@@ -53,6 +53,17 @@ export const CONFIG = {
     contactCooldown: [6, 16] as [number, number],
   },
 
+  /** 储备充足时待命的觅食蚁：一部分不回休息室，在巢口附近闲逛，不带食物回来 */
+  loiter: {
+    /** 白天待命时改为出巢闲逛的概率；地表低于 minTemp（°C）时不出去 */
+    chance: 0.45,
+    minTemp: 14,
+    /** 闲逛中心离入口的距离、闲逛半径（cm）、时长（秒） */
+    offset: [2, 7] as [number, number],
+    radius: [3, 5] as [number, number],
+    time: [30, 80] as [number, number],
+  },
+
   aphid: {
     colonies: 6,
     initialCount: [16, 36] as [number, number],

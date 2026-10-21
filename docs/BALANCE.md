@@ -53,6 +53,8 @@
 | `expansion.trigger` | 0.88 | 占用率超过该值时规划新房间 |
 | `expansion.tunnelSoilPerUnit / chamberSoilPerArea` | 4 / 4 | 每 cm 隧道、每单位房间面积需要挖的土粒数 |
 | `expansion.maxDiggers / maxChambers` | 18 / 22 | 同时挖掘的内务蚁上限、房间总数上限 |
+| `loiter.chance / minTemp` | 0.45 / 14 | 白天待命的觅食蚁改为出巢闲逛的概率；地表低于该温度（°C）不出去 |
+| `loiter.offset / radius / time` | 2–7 / 3–5 / 30–80 | 闲逛中心离入口的距离（cm）、闲逛半径（cm）、时长（秒） |
 | `expansion.enlargeChance` | 0.4 | 需要扩建时先尝试扩大已有房间的概率；房间数到上限后总是扩大 |
 | `expansion.enlargeScale / maxRoomRadius` | 1.2 / 12 | 每次扩大的线性倍数（面积约 1.44 倍）、房间半径上限（cm） |
 | `pheromone.homeHalfLife / depositHome` | 900 / 0.03 | 领地足迹的半衰期（秒）与每秒沉积量 |
@@ -158,7 +160,7 @@
 | **当前** | 觅食蚁目标改为 `lerp(0.58, 0.40, smoothstep(0.5, 3, 储备天数))`，上限改为 `86% − 保育蚁`（内务蚁至少 14%）；休息时在两间休息室中选近的；石块加温随深度衰减 | 10 天：人口 1001 → 1100，固体 230–620、社会胃 135–240，巢外 80–160 只，扩建 3 间 |
 
 ## 调参建议
-- **想让地表更热闹**：提高饱食抑制公式里的阈值（150），或者加快变质；代价是储食室堆积更多
+- **想让地表更热闹**：先调 `loiter.chance` 和 `loiter.time`，闲逛不带食物回来，不影响收入；提高饱食抑制公式里的阈值（150）或加快变质也行，但储食室会堆积更多
 - **想让人口增长更快**：提高 `eggsPerDay` 或缩短发育期；人口受 `maxPopulation` 限制
 - **觅食效率不够**：先检查 `senseFoodRadius`、搜索超时和转向噪声，再考虑增加食物源
 - **想让蚁穴扩建更频繁**：降低 `expansion.capacityPerArea` 或 `trigger`；挖掘速度看 `maxDiggers` 和内务蚁的挖掘概率

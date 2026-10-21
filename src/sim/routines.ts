@@ -552,6 +552,20 @@ function* guard(a: Ant, w: World, threat = false): Routine {
   yield { k: 'enter' };
 }
 
+/** 待命的觅食蚁在巢口附近闲逛 */
+function* loiter(a: Ant, w: World): Routine {
+  const L = CONFIG.loiter;
+  a.activity = '储备充足，出巢在附近走走';
+  yield { k: 'exit' };
+  const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
+  const ang = rng.range(0, TAU);
+  const d = rng.range(L.offset[0], L.offset[1]);
+  a.activity = rng.chance(0.5) ? '在巢口附近巡视领地' : '在蚁丘旁晒太阳';
+  yield { k: 'patrol', x: ent.x + Math.cos(ang) * d, z: ent.z + Math.sin(ang) * d, radius: rng.range(L.radius[0], L.radius[1]), time: rng.range(L.time[0], L.time[1]) };
+  a.activity = '闲逛结束，返回巢内';
+  yield { k: 'enter' };
+}
+
 function* patrolNest(a: Ant, w: World): Routine {
   yield* goHome(a);
   const c = rng.pick(w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
@@ -605,6 +619,9 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   const satiation = Math.min(0.9, Math.max(0, (col.reserve - 150) / 200)) * (a.scout ? 0.5 : 1) * (excited ? 0.3 : 1);
   if (a.domain === 'nest' && rng.chance(satiation)) {
     if (a.crop > 0.6 && rng.chance(0.4)) return yield* distributeCrop(a, w);
+    const L = CONFIG.loiter;
+    const calm = !w.clock.isNight && !w.weather.keepIn && w.predators.threatEntrance < 0 && surfaceT >= L.minTemp;
+    if (calm && rng.chance(L.chance)) return yield* loiter(a, w);
     return yield* rest(a, w, '食物储备充足，留在巢内待命');
   }
 
