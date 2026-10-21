@@ -230,7 +230,7 @@ export class PredatorManager {
     }
 
     const natural = this.spiders.filter((s) => !s.placed).length;
-    if (natural < P.maxNaturalSpiders && this.spiders.length < P.maxSpiders && rng.chance(days * P.spiderPerDay)) {
+    if (natural < P.maxNaturalSpiders && this.spiders.length < P.maxSpiders && w.weather.phase === 'clear' && rng.chance(days * P.spiderPerDay)) {
       const R = CONFIG.world.forageRadius - 3;
       for (let k = 0; k < 10; k++) {
         const a = rng.range(0, TAU);

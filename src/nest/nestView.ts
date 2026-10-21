@@ -33,6 +33,11 @@ export class NestView {
   private tunnelMat: THREE.MeshStandardMaterial;
   private freshMat: THREE.MeshStandardMaterial;
   private selected: number | null = null;
+  /** 入口的封土：地表上的土堆和透视时竖井口的土塞 */
+  private plugMeshes: { top: THREE.Mesh; shaft: THREE.Mesh }[] = [];
+  private waterMeshes = new Map<number, THREE.Mesh>();
+  private plugMat = new THREE.MeshStandardMaterial({ color: 0x9a7650, roughness: 1, flatShading: true });
+  private waterMat = new THREE.MeshStandardMaterial({ color: 0x4f86b0, roughness: 0.1, transparent: true, opacity: 0.7, depthWrite: false });
 
   constructor(private nest: Nest, private terrain: Terrain) {
     this.group.name = 'nest';
@@ -111,6 +116,40 @@ export class NestView {
     if (nest.rev !== this.builtRev) {
       this.builtRev = nest.rev;
       this.buildSoil();
+    }
+    this.syncWeather();
+  }
+
+  private syncWeather(): void {
+    this.nest.entrances.forEach((e, i) => {
+      const m = this.plugMeshes[i];
+      if (!m) return;
+      const on = e.plug > 0.02;
+      m.top.visible = on;
+      m.shaft.visible = on;
+      if (!on) return;
+      m.top.scale.set(0.5 + 0.7 * e.plug, 0.25 + 0.55 * e.plug, 0.5 + 0.7 * e.plug);
+      m.shaft.scale.setScalar(0.4 + 0.6 * e.plug);
+    });
+    for (const c of this.nest.chambers) {
+      let m = this.waterMeshes.get(c.id);
+      if (c.wet < 0.02) {
+        if (m) m.visible = false;
+        continue;
+      }
+      if (!m) {
+        const geo = new THREE.CircleGeometry(1, 28);
+        geo.rotateX(-Math.PI / 2);
+        m = new THREE.Mesh(geo, this.waterMat);
+        m.raycast = () => {};
+        m.renderOrder = 2;
+        this.chamberMeshes[c.id].add(m);
+        this.waterMeshes.set(c.id, m);
+      }
+      m.visible = true;
+      const k = 0.55 + 0.4 * Math.min(1, c.wet * 2);
+      m.scale.set(c.rx * k, 1, c.rz * k);
+      m.position.y = 0.12 + c.wet * c.ry * 0.6;
     }
   }
 
@@ -312,6 +351,18 @@ export class NestView {
       m.position.set(e.x, this.terrain.heightAt(e.x, e.z) + 0.05, e.z);
       m.userData.pick = { kind: 'entrance', id: this.nest.entrances.indexOf(e) };
       this.surfaceGroup.add(m);
+
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(1.3, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), this.plugMat);
+      dome.position.copy(m.position);
+      dome.userData.pick = m.userData.pick;
+      dome.visible = false;
+      this.surfaceGroup.add(dome);
+      const shaft = new THREE.Mesh(new THREE.SphereGeometry(1.4, 9, 7), this.plugMat);
+      shaft.position.copy(this.nest.nodes[e.node].pos).setY(this.nest.nodes[e.node].pos.y - 1.2);
+      shaft.raycast = () => {};
+      shaft.visible = false;
+      this.group.add(shaft);
+      this.plugMeshes.push({ top: dome, shaft });
     }
   }
 

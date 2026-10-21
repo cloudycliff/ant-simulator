@@ -13,6 +13,7 @@ import { PREDATOR_INFO, PredatorManager, Spider, type Predator, type PredatorKin
 import { Terrain } from './terrain';
 import { OBSTACLE_INFO, Vegetation, type PlaceableObstacle } from './vegetation';
 import { WaterManager } from './water';
+import { WeatherSystem } from './weather';
 
 /** 干预操作的结果，msg 用于提示玩家 */
 export interface ToolResult {
@@ -35,6 +36,7 @@ export class World {
   readonly water: WaterManager;
   readonly predators: PredatorManager;
   readonly alarm: AlarmField;
+  readonly weather: WeatherSystem;
   readonly colony: Colony;
   private acc = 0;
   /** 最近一帧实际执行的模拟步数（性能面板用） */
@@ -59,6 +61,7 @@ export class World {
     this.water = new WaterManager(this.terrain, this.veg, this.pheromone);
     this.predators = new PredatorManager(this.terrain, this.veg, this.rng);
     this.alarm = new AlarmField(this.terrain);
+    this.weather = new WeatherSystem(this.rng);
     this.colony = new Colony(this);
     this.colony.init();
   }
@@ -177,6 +180,13 @@ export class World {
     return this.dismissPredator(p);
   }
 
+  callRain(dry = false): ToolResult {
+    if (this.weather.phase !== 'clear') return { ok: false, msg: '已经在下雨了' };
+    if (dry) return { ok: true, msg: '' };
+    this.weather.startRain(this);
+    return { ok: true, msg: '你招来了一片雨云，马上就要下雨了' };
+  }
+
   private dismissPredator(p: Predator): ToolResult {
     this.predators.remove(p);
     const msg = p instanceof Spider ? '赶走了狼蛛' : '填平了蚁狮的陷阱';
@@ -189,7 +199,7 @@ export class World {
     const t = this.clock.temperatureAt(c.depth);
     if (!c.underStone) return t;
     const W = CONFIG.world;
-    const heat = Math.max(0, Math.sin(((this.clock.hour - 9) / 24) * TAU));
+    const heat = Math.max(0, Math.sin(((this.clock.hour - 9) / 24) * TAU)) * (1 - this.weather.cloud);
     return t + W.stoneHeat * heat * Math.max(0, 1 - c.depth / W.stoneHeatDepth);
   }
 
@@ -214,6 +224,7 @@ export class World {
 
   private tick(dt: number): void {
     this.clock.seconds += dt;
+    this.weather.update(dt, this);
     this.colony.update(dt);
     this.predators.update(dt, this);
     this.alarm.update(dt);

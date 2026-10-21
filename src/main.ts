@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config';
 import { World } from './world/world';
 import { NestView } from './nest/nestView';
+import { RainView } from './render/rain';
 import { AntView } from './render/antView';
 import { ItemView } from './render/itemView';
 import { Environment } from './render/environment';
@@ -59,6 +60,9 @@ async function boot(): Promise<void> {
   const nestView = new NestView(world.nest, world.terrain);
   nestView.build();
   scene.add(nestView.group, nestView.surfaceGroup);
+  const rain = new RainView();
+  scene.add(rain.lines);
+  const terrainMat = world.terrain.mesh.material as THREE.MeshStandardMaterial;
 
   scene.add(world.pheromone.buildOverlay());
 
@@ -363,6 +367,12 @@ async function boot(): Promise<void> {
   if (params.has('hour') && hourParam >= 0 && hourParam < 24) {
     world.clock.seconds += (((hourParam - world.clock.hour + 24) % 24) / 24) * CONFIG.time.dayLength;
   }
+  // ?rain=秒数 开局招来一场雨并快进这么多秒
+  if (params.has('rain')) {
+    world.callRain();
+    const secs = Math.min(2000, Number(params.get('rain')) || 0);
+    for (let t = 0; t < secs; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
+  }
   const selParam = params.get('select')?.split(':');
   if (selParam?.length === 2) {
     const id = Number(selParam[1]);
@@ -438,7 +448,10 @@ async function boot(): Promise<void> {
     nestView.sync();
     antView.update(time);
     itemView.update();
-    env.update(world.clock, camera, focus, xrayOn());
+    env.update(world.clock, camera, focus, xrayOn(), world.weather.cloud);
+    rain.sync(dt, camera, focus, world.weather);
+    terrainMat.color.setScalar(1 - 0.28 * world.weather.wetness);
+    terrainMat.roughness = 0.97 - 0.3 * world.weather.wetness;
 
     pherTimer += dt;
     if (hud.state.pheromone && pherTimer > 0.4) {

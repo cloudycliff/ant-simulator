@@ -278,8 +278,9 @@ export class Hud {
     const w = this.world;
     const c = w.clock;
     document.getElementById('clock')!.textContent = c.stamp();
-    document.getElementById('dayicon')!.textContent = c.isNight ? '🌙' : c.daylight < 0.6 ? '🌅' : '☀️';
-    document.getElementById('temp')!.textContent = `地表 ${c.temperatureAt(0).toFixed(1)}°C · 湿度 ${Math.round(c.humidityAt(0))}%`;
+    const wp = w.weather.phase;
+    document.getElementById('dayicon')!.textContent = wp === 'rain' ? '🌧️' : wp === 'overcast' ? '☁️' : c.isNight ? '🌙' : c.daylight < 0.6 ? '🌅' : '☀️';
+    document.getElementById('temp')!.textContent = `${w.weather.label} · 地表 ${c.temperatureAt(0).toFixed(1)}°C · 湿度 ${Math.round(c.humidityAt(0))}%`;
     document.getElementById('perf')!.textContent = `${Math.round(fps)} FPS · ${w.colony.ants.length} 只`;
     this.top.querySelectorAll<HTMLButtonElement>('[data-a="speed"]').forEach((b) => {
       b.classList.toggle('on', !c.paused && Number(b.dataset.v) === c.speed);
@@ -585,6 +586,7 @@ export class Hud {
         <span>尺寸</span><b>${(c.rx * 2 * 0.71).toFixed(0)} × ${(c.rz * 2 * 0.71).toFixed(0)} × ${(c.ry * 1.7).toFixed(0)} cm</b>
         <span>温度</span><b>${t.toFixed(1)}°C${stoneBonus > 0.05 ? `（石块 +${stoneBonus.toFixed(1)}°C）` : ''}</b>
         <span>相对湿度</span><b>${Math.round(h)}%</b>
+        ${c.wet > 0.02 ? `<span>积水</span><b>${Math.round(c.wet * 100)}%${c.wet >= CONFIG.weather.floodedAt ? '（进水，蛹会被搬走、储食加快变质）' : ''}</b>` : ''}
         ${pupaNote}
       </div>
       <h3>内容物</h3><div class="kv">${rows.join('')}</div>
@@ -650,8 +652,9 @@ export class Hud {
     for (const it of w.colony.surfaceItems) if (it.place === 'mound') soil++;
     return `
       <h2>${e.name}与蚁丘</h2>
-      <p class="desc">黑毛蚁把挖掘出的土粒堆在巢口周围，形成火山口状的小土丘。土丘能挡雨、吸收阳光为浅层育幼室加温。蚁穴通常有多个入口，便于通风和疏散。</p>
+      <p class="desc">黑毛蚁把挖掘出的土粒堆在巢口周围，形成火山口状的小土丘。土丘能挡雨、吸收阳光为浅层育幼室加温。蚁穴通常有多个入口，便于通风和疏散。下雨前内务蚁会从里面用土粒把入口堵上，防止雨水灌进浅层房间，雨后地面晾干再清开。</p>
       <div class="kv">
+        <span>状态</span><b>${e.plug >= 1 ? '已用土粒封住' : e.plug > 0 ? `封堵中 ${Math.round(e.plug * 100)}%` : '敞开'}</b>
         <span>入口附近的蚂蚁</span><b>${near}</b>
         <span>土丘上的土粒</span><b>${soil}</b>
         <span>累计挖出土粒</span><b>${w.colony.stats.soilExcavated}</b>

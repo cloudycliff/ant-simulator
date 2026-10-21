@@ -5,6 +5,7 @@ import { rng } from '../util/random';
 import type { Chamber } from '../nest/nest';
 import { AphidColony } from '../world/aphids';
 import type { FoodSource } from '../world/food';
+import type { PlugJob } from '../world/weather';
 import type { World } from '../world/world';
 import type { Ant, Command, Routine } from './ant';
 import { Item, ITEM_NAMES } from './items';
@@ -187,6 +188,14 @@ function* rest(a: Ant, w: World, label = '在休息室休息'): Routine {
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = label;
   yield { k: 'room', chamber: c.id, time: rng.range(12, 30) };
+}
+
+/** 天气转坏时返巢躲雨 */
+export function* shelter(a: Ant, w: World): Routine {
+  a.layTrail = 0;
+  a.activity = w.weather.phase === 'rain' ? '下雨了，赶回巢内躲雨' : w.weather.phase === 'overcast' ? '天色转阴，提前返巢' : '地面还湿，返回巢内';
+  yield { k: 'enter' };
+  yield* rest(a, w, w.weather.phase === 'rain' ? '在巢内躲雨' : '等地面晾干');
 }
 
 // ---------------- 蚁后 ----------------
@@ -386,6 +395,16 @@ function* maintenanceRoutine(a: Ant, w: World): Routine {
   const col = w.colony;
   if (wantsToEat(a, w)) return yield* eat(a, w);
 
+  const job = w.weather.plugJob(w);
+  if (job && rng.chance(0.8)) return yield* plugEntrance(a, w, job);
+  // 入口封着或地面还湿时，只做巢内的工作
+  if (w.weather.keepIn) {
+    const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste');
+    if (waste && rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
+    if (a.crop > 0.6 && rng.chance(0.5)) return yield* distributeCrop(a, w);
+    return yield* patrolNest(a, w);
+  }
+
   const corpse = findCorpse(w);
   if (corpse && rng.chance(0.85)) return yield* carryOut(a, w, corpse, '把同伴尸体搬到巢外垃圾堆');
 
@@ -408,6 +427,20 @@ function* maintenanceRoutine(a: Ant, w: World): Routine {
   if (r < digP + 0.25 && !w.clock.isNight) return yield* guard(a, w);
   if (a.crop > 0.6 && rng.chance(0.5)) return yield* distributeCrop(a, w);
   return yield* patrolNest(a, w);
+}
+
+/** 下雨前从里面用土粒把入口堵上，雨后地面晾干再清开 */
+function* plugEntrance(a: Ant, w: World, job: PlugJob): Routine {
+  const e = w.nest.entrances[job.entrance];
+  a.plugging = job.entrance;
+  yield* goHome(a);
+  a.activity = job.open ? `雨停了，前往${e.name}清开封土` : `要下雨了，前往${e.name}封堵入口`;
+  yield { k: 'goto', node: e.node };
+  a.activity = job.open ? `把堵在${e.name}的土粒搬开` : `用土粒一层层堵住${e.name}`;
+  yield { k: 'wait', time: rng.range(3, 5) };
+  a.plugging = -1;
+  w.weather.workPlug(job, w);
+  a.note(w, job.open ? `清开了${e.name}的一部分封土` : `往${e.name}填了一层土`);
 }
 
 function findCorpse(w: World): Item | null {
@@ -480,6 +513,13 @@ function* dig(a: Ant, w: World): Routine {
   yield { k: 'wait', time: rng.range(3, 6) };
   a.digNode = -1;
   ex.excavate(node);
+  if (w.weather.keepIn) {
+    a.activity = '入口封着，把挖下的土粒压实在隧道壁上';
+    yield { k: 'wait', time: rng.range(2, 3) };
+    col.stats.soilExcavated++;
+    a.note(w, project ? '为扩建工程挖出一粒土，压在隧道壁上' : '挖出一粒土，压在隧道壁上');
+    return;
+  }
   const soil = new Item('soil');
   col.pickUp(a, soil);
   col.stats.soilExcavated++;
@@ -565,6 +605,11 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   if (a.domain === 'nest' && rng.chance(satiation)) {
     if (a.crop > 0.6 && rng.chance(0.4)) return yield* distributeCrop(a, w);
     return yield* rest(a, w, '食物储备充足，留在巢内待命');
+  }
+
+  if (a.domain === 'nest' && w.weather.keepIn) {
+    const P = w.weather.phase;
+    return yield* rest(a, w, P === 'rain' ? '外面在下雨，留在巢内' : P === 'overcast' ? '天色阴沉，留在巢内' : '地面还湿，等晾干再出巢');
   }
 
   if (a.domain === 'nest' && w.predators.threatEntrance >= 0 && rng.chance(CONFIG.defense.holdBackProb)) {

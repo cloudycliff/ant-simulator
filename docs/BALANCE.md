@@ -71,6 +71,17 @@
 | `defense.mobKillPerSec` | 0.025 | 围攻时每只工蚁每秒被咬死的概率 |
 | `defense.guardRadius / holdBackProb / guardProb / maxGuards` | 20 / 0.7 / 0.5 / 24 | 狼蛛离入口多近算威胁；受威胁时觅食蚁留巢的概率、内务蚁出巢警戒的概率与人数上限 |
 | `defense.pitAvoidPad` | 1 | 记住陷阱的蚂蚁在陷阱半径外再留出的距离（cm） |
+| `weather.rainPerDay / firstRainDay` | 0.6 / 1 | 平均每天下雨次数（每游戏小时判定一次）；第一个游戏日不自然下雨 |
+| `weather.overcastSec / rainDays / rainStrength` | 25 / 0.1–0.25 / 0.45–1 | 下雨前转阴的秒数；一场雨的游戏日长度；雨势范围（> 0.75 显示为大雨） |
+| `weather.rainCool` | 5 | 阴雨时地表降温（°C × 云量），随深度按与日较差相同的阻尼衰减 |
+| `weather.rainTrailHalfLife / rainHomeHalfLife` | 8 / 90 | 大雨中路径信息素、领地足迹的附加消散半衰期（秒），按雨势缩放后与晴天的半衰期叠加 |
+| `weather.puddlePerSec / puddleRadius` | 0.06 / 2.5–5 | 大雨中每秒积出一个水洼的概率（× 雨势）；水洼半径（cm） |
+| `weather.soakSec / drySec` | 40 / 240 | 大雨下地面湿透的秒数；雨后晾干的基准秒数（随温度、云量变化） |
+| `weather.rainSlow` | 0.4 | 大雨中地表移动减速比例 |
+| `weather.reopenWet` | 0.45 | 雨停后地面湿润度低于该值才清开入口、恢复出巢 |
+| `weather.plugPerLoad / maxPluggers` | 0.2 / 4 | 每次封堵 / 清开改变的封堵程度；同一入口同时干活的内务蚁上限 |
+| `weather.floodDepth / floodRate / drainRate` | 14 / 0.09 / 0.003 | 会进水的最大房间深度（cm）；每秒进水量（× 雨势 × 入口平均敞开程度 × 浅度）；每秒渗干量 |
+| `weather.floodedAt / floodSpoil` | 0.25 / 3 | 积水达到该值算进水（蛹搬走）；进水的储食室变质加快倍数 |
 
 ### 写在代码里的数值
 
@@ -118,6 +129,11 @@
 | `ant.ts` `surfaceMove` | 记住的陷阱绕行超过 6 秒就忘掉它 | 防止食物就在坑边时永远绕圈 |
 | `predators.ts` 狼蛛 | 被赶走后逃离速度为游荡速度 ×2.4（正常离开 ×1.6） | |
 | `ant.ts` `surfaceMove` | 在陷阱里速度 ×0.4；拉力 = `pitPull × (0.4 + 0.6 × (1 − r / 半径))`；进坑 0.6 秒后转身往外爬 | 平常温度下约 70% 半径以内就爬不出来 |
+| `weather.ts` | 转阴时 60%、下雨时 100% 的地表空手工蚁中断任务返巢；雨势过渡时间常数 6 秒，云量 12 秒；云量 = 0.6 + 0.4 × 雨势；玩家招雨时转阴只持续 8 秒 | |
+| `weather.ts` `rainPuddle` | 水洼离入口至少 半径 + 5 cm，避开石块植物、食物源和蚁狮陷阱；最多尝试 6 个位置 | |
+| `routines.ts` | 内务蚁有封堵 / 清开任务时 80% 领取；封堵一次干 3–5 秒；入口封着时挖下的土压在隧道壁上，耗时 2–3 秒 | |
+| `clock.ts` | 地表湿度 = `62 − 18 × 太阳高度 + 34 × 地面湿润度`，上限 98% | |
+| `world.ts` `chamberTemperature` | 石块加温乘 `(1 − 云量)` | |
 
 ## 调参历史
 
@@ -139,3 +155,4 @@
 - **想让蚁穴扩建更频繁**：降低 `expansion.capacityPerArea` 或 `trigger`；挖掘速度看 `maxDiggers` 和内务蚁的挖掘概率
 - **分工比例**：保育蚁看 `nurseBase / nursePerBrood`，觅食蚁看 `reviewRoles` 里的 58%–40% 区间
 - **蜜露太多 / 太少**：调 `aphid.honeydewPerAphidDay`；社会胃有嗉囊容量的天然上限，不会无限堆积
+- **雨后停摆太久**：降低 `weather.drySec` 或提高 `reopenWet`；想让进水更常见就提高 `floodRate`，或缩短 `overcastSec`（内务蚁来不及封好）

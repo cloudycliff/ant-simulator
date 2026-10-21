@@ -2,10 +2,13 @@
  * 防御测试：在蚂蚁来往多的地方和巢口附近各放一只狼蛛，观察警报、围攻、驱赶和入口警戒。
  * npx tsx scripts/defensetest.ts [热身秒数，默认 500]
  */
+import { CONFIG } from '../src/config';
 import { World } from '../src/world/world';
 
 const warm = Number(process.argv[2] ?? 500);
 const w = new World();
+// 下雨时内务蚁不出巢警戒，测试只看晴天
+CONFIG.weather.rainPerDay = 0;
 const step = 1 / 30;
 for (let t = 0; t < warm; t += step) w.advance(step);
 // 不让自然狼蛛干扰

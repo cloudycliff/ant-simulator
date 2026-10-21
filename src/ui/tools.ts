@@ -46,8 +46,8 @@ export const TOOLS: ToolDef[] = [
     kind: 'water',
     name: '浇水',
     key: '8',
-    hint: '单击地面浇水。水会冲掉信息素，形成的水洼会慢慢蒸发',
-    options: CONFIG.intervention.waterRadius.map((r, i) => ({ label: i === 0 ? '一点水' : '一大杯水', radius: r })),
+    hint: '单击地面浇水。水会冲掉信息素，形成的水洼会慢慢蒸发；选“下一场雨”后单击任意处招来雨云',
+    options: [...CONFIG.intervention.waterRadius.map((r, i) => ({ label: i === 0 ? '一点水' : '一大杯水', radius: r })), { label: '下一场雨', radius: 5 }],
   },
   {
     kind: 'predator',
@@ -140,7 +140,7 @@ export class ToolController {
     const w = this.world;
     const i = this.option[this.active];
     if (d.kind === 'food') return w.dropFood(PLACEABLE_FOOD[i], p.x, p.z, dry);
-    if (d.kind === 'water') return w.pourWater(p.x, p.z, i === 1, dry);
+    if (d.kind === 'water') return i === 2 ? w.callRain(dry) : w.pourWater(p.x, p.z, i === 1, dry);
     if (d.kind === 'predator') {
       const k = PREDATORS[i];
       return k === 'remove' ? w.removePredator(p.x, p.z, dry) : w.placePredator(k, p.x, p.z, dry);

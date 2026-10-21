@@ -175,6 +175,42 @@ export const CONFIG = {
     pitAvoidPad: 1,
   },
 
+  weather: {
+    /** 平均每个游戏日开始下雨的次数 */
+    rainPerDay: 0.6,
+    /** 第一个游戏日不自然下雨，先让玩家看清晴天的蚁群 */
+    firstRainDay: 1,
+    /** 下雨前转阴的秒数；一场雨的游戏日长度；雨势范围 */
+    overcastSec: 25,
+    rainDays: [0.1, 0.25] as [number, number],
+    rainStrength: [0.45, 1] as [number, number],
+    /** 下雨时地表降温（°C，乘云量） */
+    rainCool: 5,
+    /** 大雨中路径信息素 / 领地足迹的半衰期（秒），雨小时按雨势放慢 */
+    rainTrailHalfLife: 8,
+    rainHomeHalfLife: 90,
+    /** 大雨中每秒新出现一个积水洼的概率，水洼半径 */
+    puddlePerSec: 0.06,
+    puddleRadius: [2.5, 5] as [number, number],
+    /** 大雨下地面湿透需要的秒数；放晴后约 20°C 时晾干需要的秒数 */
+    soakSec: 40,
+    drySec: 240,
+    /** 雨中地表移动减速比例 */
+    rainSlow: 0.4,
+    /** 雨停后地面湿润度低于该值才清开入口、恢复出巢 */
+    reopenWet: 0.45,
+    /** 每次封堵 / 清开改变的封堵程度；同时在一个入口干活的内务蚁上限 */
+    plugPerLoad: 0.2,
+    maxPluggers: 4,
+    /** 入口未封堵时雨水灌入浅层房间：深度小于 floodDepth（cm）的房间，每秒进水量，每秒渗干量 */
+    floodDepth: 14,
+    floodRate: 0.09,
+    drainRate: 0.003,
+    /** 积水超过该值的房间：蛹搬走，储食变质加快的倍数 */
+    floodedAt: 0.25,
+    floodSpoil: 3,
+  },
+
   save: {
     /** 自动保存间隔（现实秒数） */
     autosaveSec: 60,

@@ -4,6 +4,7 @@ import type { ColonySave } from '../sim/colony';
 import type { PlaceableObstacle } from './vegetation';
 import type { FoodSave } from './food';
 import type { PredatorSave } from './predators';
+import type { WeatherSave } from './weather';
 import type { World } from './world';
 
 /** 存档结构变化时加 1；旧版本的存档不再读取 */
@@ -26,6 +27,8 @@ export interface SaveData {
   puddles: ReturnType<World['water']['toSave']>;
   /** 天敌之后才加入，旧存档没有这一项时沿用新世界自然生成的蚁狮 */
   predators?: PredatorSave;
+  /** 天气、入口封堵与房间积水，旧存档没有这一项时为晴天 */
+  weather?: WeatherSave;
   /** 界面层附加的相机位置与注视点 */
   camera?: number[];
 }
@@ -49,6 +52,7 @@ export function saveWorld(w: World, savedAt: number): SaveData {
     placed: w.veg.placed.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw })),
     puddles: w.water.toSave(),
     predators: w.predators.toSave(),
+    weather: w.weather.toSave(w),
   };
 }
 
@@ -69,6 +73,7 @@ export function loadWorld(w: World, d: SaveData): void {
   for (const p of d.placed) w.veg.place(p.kind, p.x, p.z, p.yaw);
   w.water.restore(d.puddles);
   if (d.predators) w.predators.restore(d.predators);
+  if (d.weather) w.weather.restore(d.weather, w);
   w.food.restore(d.food);
   w.aphids.restore(d.aphids);
   w.pheromone.restore(d.pheromone);

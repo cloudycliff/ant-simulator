@@ -8,7 +8,7 @@ import type { FoodKind } from '../world/food';
 import { Ant, type AntSave, type Routine } from './ant';
 import { NestExpansion, type ExpansionSave } from './expansion';
 import { Item, type ItemSave, type ItemType } from './items';
-import { routineFor } from './routines';
+import { routineFor, shelter } from './routines';
 import { SpatialHash } from './spatial';
 
 export interface ColonyStats {
@@ -252,7 +252,19 @@ export class Colony {
 
   newRoutine(ant: Ant): Routine {
     if (ant.nextRole && !ant.carrying) this.applyRole(ant);
+    if (ant.domain === 'surface' && !ant.carrying && ant.role !== 'queen' && this.w.weather.keepIn) return shelter(ant, this.w);
     return routineFor(ant, this.w);
+  }
+
+  /** 天气转坏时，地表上空手、没在爬植物或打斗的工蚁按概率放下手头的事返巢 */
+  seekShelter(p: number): void {
+    for (const a of this.ants) {
+      if (a.domain !== 'surface' || a.carrying || a.climbing || a.alarmT > 0 || a.pitT > 0 || a.role === 'queen') continue;
+      if (!rng.chance(p)) continue;
+      for (const it of this.items) if (it.claimedBy === a.id) it.claimedBy = -1;
+      a.layTrail = 0;
+      a.abort();
+    }
   }
 
   private applyRole(a: Ant): void {
@@ -732,15 +744,17 @@ export class Colony {
   /** 蛹偏好 24–30°C：比较深层蛹室与石块下的向阳育幼室，温差明显时更换蛹的目标房间 */
   updateClimate(): void {
     const nest = this.w.nest;
-    const cands = [...nest.chamberOfType('pupa'), ...nest.chamberOfType('solar')];
-    if (cands.length < 2) return;
+    const dry = (c: Chamber) => c.wet < CONFIG.weather.floodedAt;
+    const cands = [...nest.chamberOfType('pupa'), ...nest.chamberOfType('solar')].filter(dry);
+    if (!cands.length) return;
     const score = (c: Chamber) => {
       const t = this.w.chamberTemperature(c);
       return t <= 30 ? t : 60 - t;
     };
     const cur = nest.chambers[this.pupaChamber];
-    let best = cur;
-    let bs = score(cur);
+    const flooded = !dry(cur);
+    let best = flooded ? cands[0] : cur;
+    let bs = flooded ? -Infinity : score(cur);
     for (const c of cands) {
       const s = score(c);
       if (s > bs) {
@@ -748,11 +762,12 @@ export class Colony {
         best = c;
       }
     }
-    if (best === cur || bs < score(cur) + 1.2) return;
+    if (best === cur || (!flooded && bs < score(cur) + 1.2)) return;
     this.pupaChamber = best.id;
     for (const arr of this.byChamber) for (const it of arr) if (it.type === 'pupa') it.wantsMove = it.chamber !== best.id;
     const t = this.w.chamberTemperature(best).toFixed(1);
-    this.pushEvent(best.type === 'solar' ? `${best.name}升温到 ${t}°C，保育蚁开始把蛹搬上来` : `浅层降温，保育蚁把蛹搬回${best.name}（${t}°C）`);
+    if (flooded) this.pushEvent(`${cur.name}进水，保育蚁把蛹搬到${best.name}`);
+    else this.pushEvent(best.type === 'solar' ? `${best.name}升温到 ${t}°C，保育蚁开始把蛹搬上来` : `浅层降温，保育蚁把蛹搬回${best.name}（${t}°C）`);
   }
 
   // ---------------- 储食与幼体 ----------------
@@ -762,10 +777,11 @@ export class Colony {
     let changed = false;
     for (const c of this.w.nest.chamberOfType('food')) {
       const arr = this.byChamber[c.id];
+      const rot = c.wet >= CONFIG.weather.floodedAt ? CONFIG.weather.floodSpoil : 1;
       for (let i = arr.length - 1; i >= 0; i--) {
         const it = arr[i];
         if (it.type !== 'food') continue;
-        it.age += days;
+        it.age += days * rot;
         const limit = it.foodKind === 'prey' ? 2.5 : 1.5;
         if (it.age <= limit || !it.free) continue;
         it.type = 'waste';

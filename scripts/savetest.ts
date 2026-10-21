@@ -32,6 +32,7 @@ function metrics(w: World): Record<string, string | number> {
     puddles: w.water.puddles.length,
     predators: `${w.predators.spiders.map((s) => s.state).join(',')} / ${w.predators.antlions.map((p) => `${p.caught}${p.feedT > 0 ? '*' : ''}`).join(',')}`,
     stats: JSON.stringify(c.stats),
+    weather: JSON.stringify(w.weather.toSave(w)),
   };
 }
 
@@ -51,8 +52,13 @@ a.placeObstacle('twig', 14, 2, Math.PI / 2);
 a.dropFood('syrup', 25, 2);
 a.pourWater(19, 12, true);
 run(a, before - 60);
+// 第二个参数：tunnel / chamber 等扩建进行到对应阶段再存档；rain 在下雨、入口封堵中途存档
 const stage = process.argv[3];
-for (let t = 0; stage && t < 12000; t += 10) {
+if (stage === 'rain') {
+  a.callRain();
+  run(a, 40);
+}
+for (let t = 0; stage && stage !== 'rain' && t < 12000; t += 10) {
   const p = a.colony.expansion.project;
   if (p && (stage === 'chamber') === !!p.chamber) break;
   run(a, 10);

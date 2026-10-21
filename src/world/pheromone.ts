@@ -34,6 +34,8 @@ export class PheromoneField {
   private texData: Uint8Array<ArrayBuffer>;
   overlay!: THREE.Mesh;
   private evapTimer = 0;
+  /** 当前雨势 0..1，由天气系统设置，雨水加快信息素的消散 */
+  rain = 0;
 
   constructor(private terrain: Terrain) {
     this.half = CONFIG.world.size / 2;
@@ -106,8 +108,10 @@ export class PheromoneField {
   update(dt: number): void {
     this.evapTimer += dt;
     if (this.evapTimer < 0.5) return;
-    const kt = Math.pow(0.5, this.evapTimer / CONFIG.pheromone.trailHalfLife);
-    const kh = Math.pow(0.5, this.evapTimer / CONFIG.pheromone.homeHalfLife);
+    const P = CONFIG.pheromone;
+    const W = CONFIG.weather;
+    const kt = Math.pow(0.5, this.evapTimer * (1 / P.trailHalfLife + this.rain / W.rainTrailHalfLife));
+    const kh = Math.pow(0.5, this.evapTimer * (1 / P.homeHalfLife + this.rain / W.rainHomeHalfLife));
     this.evapTimer = 0;
     const t = this.trail;
     const h = this.home;

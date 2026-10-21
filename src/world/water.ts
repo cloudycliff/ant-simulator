@@ -104,7 +104,7 @@ export class WaterManager {
 
   update(dt: number, clock: SimClock): void {
     const t = clock.temperatureAt(0);
-    const rate = (dt / (CONFIG.intervention.waterDays * CONFIG.time.dayLength)) * Math.max(0.3, 0.4 + t / 33);
+    const rate = (dt / (CONFIG.intervention.waterDays * CONFIG.time.dayLength)) * Math.max(0.3, 0.4 + t / 33) * (1 - 0.9 * clock.groundWet);
     this.washTimer += dt;
     const wash = this.washTimer > 0.5;
     if (wash) this.washTimer = 0;

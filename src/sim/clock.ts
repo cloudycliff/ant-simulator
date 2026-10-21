@@ -7,6 +7,10 @@ export class SimClock {
   seconds = 0;
   speed = 1;
   paused = false;
+  /** 阴雨使地表降温的幅度（°C），由天气系统设置，随深度衰减 */
+  weatherCool = 0;
+  /** 地面湿润程度 0..1，由天气系统设置 */
+  groundWet = 0;
 
   private readonly startOffset = (CONFIG.time.startHour / 24) * CONFIG.time.dayLength;
 
@@ -59,13 +63,13 @@ export class SimClock {
     const damping = 12;
     const d = Math.max(0, depth);
     const phase = ((this.hour - 8) / 24) * TAU - d / damping;
-    return mean + amplitude * Math.exp(-d / damping) * Math.sin(phase) - d * 0.03;
+    return mean + (amplitude * Math.sin(phase) - this.weatherCool) * Math.exp(-d / damping) - d * 0.03;
   }
 
   /** 相对湿度：地表夜间高、白天低；越深越潮湿。 */
   humidityAt(depth: number): number {
     const d = Math.max(0, depth);
-    const surface = 62 - 18 * this.sunElevation;
+    const surface = Math.min(98, 62 - 18 * this.sunElevation + 34 * this.groundWet);
     const deep = 93;
     const k = 1 - Math.exp(-d / 18);
     return surface + (deep - surface) * k;

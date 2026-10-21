@@ -145,6 +145,9 @@ export class Ant {
   mobTarget = -1;
   /** 因为狼蛛逼近而出巢警戒（日常的入口巡逻不算） */
   guarding = false;
+  /** 正在去封堵 / 清开的入口编号 */
+  plugging = -1;
+  private exitBlocked = false;
   private avoidSign = 1;
   private avoidT = 0;
   private blockedT = 0;
@@ -317,7 +320,8 @@ export class Ant {
   private speedFactor(w: World): number {
     const t = w.clock.temperatureAt(this.domain === 'surface' ? 0 : this.depth(w));
     const f = clamp((t - 4) / 18, 0.3, 1.25);
-    return f * (this.role === 'queen' ? 0.35 : 1) * (this.health < 0.4 ? 0.6 : 1);
+    const wet = this.domain === 'surface' ? 1 - CONFIG.weather.rainSlow * w.weather.rain : 1;
+    return f * wet * (this.role === 'queen' ? 0.35 : 1) * (this.health < 0.4 ? 0.6 : 1);
   }
 
   update(dt: number, w: World): void {
@@ -408,6 +412,9 @@ export class Ant {
   abort(): void {
     this.routine = null;
     this.cmd = null;
+    this.exitBlocked = false;
+    this.plugging = -1;
+    this.guarding = false;
   }
 
   private step(dt: number, w: World, cmd: Command): boolean {
@@ -550,9 +557,10 @@ export class Ant {
     if (this.domain === 'surface') return true;
     if (first) {
       const from = this.currentNode(w);
+      const open = w.nest.entrances.filter((e) => e.plug < 1);
       let best = w.nest.entrances[0];
       let bd = Infinity;
-      for (const e of w.nest.entrances) {
+      for (const e of open.length ? open : w.nest.entrances) {
         const d = w.nest.routeLength(from, e.node) * rng.range(0.8, 1.25);
         if (d < bd) {
           bd = d;
@@ -563,6 +571,20 @@ export class Ant {
     }
     const ent = w.nest.entrances[this.entranceTarget];
     if (!this.stepGoto(dt, w, ent.node)) return false;
+    if (ent.plug >= 1) {
+      const other = w.nest.entrances.findIndex((e) => e.plug < 1);
+      if (other >= 0) this.entranceTarget = other;
+      else if (!this.exitBlocked) {
+        this.exitBlocked = true;
+        this.taskActivity = this.activity;
+        this.activity = `${ent.name}已被土粒封住，在里面等待雨停`;
+      }
+      return false;
+    }
+    if (this.exitBlocked) {
+      this.exitBlocked = false;
+      this.activity = this.taskActivity;
+    }
     this.placeOnSurface(ent.x, ent.z, w);
     this.heading = Math.atan2(ent.z, ent.x) + rng.range(-1.6, 1.6);
     if (ent.x === 0 && ent.z === 0) this.heading = rng.range(-Math.PI, Math.PI);

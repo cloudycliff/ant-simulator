@@ -85,6 +85,8 @@ export interface Chamber {
   grow: number;
   /** 位于石块下方，白天额外升温 */
   underStone: boolean;
+  /** 雨水灌入的积水程度 0..1 */
+  wet: number;
 }
 
 interface Path {
@@ -107,6 +109,8 @@ export interface Entrance {
   x: number;
   z: number;
   name: string;
+  /** 被土粒封堵的程度 0..1，为 1 时不能出巢 */
+  plug: number;
 }
 
 /** 存档中的蚁穴结构；坐标展平为 [x, y, z, x, y, z, …] */
@@ -168,7 +172,7 @@ export class Nest {
     for (const e of Nest.entranceLayout()) {
       const y = t.heightAt(e.x, e.z) - 0.4;
       const id = this.addNode('entrance', new THREE.Vector3(e.x, y, e.z));
-      this.entrances.push({ node: id, x: e.x, z: e.z, name: e.name });
+      this.entrances.push({ node: id, x: e.x, z: e.z, name: e.name, plug: 0 });
     }
 
     // 主竖井：从主入口蜿蜒向下，沿途设置分岔点
@@ -260,6 +264,7 @@ export class Nest {
       ready,
       grow: ready ? 1 : 0.08,
       underStone: false,
+      wet: 0,
     };
     this.chambers.push(c);
     this.rev++;
@@ -414,7 +419,7 @@ export class Nest {
     });
     this.chambers = s.chambers.map((c, id) => {
       const floor = unflat(c.floor)[0];
-      return { id, type: c.type, name: c.name, floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone };
+      return { id, type: c.type, name: c.name, floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone, wet: 0 };
     });
     this.faces = s.faces.map((f) => ({ node: f.node, edge: this.edges[f.edge], full: pathOf(unflat(f.full)), len: f.len, maxLen: f.maxLen }));
     this.reserved = s.reserved.map((r) => ({ ...r }));

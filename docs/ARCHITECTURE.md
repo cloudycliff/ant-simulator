@@ -29,16 +29,18 @@ src/
     aphids.ts           蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
     predators.ts        天敌：狼蛛（游荡、扑击、进食、离开的状态机）与蚁狮陷阱（松沙区、坑底捕食）；网格与存档
     alarm.ts            警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
+    weather.ts          天气：晴 / 转阴 / 下雨的阶段与雨势、云量、地面湿润度；积水洼、浅层房间进水；入口封堵任务的分配
     water.ts            玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
     save.ts             存档：组装各子系统的 toSave / restore，版本与种子检查
     pheromone.ts        信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
   nest/
     nest.ts             蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
-    nestView.ts         蚁穴网格：背面渲染的房间与隧道、土壤剖面墙、入口洞口；每帧 sync 跟随蚁穴变化
+    nestView.ts         蚁穴网格：背面渲染的房间与隧道、土壤剖面墙、入口洞口与土塞、房间积水；每帧 sync 跟随蚁穴变化
   render/
     antView.ts          蚂蚁几何体、步态着色器、实例化更新、选中标记
     itemView.ts         物品的实例化渲染
-    environment.ts      天空、日月、半球光、观察灯、雾、星空
+    environment.ts      天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
+    rain.ts             雨丝：跟随相机的循环下落线段
   ui/
     camera.ts           自由飞行 / 跟随相机、平滑飞向目标
     picking.ts          点选（蚂蚁屏幕空间 + 物体射线）；groundPoint 用解析高度场求鼠标下的地面点
@@ -50,6 +52,7 @@ scripts/
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
   savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
   defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
+  weathertest.ts        天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
   extract-shots.mjs     从浏览器捕获结果中提取截图
 docs/                   本文档目录
 ```
@@ -59,7 +62,7 @@ docs/                   本文档目录
 ```
 requestAnimationFrame
  ├─ world.advance(dt)           按倍速累积时间，按固定步长 1/30 秒逐步 tick
- │    └─ tick: clock → colony.update → predators.update → alarm.update → food.update → aphids.update → water.update → pheromone.update
+ │    └─ tick: clock → weather.update → colony.update → predators.update → alarm.update → food.update → aphids.update → water.update → pheromone.update
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
  ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
@@ -136,6 +139,8 @@ requestAnimationFrame
 天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `Ant.surfaceMove` 里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
 
 防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines.ts` 里觅食蚁出巢前和内务蚁选任务时读取它们。
+
+天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `SimClock`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`Ant.stepExit` 只走没封死的入口。
 
 地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `Ant.surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
 
