@@ -50,6 +50,10 @@
 | `expansion.tunnelSoilPerUnit / chamberSoilPerArea` | 4 / 4 | 每 cm 隧道、每单位房间面积需要挖的土粒数 |
 | `expansion.maxDiggers / maxChambers` | 18 / 22 | 同时挖掘的内务蚁上限、房间总数上限 |
 | `pheromone.homeHalfLife / depositHome` | 900 / 0.03 | 领地足迹的半衰期（秒）与每秒沉积量 |
+| `intervention.maxPlacedFood / maxPlacedObstacles` | 30 / 40 | 玩家投放的食物、障碍物同时存在的上限 |
+| `intervention.waterRadius` | 4 / 8 | 一点水、一大杯水形成的水洼半径（cm）；倒在已有水洼上会合并成更大的一片 |
+| `intervention.waterDays` | 0.25 | 水洼在约 20°C 时完全蒸发所需的游戏日；越冷越慢（见下表） |
+| `intervention.washTrail / washHome` | 0.05 / 0.3 | 浇水时浇到的地方信息素保留的比例（路径 / 足迹） |
 
 ### 写在代码里的数值
 
@@ -87,6 +91,10 @@
 | `routines.ts` 觅食蚁 | 返巢信息素强度 = `depositFood × (0.5 + 食物源剩余比例)`，侦察蚁 ×1.3 | |
 | `ant.ts` `stepSearch` | 随机游走转向噪声 1.4·√dt | 过大会让搜索范围变小 |
 | `ant.ts` `speedFactor` | 速度系数 = `clamp((温度 − 4) / 18, 0.3, 1.25)` | |
+| `water.ts` `update` | 蒸发速度系数 = `max(0.3, 0.4 + 地表温度 / 33)`；水量低于 0.04 时消失；每 0.5 秒冲刷一次水洼范围（路径信息素清零，足迹保留 60%） | 水洼半径 = 初始半径 × √水量 |
+| `ant.ts` `surfaceMove` | 遇到水洼先绕行，绕了 4 秒还没绕开就蹚水；在水里速度 ×0.35；离开后蹚水计时以一半速度回落 | |
+| `ant.ts` `skirt` | 沿障碍物边缘绕行，选定的方向保持 1.5 秒；连续 3 秒没有走出 3 cm 就换另一边 | 防止在凹角里来回摆动 |
+| `vegetation.ts` `OBSTACLE_INFO` | 小石子半径 1.6、大石块 4；树枝路障长 18、由间距 0.9 的半径 0.5 圆串成 | |
 | `clock.ts` | 地表平均温度 19°C，日较差 ±9°C，阻尼深度 12 cm | |
 
 ## 调参历史

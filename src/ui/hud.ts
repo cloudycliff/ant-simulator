@@ -3,8 +3,10 @@ import { CHAMBER_INFO } from '../nest/nest';
 import { FOOD_KIND_NAMES } from '../world/food';
 import { ITEM_NAMES } from '../sim/items';
 import type { ColonySample } from '../sim/colony';
+import { OBSTACLE_INFO } from '../world/vegetation';
 import type { World } from '../world/world';
 import type { Selection } from './picking';
+import { TOOLS, type ToolController } from './tools';
 
 const ROLE_DESC: Record<Role, string> = {
   queen: '蚁群唯一的繁殖者。婚飞交配后脱落翅膀、独自建巢，此后终生产卵；交配时储存的精子可使用十余年。',
@@ -24,7 +26,11 @@ export type HudAction =
   | 'follow'
   | 'flyto'
   | 'deselect'
-  | 'help';
+  | 'help'
+  | 'tool'
+  | 'toolopt'
+  | 'toolexit'
+  | 'removePlaced';
 
 const SPEEDS = [1, 2, 5, 10, 20];
 
@@ -140,6 +146,9 @@ export class Hud {
   private toastEl = document.getElementById('toast')!;
   private statsEl = document.getElementById('stats')!;
   private legendEl = document.getElementById('legend')!;
+  private toolEl = document.getElementById('tool')!;
+  private toolKey = '';
+  tools: ToolController | null = null;
   private toastTimer = 0;
   private statsDrawn = -1;
   onAction: ((a: HudAction, arg?: number) => void) | null = null;
@@ -161,6 +170,9 @@ export class Hud {
         <button data-a="stats" id="btn-stats" title="快捷键 T">统计 <kbd>T</kbd></button>
         <button data-a="help" title="快捷键 H">帮助 <kbd>H</kbd></button>
       </div>
+      <div class="group" id="tools">
+        ${TOOLS.map((t, i) => `<button data-a="tool" data-v="${i}" title="快捷键 ${t.key}，重复按切换选项">${t.name} <kbd>${t.key}</kbd></button>`).join('')}
+      </div>
       <div class="perf" id="perf"></div>`;
     this.helpEl.innerHTML = `
       <b>操作</b>
@@ -168,7 +180,8 @@ export class Hud {
       <div>左键拖拽 转视角　右键拖拽 平移　滚轮 推进/拉远</div>
       <div>左键单击 选择蚂蚁/房间/食物/植物　双击 飞到目标</div>
       <div><kbd>F</kbd> 跟随选中的蚂蚁　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续</div>
-      <div><kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线</div>`;
+      <div><kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线</div>
+      <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水（重复按切换选项，<kbd>Esc</kbd> 退出工具）</div>`;
     this.statsEl.innerHTML = `
       <canvas id="chart-pop"></canvas>
       <canvas id="chart-food"></canvas>`;
@@ -183,8 +196,10 @@ export class Hud {
     this.top.addEventListener('click', handler);
     this.infoEl.addEventListener('click', handler);
     this.helpEl.addEventListener('click', handler);
+    this.toolEl.addEventListener('click', handler);
     this.infoEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.statsEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.toolEl.addEventListener('pointerdown', (e) => e.stopPropagation());
   }
 
   toggleHelp(): void {
@@ -224,11 +239,33 @@ export class Hud {
     this.statsEl.classList.toggle('hidden', !s.stats);
     this.legendEl.classList.toggle('hidden', !s.pheromone);
     if (s.stats) this.renderStats();
+    this.renderTool();
 
     this.renderColony();
     this.renderInfo(sel);
     this.eventsEl.innerHTML = w.colony.events.map((e) => `<div><span>${e.t}</span>${esc(e.msg)}</div>`).join('');
     this.layout();
+  }
+
+  /** 工具选项面板：只在工具或选项变化时重写 DOM，避免点击时按钮被替换 */
+  renderTool(): void {
+    const t = this.tools;
+    const active = t?.active ?? -1;
+    this.top.querySelectorAll<HTMLButtonElement>('[data-a="tool"]').forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === active));
+    document.body.classList.toggle('tooling', active >= 0);
+    const key = t && active >= 0 ? `${active}:${t.option[active]}` : '';
+    if (key === this.toolKey) return;
+    this.toolKey = key;
+    this.toolEl.classList.toggle('hidden', !key);
+    if (!t || !key) return;
+    const d = TOOLS[active];
+    const cur = t.option[active];
+    this.toolEl.innerHTML = `
+      <div class="head"><b>${d.name}</b><span>${d.hint}</span></div>
+      <div class="opts">
+        ${d.options.map((o, i) => `<button data-a="toolopt" data-v="${i}" class="${i === cur ? 'on' : ''}">${o.label}</button>`).join('')}
+        <button data-a="toolexit" class="exit">退出 <kbd>Esc</kbd></button>
+      </div>`;
   }
 
   private layout(): void {
@@ -348,6 +385,24 @@ export class Hud {
       case 'plant':
         html = this.plantInfo(sel.id);
         break;
+      case 'placed': {
+        const p = this.world.veg.placedById(sel.id);
+        html = p
+          ? `<h2>${OBSTACLE_INFO[p.kind].name}<span class="tag next">你放置的</span></h2>
+             <p class="desc">${p.kind === 'twig' ? '横在地上的树枝会截断蚂蚁的路线。被挡住的蚂蚁会沿着树枝走到尽头再绕过去，信息素路径也会随之改道。' : '蚂蚁不会爬上石块，而是贴着边缘绕行。大石块会让路过的蚂蚁明显绕路。'}</p>
+             <div class="actions"><button data-a="removePlaced" data-v="${p.id}">移除</button></div>`
+          : '<h2>障碍物</h2><p class="desc">已被移除。</p>';
+        break;
+      }
+      case 'puddle': {
+        const p = this.world.water.byId(sel.id);
+        html = p
+          ? `<h2>水洼</h2>
+             <p class="desc">蚂蚁会绕开积水。水会冲掉地面上的路径信息素和足迹，原本沿路径往返的觅食蚁要重新搜索。气温越高蒸发得越快。</p>
+             <div class="kv"><span>半径</span><b>${p.r.toFixed(1)} cm</b><span>剩余水量</span><b>${bar(p.water, '#5f9ccc')}</b></div>`
+          : '<h2>水洼</h2><p class="desc">已经蒸发、渗进土里了。</p>';
+        break;
+      }
     }
     this.infoEl.innerHTML = html + `<div class="actions"><button data-a="deselect">取消选择 <kbd>Esc</kbd></button></div>`;
   }
@@ -495,7 +550,7 @@ export class Hud {
     for (const a of w.colony.ants) if (a.domain === 'surface' && Math.hypot(a.pos.x - f.x, a.pos.z - f.z) < f.radius + 3) near++;
     const dist = Math.hypot(f.x, f.z);
     return `
-      <h2>${f.info.name}</h2>
+      <h2>${f.info.name}${f.placed ? '<span class="tag next">你投放的</span>' : ''}</h2>
       <p class="desc">${f.info.desc}</p>
       <div class="kv">
         <span>食物类型</span><b>${FOOD_KIND_NAMES[f.kind]}</b>

@@ -27,6 +27,7 @@ src/
     vegetation.ts       草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
     food.ts             食物源类型、生成、网格
     aphids.ts           蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
+    water.ts            玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
     pheromone.ts        信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
   nest/
     nest.ts             蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
@@ -37,10 +38,12 @@ src/
     environment.ts      天空、日月、半球光、观察灯、雾、星空
   ui/
     camera.ts           自由飞行 / 跟随相机、平滑飞向目标
-    picking.ts          点选（蚂蚁屏幕空间 + 物体射线）
-    hud.ts              顶栏、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例
+    picking.ts          点选（蚂蚁屏幕空间 + 物体射线）；groundPoint 用解析高度场求鼠标下的地面点
+    tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法
+    hud.ts              顶栏、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板
 scripts/
   simtest.ts            无界面模拟测试
+  tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
   extract-shots.mjs     从浏览器捕获结果中提取截图
 docs/                   本文档目录
 ```
@@ -50,7 +53,7 @@ docs/                   本文档目录
 ```
 requestAnimationFrame
  ├─ world.advance(dt)           按倍速累积时间，按固定步长 1/30 秒逐步 tick
- │    └─ tick: clock → colony.update → food.update → aphids.update → pheromone.update
+ │    └─ tick: clock → colony.update → food.update → aphids.update → water.update → pheromone.update
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
  ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
@@ -116,6 +119,14 @@ requestAnimationFrame
 
 改变物品位置时必须通过 `Colony` 的方法（`addToChamber`、`dropAtMidden`、`dropOnMound`、`dropOnSurface`、`dropAtNode`、`pickUp`、`release`、`destroy`），这样各个索引才能保持一致。
 
+### 玩家干预（`World` 的干预方法）
+
+`dropFood`、`placeObstacle`、`removeObstacle`、`removePlacedById`、`pourWater` 都返回 `ToolResult {ok, msg}`，成功时把 `msg` 记进蚁群事件。传 `dry = true` 只做检查不改动世界，界面用它决定预览圈的颜色。合法性检查集中在 `World.checkSpot`：活动范围、离入口的距离、与石块 / 植物 / 水洼 / 食物是否重叠。
+
+界面层（`ToolController`）只负责选工具和给出地面点，不直接改世界。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
+
+地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `Ant.surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
+
 ### 蚁穴生成（`Nest.generate`）
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm
 - 房间按 `specs` 表挂在分岔点上（类型、所在分岔点、方向角、距离、尺寸）。房间是底部被压平的椭球，门开在地板边缘、朝向分岔点。最后一行是第一个分岔点旁、大石块下的向阳育幼室
@@ -148,7 +159,9 @@ requestAnimationFrame
 4. 想让扩建也能生成这种房间：在 `NestExpansion.plan` 的类型选择里加入
 5. 运行中新增的房间要调用 `Colony.ensureChamberSlots`（扩建流程已处理）
 
-**新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充。
+**新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充；想让玩家能投放，再加进 `PLACEABLE_FOOD`。
+
+**新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在 `ToolController.apply` / `hover` 里调用。
 
 **新增一种物品**：在 `items.ts` 的 `ItemType`、`ITEM_NAMES` 和 `itemView.ts` 的图层中补充。
 

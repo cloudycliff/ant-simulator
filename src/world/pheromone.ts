@@ -58,6 +58,24 @@ export class PheromoneField {
     if (k >= 0) this.home[k] = Math.min(4, this.home[k] + amount);
   }
 
+  /** 半径 r 内的两种信息素分别乘以保留比例（水冲刷） */
+  wash(x: number, z: number, r: number, keepTrail: number, keepHome: number): void {
+    const c = this.cell;
+    const i0 = Math.max(0, Math.floor((x - r + this.half) / c));
+    const i1 = Math.min(this.res - 1, Math.floor((x + r + this.half) / c));
+    const j0 = Math.max(0, Math.floor((z - r + this.half) / c));
+    const j1 = Math.min(this.res - 1, Math.floor((z + r + this.half) / c));
+    for (let j = j0; j <= j1; j++)
+      for (let i = i0; i <= i1; i++) {
+        const cx = (i + 0.5) * c - this.half;
+        const cz = (j + 0.5) * c - this.half;
+        if ((cx - x) ** 2 + (cz - z) ** 2 > r * r) continue;
+        const k = j * this.res + i;
+        this.trail[k] *= keepTrail;
+        this.home[k] *= keepHome;
+      }
+  }
+
   update(dt: number): void {
     this.evapTimer += dt;
     if (this.evapTimer < 0.5) return;

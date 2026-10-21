@@ -7,7 +7,26 @@ export interface Obstacle {
   x: number;
   z: number;
   r: number;
-  kind: 'stone' | 'twig' | 'plant';
+  kind: 'stone' | 'twig' | 'plant' | 'water';
+}
+
+export type PlaceableObstacle = 'pebble' | 'rock' | 'twig';
+
+export const OBSTACLE_INFO: Record<PlaceableObstacle, { name: string; r: number; len?: number }> = {
+  pebble: { name: '小石子', r: 1.6 },
+  rock: { name: '大石块', r: 4 },
+  twig: { name: '树枝路障', r: 0.5, len: 18 },
+};
+
+/** 玩家放置的障碍物；树枝路障由一串避障圆组成 */
+export interface PlacedObstacle {
+  id: number;
+  kind: PlaceableObstacle;
+  x: number;
+  z: number;
+  yaw: number;
+  parts: Obstacle[];
+  mesh: THREE.Object3D;
 }
 
 export interface Plant {
@@ -24,18 +43,26 @@ export interface Plant {
 /** 草、石块、落叶、枯枝和小型植物。石块和植物茎同时登记为蚂蚁的避障圆。 */
 export class Vegetation {
   group = new THREE.Group();
+  /** 玩家放置的障碍物，单独成组便于拾取 */
+  placedGroup = new THREE.Group();
   grass!: THREE.InstancedMesh;
   private leaves!: THREE.InstancedMesh;
   obstacles: Obstacle[] = [];
   plants: Plant[] = [];
+  placed: PlacedObstacle[] = [];
+  private nextPlacedId = 1;
   private grid = new Map<number, number[]>();
   private readonly gcell = 8;
   private grassMat!: THREE.MeshStandardMaterial;
   private windUniform = { value: 0 };
+  private stoneMat = new THREE.MeshStandardMaterial({ color: 0x77706a, roughness: 0.92, flatShading: true });
+  private twigMat = new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 });
+  private rockNoise!: Noise2D;
 
   constructor(private terrain: Terrain, private rng: Rng) {}
 
   build(): void {
+    this.group.add(this.placedGroup);
     this.buildGrass();
     this.buildStones();
     this.buildLeaves();
@@ -47,9 +74,20 @@ export class Vegetation {
     return (i + 1000) * 4000 + (j + 1000);
   }
 
-  private addObstacle(o: Obstacle): void {
-    const idx = this.obstacles.length;
+  addObstacle(o: Obstacle): void {
     this.obstacles.push(o);
+    this.index(o, this.obstacles.length - 1);
+  }
+
+  /** 移除若干避障圆并重建网格（索引随之变化） */
+  removeObstacles(list: Obstacle[]): void {
+    const drop = new Set(list);
+    this.obstacles = this.obstacles.filter((o) => !drop.has(o));
+    this.grid.clear();
+    this.obstacles.forEach((o, i) => this.index(o, i));
+  }
+
+  private index(o: Obstacle, idx: number): void {
     const i0 = Math.floor((o.x - o.r) / this.gcell);
     const i1 = Math.floor((o.x + o.r) / this.gcell);
     const j0 = Math.floor((o.z - o.r) / this.gcell);
@@ -63,12 +101,13 @@ export class Vegetation {
       }
   }
 
-  /** 返回包含点 (x,z) 的障碍物（考虑额外半径） */
-  obstacleAt(x: number, z: number, pad = 0): Obstacle | null {
+  /** 返回包含点 (x,z) 的障碍物（考虑额外半径）；solid 为 true 时忽略水洼 */
+  obstacleAt(x: number, z: number, pad = 0, solid = false): Obstacle | null {
     const arr = this.grid.get(this.key(Math.floor(x / this.gcell), Math.floor(z / this.gcell)));
     if (!arr) return null;
     for (const i of arr) {
       const o = this.obstacles[i];
+      if (solid && o.kind === 'water') continue;
       const rr = o.r + pad;
       if ((x - o.x) ** 2 + (z - o.z) ** 2 < rr * rr) return o;
     }
@@ -152,9 +191,86 @@ export class Vegetation {
     this.group.add(this.grass);
   }
 
+  private stoneMesh(x: number, z: number, r: number, yaw: number): THREE.Mesh {
+    const geo = new THREE.IcosahedronGeometry(1, 2);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const off = this.rng.range(0, 100);
+    for (let i = 0; i < pos.count; i++) {
+      // 位移只取决于顶点方向，非索引几何中重复的顶点得到相同位移，避免面片裂开
+      const px = pos.getX(i);
+      const py = pos.getY(i);
+      const pz = pos.getZ(i);
+      const k = 0.82 + this.rockNoise.fbm(px * 1.3 + pz * 0.7 + off, py * 1.3 - pz * 0.5, 3) * 0.6;
+      pos.setXYZ(i, px * k, Math.max(py * k * 0.55, -0.15), pz * k);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, this.stoneMat);
+    mesh.scale.setScalar(r);
+    mesh.rotation.y = yaw;
+    mesh.position.set(x, this.terrain.heightAt(x, z) + r * 0.12, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.pick = { kind: 'stone' };
+    return mesh;
+  }
+
+  /** 放置玩家障碍物。调用方负责检查位置是否可用 */
+  place(kind: PlaceableObstacle, x: number, z: number, yaw: number): PlacedObstacle {
+    const info = OBSTACLE_INFO[kind];
+    const parts: Obstacle[] = [];
+    let mesh: THREE.Object3D;
+    if (kind === 'twig') {
+      const len = info.len!;
+      const geo = new THREE.CylinderGeometry(0.42, 0.55, len, 7);
+      geo.rotateZ(Math.PI / 2);
+      mesh = new THREE.Mesh(geo, this.twigMat);
+      mesh.position.set(x, this.terrain.heightAt(x, z) + 0.45, z);
+      mesh.rotation.y = -yaw;
+      mesh.castShadow = true;
+      const n = Math.ceil(len / 0.9);
+      for (let i = 0; i <= n; i++) {
+        const t = (i / n - 0.5) * len;
+        parts.push({ x: x + Math.cos(yaw) * t, z: z + Math.sin(yaw) * t, r: info.r, kind: 'twig' });
+      }
+    } else {
+      mesh = this.stoneMesh(x, z, info.r, yaw);
+      parts.push({ x, z, r: info.r * 0.85, kind: 'stone' });
+    }
+    const p: PlacedObstacle = { id: this.nextPlacedId++, kind, x, z, yaw, parts, mesh };
+    mesh.traverse((o) => (o.userData.pick = { kind: 'placed', id: p.id }));
+    for (const o of parts) this.addObstacle(o);
+    this.placedGroup.add(mesh);
+    this.placed.push(p);
+    return p;
+  }
+
+  /** (x,z) 附近 r 范围内最近的玩家障碍物 */
+  placedNear(x: number, z: number, r: number): PlacedObstacle | null {
+    let best: PlacedObstacle | null = null;
+    let bd = Infinity;
+    for (const p of this.placed)
+      for (const o of p.parts) {
+        const d = Math.hypot(o.x - x, o.z - z) - o.r;
+        if (d < r && d < bd) {
+          bd = d;
+          best = p;
+        }
+      }
+    return best;
+  }
+
+  removePlaced(p: PlacedObstacle): void {
+    this.removeObstacles(p.parts);
+    this.placedGroup.remove(p.mesh);
+    this.placed.splice(this.placed.indexOf(p), 1);
+  }
+
+  placedById(id: number): PlacedObstacle | undefined {
+    return this.placed.find((p) => p.id === id);
+  }
+
   private buildStones(): void {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x77706a, roughness: 0.92, flatShading: true });
-    const rockNoise = new Noise2D(this.rng.int(1, 1e6));
+    this.rockNoise = new Noise2D(this.rng.int(1, 1e6));
     const list: { x: number; z: number; r: number }[] = [
       // 蚁穴旁的一块大石头：黑毛蚁常在石块下筑巢
       { x: -11, z: 7, r: 5.5 },
@@ -167,25 +283,9 @@ export class Vegetation {
       list.push({ x, z, r });
     }
     for (const st of list) {
-      const geo = new THREE.IcosahedronGeometry(1, 2);
-      const pos = geo.attributes.position as THREE.BufferAttribute;
-      const off = this.rng.range(0, 100);
-      for (let i = 0; i < pos.count; i++) {
-        // 位移只取决于顶点方向，非索引几何中重复的顶点得到相同位移，避免面片裂开
-        const x = pos.getX(i);
-        const y = pos.getY(i);
-        const z = pos.getZ(i);
-        const k = 0.82 + rockNoise.fbm(x * 1.3 + z * 0.7 + off, y * 1.3 - z * 0.5, 3) * 0.6;
-        pos.setXYZ(i, x * k, Math.max(y * k * 0.55, -0.15), z * k);
-      }
-      geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.scale.setScalar(st.r);
+      // 朝向必须在形状之后取随机数，调换顺序会改变整个世界布局
+      const mesh = this.stoneMesh(st.x, st.z, st.r, 0);
       mesh.rotation.y = this.rng.range(0, Math.PI * 2);
-      mesh.position.set(st.x, this.terrain.heightAt(st.x, st.z) + st.r * 0.12, st.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData.pick = { kind: 'stone' };
       this.group.add(mesh);
       this.addObstacle({ x: st.x, z: st.z, r: st.r * 0.85, kind: 'stone' });
     }
@@ -222,7 +322,7 @@ export class Vegetation {
   }
 
   private buildTwigs(): void {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 });
+    const mat = this.twigMat;
     for (let i = 0; i < 40; i++) {
       const x = this.rng.range(-110, 110);
       const z = this.rng.range(-110, 110);

@@ -95,6 +95,13 @@ export class Ant {
   readonly ageBias = rng.gauss(0, CONFIG.polyethism.ageJitterDays);
   /** 触角接触、交哺时原地停留的剩余秒数 */
   holdT = 0;
+  /** 被水洼挡住的累计时间，超过阈值后蹚水通过 */
+  wadeT = 0;
+  private avoidSign = 1;
+  private avoidT = 0;
+  private blockedT = 0;
+  private blockX = 0;
+  private blockZ = 0;
   nextContactAt = rng.range(0, 10);
   contacts = 0;
   shares = 0;
@@ -387,23 +394,65 @@ export class Ant {
 
   // ---------------- 地表运动 ----------------
 
+  /**
+   * 沿障碍物边缘绕行。绕行方向（顺/逆时针）会保持一段时间，否则在凹角处每步重新选择会来回摆动、原地打转；
+   * 长时间没有离开原地时换一个方向。
+   */
+  private skirt(cx: number, cz: number): void {
+    const radial = Math.atan2(this.pos.z - cz, this.pos.x - cx);
+    if (this.avoidT <= 0) {
+      this.avoidSign = Math.abs(wrapAngle(radial + Math.PI / 2 - this.heading)) < Math.PI / 2 ? 1 : -1;
+      this.blockX = this.pos.x;
+      this.blockZ = this.pos.z;
+      this.blockedT = 0;
+    }
+    this.avoidT = 1.5;
+    if (this.blockedT > 3) {
+      this.avoidSign = -this.avoidSign;
+      this.blockedT = 0;
+    }
+    this.heading = radial + (this.avoidSign * Math.PI) / 2;
+  }
+
+  /** 绕行期间按真实时间累计“没走出 3 cm”的时长 */
+  private trackBlocked(dt: number): void {
+    if (this.avoidT <= 0) return;
+    if (Math.hypot(this.pos.x - this.blockX, this.pos.z - this.blockZ) > 3) {
+      this.blockX = this.pos.x;
+      this.blockZ = this.pos.z;
+      this.blockedT = 0;
+    } else this.blockedT += dt;
+  }
+
   private surfaceMove(dt: number, w: World, desired: number | null, turnRate = 5, speedMul = 1): void {
     if (desired !== null) {
       const d = wrapAngle(desired - this.heading);
       this.heading += clamp(d, -turnRate * dt, turnRate * dt);
     }
-    const step = CONFIG.ant.speedSurface * this.speedFactor(w) * speedMul * dt;
+    const wetHere = w.water.at(this.pos.x, this.pos.z);
+    const step = CONFIG.ant.speedSurface * this.speedFactor(w) * speedMul * (wetHere ? 0.35 : 1) * dt;
     let nx = this.pos.x + Math.cos(this.heading) * step;
     let nz = this.pos.z + Math.sin(this.heading) * step;
-    const ob = w.veg.obstacleAt(nx, nz, 0.35);
-    if (ob) {
-      const radial = Math.atan2(this.pos.z - ob.z, this.pos.x - ob.x);
-      const t1 = radial + Math.PI / 2;
-      const t2 = radial - Math.PI / 2;
-      this.heading = Math.abs(wrapAngle(t1 - this.heading)) < Math.abs(wrapAngle(t2 - this.heading)) ? t1 : t2;
+    // 水洼是软障碍：先沿边缘绕行，被挡住几秒（目标在水里、或水洼盖住入口）就蹚水过去
+    this.trackBlocked(dt);
+    this.avoidT -= dt;
+    const pd = wetHere ? null : w.water.at(nx, nz);
+    if (pd && this.wadeT < 4) {
+      this.wadeT += dt;
+      this.skirt(pd.x, pd.z);
       nx = this.pos.x + Math.cos(this.heading) * step;
       nz = this.pos.z + Math.sin(this.heading) * step;
-      const ob2 = w.veg.obstacleAt(nx, nz, 0.3);
+      if (w.water.at(nx, nz)) {
+        nx = this.pos.x;
+        nz = this.pos.z;
+      }
+    } else if (!pd && !wetHere) this.wadeT = Math.max(0, this.wadeT - dt * 0.5);
+    const ob = w.veg.obstacleAt(nx, nz, 0.35, true);
+    if (ob) {
+      this.skirt(ob.x, ob.z);
+      nx = this.pos.x + Math.cos(this.heading) * step;
+      nz = this.pos.z + Math.sin(this.heading) * step;
+      const ob2 = w.veg.obstacleAt(nx, nz, 0.3, true);
       if (ob2) {
         const a = Math.atan2(nz - ob2.z, nx - ob2.x);
         nx = ob2.x + Math.cos(a) * (ob2.r + 0.4);

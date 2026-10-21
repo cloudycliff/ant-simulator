@@ -102,6 +102,20 @@ export const CONFIG = {
     maxSources: 20,
   },
 
+  /** 玩家干预工具 */
+  intervention: {
+    /** 玩家投放的食物同时存在的上限（不计自然刷新的） */
+    maxPlacedFood: 30,
+    maxPlacedObstacles: 40,
+    /** 水洼半径（小 / 大） */
+    waterRadius: [4, 8] as [number, number],
+    /** 20°C 时水洼完全蒸发渗干所需的游戏日 */
+    waterDays: 0.25,
+    /** 浇水瞬间残留的信息素比例：路径 / 足迹 */
+    washTrail: 0.05,
+    washHome: 0.3,
+  },
+
   nest: {
     tunnelRadius: 1.0,
     shaftRadius: 1.25,

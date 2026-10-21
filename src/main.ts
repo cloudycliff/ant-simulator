@@ -9,6 +9,7 @@ import { Environment } from './render/environment';
 import { CameraController } from './ui/camera';
 import { Picker, type Selection } from './ui/picking';
 import { Hud, type HudAction } from './ui/hud';
+import { ToolController } from './ui/tools';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
 
@@ -32,7 +33,7 @@ async function boot(): Promise<void> {
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);
   for (let t = 0; t < skip; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
-  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group);
+  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group);
 
   const nestView = new NestView(world.nest, world.terrain);
   nestView.build();
@@ -56,10 +57,17 @@ async function boot(): Promise<void> {
 
   const picker = new Picker(world, camera, renderer.domElement, antView, {
     chambers: nestView.chamberMeshes,
-    surface: [world.food.group, nestView.surfaceGroup, ...world.veg.group.children.filter((o) => o.userData.pick)],
+    surface: [world.food.group, nestView.surfaceGroup, world.veg.placedGroup, world.water.group, ...world.veg.group.children.filter((o) => o.userData.pick)],
     terrain: world.terrain.mesh,
   });
   const hud = new Hud(world);
+  const tools = new ToolController(world);
+  hud.tools = tools;
+  scene.add(tools.preview);
+  let mouse: { x: number; y: number } | null = null;
+  renderer.domElement.addEventListener('pointermove', (e) => (mouse = { x: e.clientX, y: e.clientY }));
+  renderer.domElement.addEventListener('pointerleave', () => (mouse = null));
+  const groundPt = new THREE.Vector3();
 
   let selection: Selection | null = null;
   let xrayApplied: boolean | null = null;
@@ -181,13 +189,46 @@ async function boot(): Promise<void> {
       case 'help':
         hud.toggleHelp();
         break;
+      case 'tool': {
+        tools.select(v ?? 0);
+        const help = document.getElementById('help')!;
+        if (!help.classList.contains('hidden')) hud.toggleHelp();
+        break;
+      }
+      case 'toolopt':
+        tools.setOption(v ?? 0);
+        break;
+      case 'toolexit':
+        tools.exit();
+        break;
+      case 'removePlaced': {
+        const r = world.removePlacedById(v ?? -1);
+        hud.toast(r.msg);
+        if (r.ok) select(null);
+        break;
+      }
     }
+    hud.renderTool();
     applyView();
   };
   hud.onAction = action;
 
-  controller.onClick = (x, y) => select(picker.pick(x, y, xrayOn()));
+  const useTool = (x: number, y: number) => {
+    tools.hover(picker.groundPoint(x, y, groundPt));
+    const r = tools.apply();
+    if (r.msg) hud.toast(r.msg);
+    if (r.ok) {
+      hud.refresh(selection, fps);
+      if (hud.state.pheromone) world.pheromone.refreshTexture();
+    }
+  };
+
+  controller.onClick = (x, y) => {
+    if (tools.active >= 0) return useTool(x, y);
+    select(picker.pick(x, y, xrayOn()));
+  };
   controller.onDoubleClick = (x, y) => {
+    if (tools.active >= 0) return;
     const s = picker.pick(x, y, xrayOn());
     if (s) {
       select(s);
@@ -216,8 +257,17 @@ async function boot(): Promise<void> {
         return action('follow');
       case 'KeyH':
         return action('help');
+      case 'Digit6':
+        return action('tool', 0);
+      case 'Digit7':
+        return action('tool', 1);
+      case 'Digit8':
+        return action('tool', 2);
+      case 'KeyR':
+        tools.rotate();
+        return;
       case 'Escape':
-        return action('deselect');
+        return action(tools.active >= 0 ? 'toolexit' : 'deselect');
     }
   });
 
@@ -297,6 +347,7 @@ async function boot(): Promise<void> {
       focus.y = world.terrain.heightAt(focus.x, focus.z);
     }
 
+    if (tools.active >= 0) tools.hover(mouse ? picker.groundPoint(mouse.x, mouse.y, groundPt) : null);
     world.veg.update(time);
     world.aphids.sync();
     nestView.sync();

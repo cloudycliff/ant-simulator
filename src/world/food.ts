@@ -12,9 +12,11 @@ export const FOOD_KIND_NAMES: Record<FoodKind, string> = {
   sugar: '甜液',
 };
 
-export type FoodSourceType = 'beetle' | 'caterpillar' | 'seeds' | 'fruit';
+export type FoodSourceType = 'beetle' | 'caterpillar' | 'seeds' | 'fruit' | 'syrup';
 
-const SOURCE_INFO: Record<FoodSourceType, { name: string; kind: FoodKind; amount: [number, number]; radius: number; desc: string }> = {
+export const PLACEABLE_FOOD: FoodSourceType[] = ['syrup', 'beetle', 'caterpillar', 'seeds', 'fruit'];
+
+export const SOURCE_INFO: Record<FoodSourceType, { name: string; kind: FoodKind; amount: [number, number]; radius: number; desc: string }> = {
   beetle: {
     name: '甲虫尸体',
     kind: 'prey',
@@ -43,6 +45,13 @@ const SOURCE_INFO: Record<FoodSourceType, { name: string; kind: FoodKind; amount
     radius: 2.0,
     desc: '富含糖分的液体食物。觅食蚁把甜汁吸入嗉囊带回巢，再通过交哺分给同伴。',
   },
+  syrup: {
+    name: '糖水',
+    kind: 'sugar',
+    amount: [50, 70],
+    radius: 1.8,
+    desc: '玩家滴下的一滴糖水。和蜜露、花蜜一样被吸进嗉囊带回巢，是饲养蚂蚁最常用的“零食”。',
+  },
 };
 
 let nextFoodId = 1;
@@ -55,6 +64,8 @@ export class FoodSource {
   /** 已被觅食蚁发现 */
   discovered = false;
   takenTotal = 0;
+  /** 由玩家投放 */
+  placed = false;
   constructor(
     public type: FoodSourceType,
     public x: number,
@@ -104,6 +115,7 @@ export class FoodManager {
     elaiosome: new THREE.MeshStandardMaterial({ color: 0xf3ead0, roughness: 0.5 }),
     fruit: new THREE.MeshStandardMaterial({ color: 0x9b1d2a, roughness: 0.4 }),
     juice: new THREE.MeshStandardMaterial({ color: 0xd9761c, roughness: 0.1, transparent: true, opacity: 0.75 }),
+    syrup: new THREE.MeshStandardMaterial({ color: 0xe8a640, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.7 }),
   };
 
   constructor(private terrain: Terrain, private veg: Vegetation, private rng: Rng) {}
@@ -178,11 +190,20 @@ export class FoodManager {
         m.rotation.y = a;
         add(sphere, this.mats.elaiosome, sx + Math.cos(a) * 0.45, 0.32, sz - Math.sin(a) * 0.45, 0.2, 0.18, 0.2);
       }
-    } else {
+    } else if (t === 'fruit') {
       add(sphere, this.mats.fruit, 0, 1.1, 0, 1.5, 1.3, 1.5);
       add(new THREE.CircleGeometry(2.4, 16).rotateX(-Math.PI / 2), this.mats.juice, 0.3, 0.06, 0.2);
+    } else {
+      add(sphere, this.mats.syrup, 0, 0.05, 0, 1.7, 0.35, 1.5);
+      add(sphere, this.mats.syrup, 0.6, 0.05, 0.5, 0.9, 0.25, 0.8);
     }
     return g;
+  }
+
+  placedCount(): number {
+    let n = 0;
+    for (const s of this.sources) if (s.placed) n++;
+    return n;
   }
 
   nearest(x: number, z: number, radius: number): FoodSource | null {

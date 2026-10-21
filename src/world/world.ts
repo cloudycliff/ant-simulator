@@ -6,10 +6,19 @@ import type { Ant } from '../sim/ant';
 import { SimClock } from '../sim/clock';
 import { Colony } from '../sim/colony';
 import { AphidManager } from './aphids';
-import { FoodManager } from './food';
+import { FoodManager, SOURCE_INFO, type FoodSourceType } from './food';
 import { PheromoneField } from './pheromone';
 import { Terrain } from './terrain';
-import { Vegetation } from './vegetation';
+import { OBSTACLE_INFO, Vegetation, type PlaceableObstacle } from './vegetation';
+import { WaterManager } from './water';
+
+/** 干预操作的结果，msg 用于提示玩家 */
+export interface ToolResult {
+  ok: boolean;
+  msg: string;
+}
+
+const COMPASS = ['东', '东南', '南', '西南', '西', '西北', '北', '东北'];
 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
 export class World {
@@ -21,6 +30,7 @@ export class World {
   readonly food: FoodManager;
   readonly aphids: AphidManager;
   readonly pheromone: PheromoneField;
+  readonly water: WaterManager;
   readonly colony: Colony;
   private acc = 0;
   /** 最近一帧实际执行的模拟步数（性能面板用） */
@@ -42,8 +52,86 @@ export class World {
     this.food.init();
     this.aphids = new AphidManager(this.veg, this.rng);
     this.pheromone = new PheromoneField(this.terrain);
+    this.water = new WaterManager(this.terrain, this.veg, this.pheromone);
     this.colony = new Colony(this);
     this.colony.init();
+  }
+
+  // ---------------- 玩家干预 ----------------
+
+  /** “蚁穴东北 32 cm 处”。+x 为东，+z 为南 */
+  describePlace(x: number, z: number): string {
+    const d = Math.hypot(x, z);
+    if (d < 6) return '蚁穴入口旁';
+    const sector = Math.round(Math.atan2(z, x) / (Math.PI / 4));
+    return `蚁穴${COMPASS[(sector + 8) % 8]} ${d.toFixed(0)} cm 处`;
+  }
+
+  private checkSpot(x: number, z: number, r: number, blocking: boolean): string | null {
+    if (Math.hypot(x, z) > CONFIG.world.forageRadius - r - 1) return '超出了蚂蚁的活动范围';
+    if (!blocking) return null;
+    for (const e of this.nest.entrances) if (Math.hypot(e.x - x, e.z - z) < r + 4) return '离蚁穴入口太近，会把入口堵住';
+    if (this.veg.obstacleAt(x, z, r)) return '这里已经有石块、植物或水洼了';
+    for (const s of this.food.sources) if (Math.hypot(s.x - x, s.z - z) < r + s.radius) return '这里已经有食物了';
+    return null;
+  }
+
+  // 以下干预方法在 dry 为 true 时只做检查、不改动世界（用于放置预览）
+
+  dropFood(type: FoodSourceType, x: number, z: number, dry = false): ToolResult {
+    const info = SOURCE_INFO[type];
+    if (this.food.placedCount() >= CONFIG.intervention.maxPlacedFood) return { ok: false, msg: '投放的食物太多了，等蚂蚁搬完一些再投' };
+    const err = this.checkSpot(x, z, info.radius, false);
+    if (err) return { ok: false, msg: err };
+    if (this.veg.obstacleAt(x, z, info.radius * 0.5)) return { ok: false, msg: '这里被石块、植物或水洼占着' };
+    if (dry) return { ok: true, msg: '' };
+    const src = this.food.spawn(0, type, { x, z });
+    if (!src) return { ok: false, msg: '无法在这里投放' };
+    src.placed = true;
+    const msg = `你在${this.describePlace(x, z)}投放了${info.name}`;
+    this.colony.pushEvent(msg);
+    return { ok: true, msg };
+  }
+
+  placeObstacle(kind: PlaceableObstacle, x: number, z: number, yaw: number, dry = false): ToolResult {
+    const info = OBSTACLE_INFO[kind];
+    if (this.veg.placed.length >= CONFIG.intervention.maxPlacedObstacles) return { ok: false, msg: '放置的障碍物太多了，先移除一些' };
+    const pts = kind === 'twig' ? [-0.5, -0.25, 0, 0.25, 0.5].map((t) => [x + Math.cos(yaw) * t * info.len!, z + Math.sin(yaw) * t * info.len!]) : [[x, z]];
+    for (const [px, pz] of pts) {
+      const err = this.checkSpot(px, pz, info.r, true);
+      if (err) return { ok: false, msg: err };
+    }
+    if (dry) return { ok: true, msg: '' };
+    this.veg.place(kind, x, z, yaw);
+    const msg = `你在${this.describePlace(x, z)}放了一${kind === 'twig' ? '根' : '块'}${info.name}`;
+    this.colony.pushEvent(msg);
+    return { ok: true, msg };
+  }
+
+  removeObstacle(x: number, z: number, dry = false): ToolResult {
+    const p = this.veg.placedNear(x, z, 2.5);
+    if (!p) return { ok: false, msg: '这里没有你放置的障碍物（自然生成的石块和植物不能移除）' };
+    if (dry) return { ok: true, msg: '' };
+    this.veg.removePlaced(p);
+    return { ok: true, msg: `移除了${OBSTACLE_INFO[p.kind].name}` };
+  }
+
+  removePlacedById(id: number): ToolResult {
+    const p = this.veg.placedById(id);
+    if (!p) return { ok: false, msg: '已经移除了' };
+    this.veg.removePlaced(p);
+    return { ok: true, msg: `移除了${OBSTACLE_INFO[p.kind].name}` };
+  }
+
+  pourWater(x: number, z: number, big: boolean, dry = false): ToolResult {
+    const r = CONFIG.intervention.waterRadius[big ? 1 : 0];
+    const err = this.checkSpot(x, z, r, false);
+    if (err) return { ok: false, msg: err };
+    if (dry) return { ok: true, msg: '' };
+    this.water.pour(x, z, r);
+    const msg = `你在${this.describePlace(x, z)}浇了${big ? '一大杯' : '一点'}水，冲掉了那里的信息素`;
+    this.colony.pushEvent(msg);
+    return { ok: true, msg };
   }
 
   /** 房间温度：土壤温度随深度变化；石块下方的房间白天额外吸热升温 */
@@ -79,6 +167,7 @@ export class World {
     this.colony.update(dt);
     this.food.update(dt);
     this.aphids.update(dt, this.clock.seconds);
+    this.water.update(dt, this.clock);
     this.pheromone.update(dt);
   }
 }
