@@ -49,6 +49,7 @@ export class Vegetation {
   placedGroup = new THREE.Group();
   grass!: THREE.InstancedMesh;
   private leaves!: THREE.InstancedMesh;
+  private leafSpots: { x: number; z: number; len: number }[] = [];
   obstacles: Obstacle[] = [];
   plants: Plant[] = [];
   placed: PlacedObstacle[] = [];
@@ -57,6 +58,10 @@ export class Vegetation {
   private readonly gcell = 8;
   private grassMat!: THREE.MeshStandardMaterial;
   private windUniform = { value: 0 };
+  /** 草叶摆幅倍数，下雨时变大 */
+  private gustUniform = { value: 1 };
+  /** 植物叶片的挂点：下雨时被雨压低，雨滴打中时上下颤动 */
+  private leafPivots: { pivot: THREE.Object3D; rest: number; off: number; v: number }[] = [];
   private stoneMat = new THREE.MeshStandardMaterial({ color: 0x77706a, roughness: 0.92, flatShading: true });
   private twigMat = new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 });
   private rockNoise!: Noise2D;
@@ -148,16 +153,18 @@ export class Vegetation {
       side: THREE.DoubleSide,
     });
     const wind = this.windUniform;
+    const gust = this.gustUniform;
     this.grassMat.onBeforeCompile = (shader) => {
       shader.uniforms.uWind = wind;
+      shader.uniforms.uGust = gust;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uWind;')
+        .replace('#include <common>', '#include <common>\nuniform float uWind;\nuniform float uGust;')
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
            vec4 wp = instanceMatrix * vec4(0.0,0.0,0.0,1.0);
            float sway = sin(uWind * 1.7 + wp.x * 0.11 + wp.z * 0.07) * 0.18 + sin(uWind * 3.1 + wp.x * 0.3) * 0.05;
-           transformed.x += sway * position.y * position.y;`,
+           transformed.x += sway * uGust * position.y * position.y;`,
         );
     };
     this.grass = new THREE.InstancedMesh(blade, this.grassMat, count);
@@ -293,6 +300,15 @@ export class Vegetation {
     }
   }
 
+  /** 去掉会横在坑上的落叶（落叶贴着原地面摆放） */
+  clearLitter(x: number, z: number, r: number): void {
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.leafSpots.forEach((l, i) => {
+      if (Math.hypot(l.x - x, l.z - z) < r + l.len) this.leaves.setMatrixAt(i, zero);
+    });
+    this.leaves.instanceMatrix.needsUpdate = true;
+  }
+
   private buildLeaves(): void {
     const shape = new THREE.Shape();
     shape.moveTo(0, -1);
@@ -315,6 +331,7 @@ export class Vegetation {
       q.setFromEuler(e);
       m.compose(new THREE.Vector3(x, this.terrain.heightAt(x, z) + 0.08, z), q, new THREE.Vector3(sc * 0.6, 1, sc));
       leaves.setMatrixAt(i, m);
+      this.leafSpots.push({ x, z, len: sc });
       c.setHSL(this.rng.range(0.05, 0.12), this.rng.range(0.4, 0.7), this.rng.range(0.22, 0.4));
       leaves.setColorAt(i, c);
     }
@@ -382,11 +399,14 @@ export class Vegetation {
       for (let k = 0; k < nLeaves; k++) {
         const leaf = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 4), leafMat);
         leaf.scale.set(4.5, 0.15, 1.6);
-        leaf.position.set(0, h * (0.25 + 0.6 * (k / nLeaves)), 0);
-        leaf.rotation.set(0, (k * 2.4) % (Math.PI * 2), -0.35);
-        leaf.translateX(4);
+        leaf.position.x = 4;
         leaf.castShadow = true;
-        g.add(leaf);
+        const pivot = new THREE.Group();
+        pivot.position.set(0, h * (0.25 + 0.6 * (k / nLeaves)), 0);
+        pivot.rotation.set(0, (k * 2.4) % (Math.PI * 2), -0.35);
+        pivot.add(leaf);
+        g.add(pivot);
+        this.leafPivots.push({ pivot, rest: -0.35, off: 0, v: 0 });
       }
       if (this.rng.chance(0.6)) {
         const fl = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 0), flowerMat);
@@ -403,8 +423,17 @@ export class Vegetation {
     }
   }
 
-  update(time: number): void {
-    this.windUniform.value = time;
+  /** 只影响画面，用 Math.random 而不是世界随机数 */
+  update(dt: number, rain: number): void {
+    this.windUniform.value += dt * (1 + rain * 0.8);
+    this.gustUniform.value = 1 + rain * 1.2;
+    const droop = -0.22 * rain;
+    for (const l of this.leafPivots) {
+      if (rain > 0.02 && Math.random() < rain * dt * 3) l.v -= 0.6 + Math.random() * 0.8;
+      l.v += ((droop - l.off) * 40 - l.v * 4) * dt;
+      l.off += l.v * dt;
+      l.pivot.rotation.z = l.rest + l.off;
+    }
   }
 
   setGrassVisible(v: boolean): void {

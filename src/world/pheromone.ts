@@ -127,6 +127,7 @@ export class PheromoneField {
     const geo = (this.terrain.mesh.geometry as THREE.BufferGeometry).clone();
     const pos = geo.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) + 0.06);
+    this.terrain.linkGeometry(geo, 0.06);
     const mat = new THREE.MeshBasicMaterial({
       map: this.tex,
       transparent: true,

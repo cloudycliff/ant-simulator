@@ -40,7 +40,7 @@ src/
     antView.ts          蚂蚁几何体、步态着色器、实例化更新、选中标记
     itemView.ts         物品的实例化渲染
     environment.ts      天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
-    rain.ts             雨丝：跟随相机的循环下落线段
+    rain.ts             雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
   ui/
     camera.ts           自由飞行 / 跟随相机、平滑飞向目标
     picking.ts          点选（蚂蚁屏幕空间 + 物体射线）；groundPoint 用解析高度场求鼠标下的地面点
@@ -162,7 +162,7 @@ requestAnimationFrame
 - **地下透视**：`Terrain.setXray` 让地表变透明；`NestView.setXray` 切换蚁穴与地表洞口的可见性；`AntView`、`ItemView` 的 `xray` 决定是否显示巢内的蚂蚁和物品
 - **实例容量**：工蚁 `maxPopulation + 50`；物品各类有固定上限（见 `itemView.ts`）
 - **蚂蚁细节层级**：`AntView` 有完整和简化两套工蚁实例网格，每帧按离相机的距离（`ant.lodDistance`）分配，共用同一个步态材质；简化网格不投影
-- **地形高度**：`Terrain.heightAt` 在网格建好后查 0.5 cm 间距的高度表，模拟里所有地表高度都走这里；`exactHeight` 只用来建表
+- **地形高度**：`Terrain.heightAt` 在网格建好后查 0.5 cm 间距的高度表，模拟里所有地表高度都走这里；`exactHeight` 只用来建表。蚁狮坑用 `Terrain.setDent` 只压低显示网格的顶点（信息素叠加层通过 `linkGeometry` 跟着变），`heightAt` 仍是原地面，坑里的高度由 `PredatorManager.liftAt` 叠加（T-037）
 - **阴影**：方向光的阴影相机 ±45 单位，跟随视点前方的地面点
 
 ## 扩展指南

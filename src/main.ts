@@ -71,7 +71,7 @@ async function boot(): Promise<void> {
   nestView.build();
   scene.add(nestView.group, nestView.surfaceGroup);
   const rain = new RainView();
-  scene.add(rain.lines);
+  scene.add(rain.lines, rain.splashes);
   const terrainMat = world.terrain.mesh.material as THREE.MeshStandardMaterial;
 
   scene.add(world.pheromone.buildOverlay());
@@ -455,7 +455,7 @@ async function boot(): Promise<void> {
     }
 
     if (tools.active >= 0) tools.hover(mouse ? picker.groundPoint(mouse.x, mouse.y, groundPt) : null);
-    world.veg.update(time);
+    world.veg.update(dt, world.weather.rain);
     world.aphids.sync();
     world.predators.sync(time);
     world.alarm.sync(hud.state.pheromone);
@@ -463,7 +463,7 @@ async function boot(): Promise<void> {
     antView.update(time, camera.position);
     itemView.update();
     env.update(world.clock, camera, focus, xrayOn(), world.weather.cloud);
-    rain.sync(dt, camera, focus, world.weather);
+    rain.sync(dt, camera, focus, world.weather, (x, z) => world.terrain.heightAt(x, z));
     terrainMat.color.setScalar(1 - 0.28 * world.weather.wetness);
     terrainMat.roughness = 0.97 - 0.3 * world.weather.wetness;
 

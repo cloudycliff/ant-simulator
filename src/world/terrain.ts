@@ -13,6 +13,14 @@ interface Mound {
   height: number;
 }
 
+/** 显示网格上挖下去的坑：t = 到中心距离 / r，顶点压低 depth(t) */
+export interface Dent {
+  x: number;
+  z: number;
+  r: number;
+  depth: (t: number) => number;
+}
+
 /** 地表高度场。高度函数是解析式，建好后缓存成网格供蚂蚁 O(1) 采样。 */
 export class Terrain {
   readonly size = CONFIG.world.size;
@@ -22,6 +30,10 @@ export class Terrain {
   private mounds: Mound[] = [];
   private grid: Float32Array | null = null;
   private gridN = 0;
+  private dents = new Map<number, Dent>();
+  private baseY: Float32Array | null = null;
+  /** 和地形网格顶点一一对应、要跟着坑一起变形的网格（信息素叠加层），offset 为高出地面的量 */
+  private linked: { geo: THREE.BufferGeometry; offset: number }[] = [];
   mesh!: THREE.Mesh;
   material!: THREE.MeshStandardMaterial;
 
@@ -132,6 +144,8 @@ export class Terrain {
       colors[i * 3 + 2] = c.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    this.baseY = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) this.baseY[i] = pos.getY(i);
     geo.computeVertexNormals();
     this.material = new THREE.MeshStandardMaterial({
       vertexColors: true,
@@ -142,6 +156,43 @@ export class Terrain {
     this.mesh.receiveShadow = true;
     this.mesh.name = 'terrain';
     return this.mesh;
+  }
+
+  /**
+   * 在显示网格上挖坑（dent 为 null 时填平）。只改顶点，heightAt 仍是原地面：
+   * 坑里的东西由调用方自己叠加坑面高度，网格顶点间距约 1 cm，坑面要另做网格盖在上面
+   */
+  setDent(id: number, dent: Dent | null): void {
+    const old = this.dents.get(id);
+    if (dent) this.dents.set(id, dent);
+    else this.dents.delete(id);
+    if (!this.baseY) return;
+    for (const d of [old, dent]) if (d) this.reshape(d.x, d.z, d.r);
+    (this.mesh.geometry as THREE.BufferGeometry).computeVertexNormals();
+  }
+
+  linkGeometry(geo: THREE.BufferGeometry, offset: number): void {
+    this.linked.push({ geo, offset });
+  }
+
+  private reshape(x: number, z: number, r: number): void {
+    const base = this.baseY!;
+    const pos = (this.mesh.geometry as THREE.BufferGeometry).attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i);
+      const vz = pos.getZ(i);
+      if (Math.abs(vx - x) > r || Math.abs(vz - z) > r) continue;
+      let low = 0;
+      for (const d of this.dents.values()) {
+        const t = Math.hypot(vx - d.x, vz - d.z) / d.r;
+        if (t < 1) low = Math.max(low, d.depth(t));
+      }
+      const y = base[i] - low;
+      pos.setY(i, y);
+      for (const l of this.linked) (l.geo.attributes.position as THREE.BufferAttribute).setY(i, y + l.offset);
+    }
+    pos.needsUpdate = true;
+    for (const l of this.linked) l.geo.attributes.position.needsUpdate = true;
   }
 
   setXray(on: boolean): void {

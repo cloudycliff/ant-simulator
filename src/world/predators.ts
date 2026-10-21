@@ -22,10 +22,22 @@ export const PREDATOR_INFO: Record<PredatorKind, { name: string; desc: string }>
 };
 
 /** 坑口外沿堆起的松沙到 PIT_EDGE 倍半径处落回地面 */
-const PIT_EDGE = 1.35;
-/** 陷阱表面高度（t 为到中心的距离 / 陷阱半径）：地形网格建好后不能再挖，坑做成中心贴地、四周堆高的沙环 */
+const PIT_EDGE = 1.45;
+/** 坑底低于地面的深度（cm），坑壁约 30° */
+const PIT_DEPTH = 1.5;
+const PIT_LIP = 0.2;
+/** 陷阱表面相对地面的高度（t 为到中心的距离 / 陷阱半径）：漏斗形的坑，坑口一圈略高的松沙 */
 function pitLift(t: number): number {
-  return t < 1 ? 0.03 + 0.62 * t * t : 0.65 * Math.max(0, (PIT_EDGE - t) / (PIT_EDGE - 1));
+  if (t < 1) return PIT_LIP - (PIT_DEPTH + PIT_LIP) * Math.pow(1 - t, 1.3);
+  const u = Math.max(0, (PIT_EDGE - t) / (PIT_EDGE - 1));
+  return 0.04 + (PIT_LIP - 0.04) * u * u;
+}
+/**
+ * 地形网格在坑里压低的量：要低于坑面，网格是约 1 cm 的三角形，漏斗中心尖，
+ * 三角形的弦会高出坑面，所以越靠近中心留的余量越大
+ */
+function pitDent(t: number): number {
+  return Math.max(0, -pitLift(t)) + 0.1 + 0.6 * (1 - t) * (1 - t);
 }
 
 export type SpiderState = 'wander' | 'pause' | 'chase' | 'feed' | 'leave';
@@ -144,6 +156,8 @@ export class PredatorManager {
   addAntlion(x: number, z: number, placed: boolean): Antlion {
     const p = new Antlion(x, z, placed, this.pitMesh(x, z));
     p.mesh.traverse((o) => (o.userData.pick = { kind: 'predator', id: p.id }));
+    this.terrain.setDent(p.id, { x, z, r: CONFIG.predators.pitRadius, depth: pitDent });
+    this.veg.clearLitter(x, z, CONFIG.predators.pitRadius * PIT_EDGE);
     this.group.add(p.mesh);
     this.antlions.push(p);
     return p;
@@ -151,6 +165,7 @@ export class PredatorManager {
 
   remove(p: Predator): void {
     this.group.remove(p.mesh);
+    if (p instanceof Antlion) this.terrain.setDent(p.id, null);
     if (p instanceof Spider) this.spiders.splice(this.spiders.indexOf(p), 1);
     else this.antlions.splice(this.antlions.indexOf(p), 1);
   }
@@ -429,7 +444,7 @@ export class PredatorManager {
 
   sync(time: number): void {
     for (const s of this.spiders) {
-      const y = this.terrain.heightAt(s.x, s.z);
+      const y = this.terrain.heightAt(s.x, s.z) + Math.max(-0.5, this.liftAt(s.x, s.z));
       s.mesh.position.set(s.x, y, s.z);
       s.mesh.rotation.y = -s.heading;
       const legs = s.mesh.userData.legs as THREE.Object3D[];
@@ -499,11 +514,11 @@ export class PredatorManager {
     return g;
   }
 
-  /** 漏斗形的坑：坑口一圈松沙略高于地面，向中心逐渐变低 */
+  /** 漏斗形的坑：坑口一圈松沙略高于地面，坑壁向中心陷下去 */
   private pitMesh(x: number, z: number): THREE.Group {
     const R = CONFIG.predators.pitRadius;
-    const rings = 7;
-    const segs = 28;
+    const rings = 12;
+    const segs = 32;
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
@@ -522,7 +537,8 @@ export class PredatorManager {
         const px = Math.cos(a) * t * R;
         const pz = Math.sin(a) * t * R;
         pos.push(px, this.terrain.heightAt(x + px, z + pz) - h0 + pitLift(t), pz);
-        col.push(c.r, c.g, c.b);
+        const grain = rng.range(0.9, 1.06);
+        col.push(c.r * grain, c.g * grain, c.b * grain);
       }
     }
     for (let s = 0; s < segs; s++) idx.push(0, 1 + ((s + 1) % segs), 1 + s);
@@ -546,7 +562,7 @@ export class PredatorManager {
     g.add(pit);
     // 坑底只露出一对弯曲的大颚
     const jaws = new THREE.Group();
-    jaws.position.y = 0.1;
+    jaws.position.y = pitLift(0) + 0.1;
     const jawGeo = new THREE.TorusGeometry(0.35, 0.05, 4, 8, Math.PI * 0.6).rotateX(Math.PI / 2);
     for (const side of [1, -1]) {
       const j = new THREE.Mesh(jawGeo, this.mats.jaw);
@@ -557,7 +573,7 @@ export class PredatorManager {
     g.add(jaws);
     const prey = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), this.mats.prey);
     prey.scale.set(0.38, 0.14, 0.16);
-    prey.position.set(0.15, 0.1, 0);
+    prey.position.set(0.15, pitLift(0) + 0.1, 0);
     g.add(prey);
     g.userData.jaws = jaws;
     g.userData.prey = prey;
