@@ -32,11 +32,17 @@ async function boot(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 2500);
 
   const params = new URLSearchParams(location.search);
+  // ?ants=工蚁数：新开局时的初始工蚁数（性能测试用）
+  const antsParam = Number(params.get('ants'));
+  if (antsParam > 0) {
+    CONFIG.colony.initialWorkers = Math.min(5000, antsParam);
+    CONFIG.colony.maxPopulation = Math.max(CONFIG.colony.maxPopulation, CONFIG.colony.initialWorkers + 200);
+  }
   // 有存档时接着上次继续；?new=1 忽略存档（之后的自动保存会覆盖它）
   let world = new World();
   let loadMsg = '';
   let savedCamera: number[] | undefined;
-  const saved = params.get('new') === '1' ? null : readSave();
+  const saved = params.get('new') === '1' || antsParam > 0 ? null : readSave();
   if (saved) {
     const problem = saveProblem(saved);
     if (problem) loadMsg = `${problem}，已开始新的蚁群`;
@@ -67,7 +73,7 @@ async function boot(): Promise<void> {
   scene.add(world.pheromone.buildOverlay());
 
   const antView = new AntView(world);
-  scene.add(antView.workers, antView.queens, antView.marker);
+  scene.add(antView.workers, antView.workersLow, antView.queens, antView.marker);
   const itemView = new ItemView(world);
   scene.add(itemView.group);
   const env = new Environment(scene);
@@ -403,6 +409,8 @@ async function boot(): Promise<void> {
   const fwd = new THREE.Vector3();
   let last = performance.now();
   let fps = 60;
+  /** 每帧主线程耗时（ms，指数平均）：模拟推进、视图同步、提交渲染 */
+  const perf = { sim: 0, views: 0, render: 0 };
   let hudTimer = 0;
   let pherTimer = 0;
   let autosaveTimer = 0;
@@ -414,7 +422,9 @@ async function boot(): Promise<void> {
     time += dt;
     fps += (1 / Math.max(dt, 1e-4) - fps) * 0.05;
 
-    world.advance(dt);
+    const t0 = performance.now();
+    world.advance(dt, CONFIG.time.frameBudgetMs);
+    const t1 = performance.now();
     controller.update(dt);
 
     const cp = camera.position;
@@ -446,7 +456,7 @@ async function boot(): Promise<void> {
     world.predators.sync(time);
     world.alarm.sync(hud.state.pheromone);
     nestView.sync();
-    antView.update(time);
+    antView.update(time, camera.position);
     itemView.update();
     env.update(world.clock, camera, focus, xrayOn(), world.weather.cloud);
     rain.sync(dt, camera, focus, world.weather);
@@ -467,10 +477,15 @@ async function boot(): Promise<void> {
     hudTimer += dt;
     if (hudTimer > 0.25) {
       hudTimer = 0;
-      hud.refresh(selection, fps);
+      hud.refresh(selection, fps, perf);
     }
 
+    const t2 = performance.now();
     renderer.render(scene, camera);
+    const t3 = performance.now();
+    perf.sim += (t1 - t0 - perf.sim) * 0.05;
+    perf.views += (t2 - t1 - perf.views) * 0.05;
+    perf.render += (t3 - t2 - perf.render) * 0.05;
     requestAnimationFrame(frame);
   };
   hud.refresh(selection, fps);

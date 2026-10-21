@@ -30,9 +30,9 @@ function ellipsoid(rx: number, ry: number, rz: number, x: number, y: number, z: 
 }
 
 /** 连接两点的细长段（腿节、触角节） */
-function segment(a: THREE.Vector3, b: THREE.Vector3, r: number): THREE.BufferGeometry {
+function segment(a: THREE.Vector3, b: THREE.Vector3, r: number, radial = 5): THREE.BufferGeometry {
   const len = a.distanceTo(b);
-  const g = new THREE.CylinderGeometry(r * 0.8, r, len, 5, 1, false);
+  const g = new THREE.CylinderGeometry(r * 0.8, r, len, radial, 1, radial < 5);
   g.translate(0, len / 2, 0);
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
   g.applyQuaternion(q);
@@ -40,28 +40,35 @@ function segment(a: THREE.Vector3, b: THREE.Vector3, r: number): THREE.BufferGeo
   return g;
 }
 
-/** 体长约 1 的黑毛蚁：头、胸（中躯）、腹柄结节、柄后腹，六足与膝状触角。+X 为前方。 */
-export function buildAntGeometry(queen = false): THREE.BufferGeometry {
+/**
+ * 体长约 1 的黑毛蚁：头、胸（中躯）、腹柄结节、柄后腹，六足与膝状触角。+X 为前方。
+ * low 为远处用的简化版：分段更少，没有复眼、上颚和腹柄结节，三角形约为完整版的四分之一。
+ */
+export function buildAntGeometry(queen = false, low = false): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const none = new THREE.Vector3();
   const gs = queen ? 1.35 : 1;
-  parts.push(part(ellipsoid(0.27 * gs, 0.19 * gs, 0.2 * gs, -0.3 - (gs - 1) * 0.22, 0.17, 0, 12), 0, none, 1));
-  parts.push(part(ellipsoid(0.045, 0.07, 0.05, -0.04, 0.16, 0), 0, none, 1));
+  const seg = low ? 6 : 10;
+  const radial = low ? 3 : 5;
+  parts.push(part(ellipsoid(0.27 * gs, 0.19 * gs, 0.2 * gs, -0.3 - (gs - 1) * 0.22, 0.17, 0, low ? 7 : 12), 0, none, 1));
+  if (!low) parts.push(part(ellipsoid(0.045, 0.07, 0.05, -0.04, 0.16, 0), 0, none, 1));
   const tw = queen ? 1.3 : 1;
-  parts.push(part(ellipsoid(0.17 * tw, 0.085 * tw, 0.075 * tw, 0.09, 0.17, 0), 0, none, 1));
-  parts.push(part(ellipsoid(0.115, 0.095, 0.11, 0.33, 0.19, 0), 0, none, 1));
-  // 复眼
-  for (const s of [-1, 1]) parts.push(part(ellipsoid(0.03, 0.03, 0.02, 0.36, 0.22, s * 0.095, 6), 0, none, 0.3));
-  // 上颚
-  for (const s of [-1, 1])
-    parts.push(part(segment(new THREE.Vector3(0.42, 0.15, s * 0.05), new THREE.Vector3(0.5, 0.14, s * 0.012), 0.022), 0, none, 1.4));
+  parts.push(part(ellipsoid(0.17 * tw, 0.085 * tw, 0.075 * tw, 0.09, 0.17, 0, seg), 0, none, 1));
+  parts.push(part(ellipsoid(0.115, 0.095, 0.11, 0.33, 0.19, 0, seg), 0, none, 1));
+  if (!low) {
+    // 复眼
+    for (const s of [-1, 1]) parts.push(part(ellipsoid(0.03, 0.03, 0.02, 0.36, 0.22, s * 0.095, 6), 0, none, 0.3));
+    // 上颚
+    for (const s of [-1, 1])
+      parts.push(part(segment(new THREE.Vector3(0.42, 0.15, s * 0.05), new THREE.Vector3(0.5, 0.14, s * 0.012), 0.022), 0, none, 1.4));
+  }
   // 膝状触角：柄节向上外伸，鞭节前折
   for (const s of [-1, 1]) {
     const base = new THREE.Vector3(0.4, 0.23, s * 0.05);
     const knee = new THREE.Vector3(0.42, 0.36, s * 0.16);
     const tip = new THREE.Vector3(0.62, 0.3, s * 0.2);
-    parts.push(part(segment(base, knee, 0.014), 3, base, 1.3));
-    parts.push(part(segment(knee, tip, 0.016), 3, base, 1.3));
+    parts.push(part(segment(base, knee, 0.014, radial), 3, base, 1.3));
+    parts.push(part(segment(knee, tip, 0.016, radial), 3, base, 1.3));
   }
   // 六足：前足向前、后足向后，三脚架分组（左前、右中、左后 为一组）
   const legs = [
@@ -75,8 +82,8 @@ export function buildAntGeometry(queen = false): THREE.BufferGeometry {
       const knee = new THREE.Vector3(l.kx, 0.24, s * 0.3);
       const foot = new THREE.Vector3(l.fx, 0.0, s * 0.42);
       const group = (i % 2 === 0) === (s < 0) ? 1 : 2;
-      parts.push(part(segment(hip, knee, 0.022), group, hip, 1.35));
-      parts.push(part(segment(knee, foot, 0.016), group, hip, 1.35));
+      parts.push(part(segment(hip, knee, 0.022, radial), group, hip, 1.35));
+      parts.push(part(segment(knee, foot, 0.016, radial), group, hip, 1.35));
     }
   });
   if (queen) {
@@ -131,6 +138,9 @@ const BODY = new THREE.Color(0x2b1e17);
 
 export class AntView {
   workers: THREE.InstancedMesh;
+  /** 离相机较远的工蚁用简化网格，不投影 */
+  workersLow: THREE.InstancedMesh;
+  private gaitL: THREE.InstancedBufferAttribute;
   queens: THREE.InstancedMesh;
   private gaitW: THREE.InstancedBufferAttribute;
   private gaitQ: THREE.InstancedBufferAttribute;
@@ -151,6 +161,15 @@ export class AntView {
     this.workers.setColorAt(0, BODY);
     this.workers.castShadow = true;
     this.workers.frustumCulled = false;
+
+    const lGeo = buildAntGeometry(false, true);
+    this.gaitL = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
+    this.gaitL.setUsage(THREE.DynamicDrawUsage);
+    lGeo.setAttribute('aGait', this.gaitL);
+    this.workersLow = new THREE.InstancedMesh(lGeo, this.workers.material, cap);
+    this.workersLow.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.workersLow.setColorAt(0, BODY);
+    this.workersLow.frustumCulled = false;
 
     const qGeo = buildAntGeometry(true);
     this.gaitQ = new THREE.InstancedBufferAttribute(new Float32Array(4), 1);
@@ -179,9 +198,11 @@ export class AntView {
     return this.xray || a.domain === 'surface';
   }
 
-  update(time: number): void {
+  update(time: number, camPos: THREE.Vector3): void {
     const ants = this.world.colony.ants;
+    const lod2 = CONFIG.ant.lodDistance ** 2;
     let wi = 0;
+    let li = 0;
     let qi = 0;
     let selected: Ant | null = null;
     for (const a of ants) {
@@ -202,6 +223,11 @@ export class AntView {
         this.queens.setColorAt(qi, _c);
         this.gaitQ.setX(qi, a.gait);
         qi++;
+      } else if (a.pos.distanceToSquared(camPos) > lod2 && a.id !== this.selectedId) {
+        this.workersLow.setMatrixAt(li, _m);
+        this.workersLow.setColorAt(li, _c);
+        this.gaitL.setX(li, a.gait);
+        li++;
       } else {
         this.workers.setMatrixAt(wi, _m);
         this.workers.setColorAt(wi, _c);
@@ -210,12 +236,14 @@ export class AntView {
       }
     }
     this.workers.count = wi;
+    this.workersLow.count = li;
     this.queens.count = qi;
-    this.workers.instanceMatrix.needsUpdate = true;
-    this.queens.instanceMatrix.needsUpdate = true;
-    if (this.workers.instanceColor) this.workers.instanceColor.needsUpdate = true;
-    if (this.queens.instanceColor) this.queens.instanceColor.needsUpdate = true;
+    for (const m of [this.workers, this.workersLow, this.queens]) {
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
     this.gaitW.needsUpdate = true;
+    this.gaitL.needsUpdate = true;
     this.gaitQ.needsUpdate = true;
 
     if (selected && this.isVisible(selected)) {

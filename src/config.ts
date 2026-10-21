@@ -17,6 +17,8 @@ export const CONFIG = {
     startHour: 7.5,
     fixedStep: 1 / 30,
     maxStepsPerFrame: 24,
+    /** 每帧模拟最多占用的主线程时间，超出就降低实际倍速以保住帧率 */
+    frameBudgetMs: 10,
   },
 
   colony: {
@@ -80,6 +82,8 @@ export const CONFIG = {
   ant: {
     workerLength: 1.0,
     queenScale: 2.1,
+    /** 离相机超过该距离的工蚁改用简化网格且不投影（此时在 720p 画面上约 20 像素长） */
+    lodDistance: 35,
     speedSurface: 3.2,
     speedNest: 2.4,
     hungerPerDay: 0.4,

@@ -148,6 +148,10 @@ export class Ant {
   /** 正在去封堵 / 清开的入口编号 */
   plugging = -1;
   private exitBlocked = false;
+  /** 体温决定的速度系数，每 0.5 秒按所在深度重新计算 */
+  private tempK = 1;
+  private tempAt = 0;
+  private tempDomain: 'surface' | 'nest' = 'nest';
   private avoidSign = 1;
   private avoidT = 0;
   private blockedT = 0;
@@ -318,8 +322,13 @@ export class Ant {
 
   /** 体温随环境温度变化，影响行进速度 */
   private speedFactor(w: World): number {
-    const t = w.clock.temperatureAt(this.domain === 'surface' ? 0 : this.depth(w));
-    const f = clamp((t - 4) / 18, 0.3, 1.25);
+    const now = w.clock.seconds;
+    if (now >= this.tempAt || this.tempDomain !== this.domain) {
+      this.tempAt = now + 0.5;
+      this.tempDomain = this.domain;
+      this.tempK = clamp((w.clock.temperatureAt(this.domain === 'surface' ? 0 : this.depth(w)) - 4) / 18, 0.3, 1.25);
+    }
+    const f = this.tempK;
     const wet = this.domain === 'surface' ? 1 - CONFIG.weather.rainSlow * w.weather.rain : 1;
     return f * wet * (this.role === 'queen' ? 0.35 : 1) * (this.health < 0.4 ? 0.6 : 1);
   }

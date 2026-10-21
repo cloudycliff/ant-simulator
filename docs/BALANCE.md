@@ -17,6 +17,7 @@
 |---|---|---|
 | `time.dayLength` | 600 | 一个游戏日对应的模拟秒数 |
 | `time.startHour` | 7.5 | 开局时刻 |
+| `time.maxStepsPerFrame / frameBudgetMs` | 24 / 10 | 每帧最多补算的模拟步数；每帧模拟最多占用的毫秒数，超出就降低实际倍速 |
 | `colony.initialWorkers` | 1000 | 初始工蚁数 |
 | `colony.maxPopulation` | 3000 | 成虫 + 幼体的上限（超过后停止产卵） |
 | `colony.roleRatio` | 保育 0.26 / 内务 0.24 / 觅食 0.50 | 初始分工比例 |
@@ -27,6 +28,7 @@
 | `colony.workerLifespanDays` | 45–90 | 工蚁寿命 |
 | `brood.eggDays / larvaDays / pupaDays` | 2 / 3.2 / 2.4 | 各发育期天数 |
 | `brood.larvaFeedsNeeded` | 3 | 幼虫化蛹前需要被喂食的次数 |
+| `ant.lodDistance` | 35 | 离相机超过该距离的工蚁用简化网格、不投影（只影响画面） |
 | `ant.speedSurface / speedNest` | 3.2 / 2.4 | 移动速度（cm/s，会再乘温度系数） |
 | `ant.hungerPerDay` | 0.4 | 饥饿增长速度（再乘职别系数） |
 | `ant.eatAmount` | 0.25 | 每次进食消耗的储备 |
@@ -117,7 +119,8 @@
 | `routines.ts` 觅食蚁 | 搜索超时：普通 140 秒，侦察蚁 220 秒 | |
 | `routines.ts` 觅食蚁 | 返巢信息素强度 = `depositFood × (0.5 + 食物源剩余比例)`，侦察蚁 ×1.3 | |
 | `ant.ts` `stepSearch` | 随机游走转向噪声 1.4·√dt | 过大会让搜索范围变小 |
-| `ant.ts` `speedFactor` | 速度系数 = `clamp((温度 − 4) / 18, 0.3, 1.25)` | |
+| `ant.ts` `speedFactor` | 速度系数 = `clamp((温度 − 4) / 18, 0.3, 1.25)`；温度部分每只蚂蚁缓存 0.5 秒，换位置域时重算 | |
+| `terrain.ts` `GRID_STEP` | 地形高度查表间距 0.5 cm（双线性插值） | 与解析式相比平均误差约 0.001 cm，个别陡坡处最大约 0.2 cm |
 | `water.ts` `update` | 蒸发速度系数 = `max(0.3, 0.4 + 地表温度 / 33)`；水量低于 0.04 时消失；每 0.5 秒冲刷一次水洼范围（路径信息素清零，足迹保留 60%） | 水洼半径 = 初始半径 × √水量 |
 | `ant.ts` `surfaceMove` | 遇到水洼先绕行，绕了 4 秒还没绕开就蹚水；在水里速度 ×0.35；离开后蹚水计时以一半速度回落 | |
 | `ant.ts` `skirt` | 沿障碍物边缘绕行，选定的方向保持 1.5 秒；连续 3 秒没有走出 3 cm 就换另一边 | 防止在凹角里来回摆动 |

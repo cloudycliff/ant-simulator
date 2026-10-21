@@ -101,6 +101,9 @@ button.on kbd {
   color: #8f877a;
   font-variant-numeric: tabular-nums;
 }
+#topbar .perf.lag {
+  color: #d9a35a;
+}
 
 #colony {
   top: 66px;

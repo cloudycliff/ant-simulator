@@ -274,14 +274,18 @@ export class Hud {
     }
   }
 
-  refresh(sel: Selection | null, fps: number): void {
+  refresh(sel: Selection | null, fps: number, perf?: { sim: number; views: number; render: number }): void {
     const w = this.world;
     const c = w.clock;
     document.getElementById('clock')!.textContent = c.stamp();
     const wp = w.weather.phase;
     document.getElementById('dayicon')!.textContent = wp === 'rain' ? '🌧️' : wp === 'overcast' ? '☁️' : c.isNight ? '🌙' : c.daylight < 0.6 ? '🌅' : '☀️';
     document.getElementById('temp')!.textContent = `${w.weather.label} · 地表 ${c.temperatureAt(0).toFixed(1)}°C · 湿度 ${Math.round(c.humidityAt(0))}%`;
-    document.getElementById('perf')!.textContent = `${Math.round(fps)} FPS · ${w.colony.ants.length} 只`;
+    const pe = document.getElementById('perf')!;
+    const lagging = !c.paused && w.effectiveSpeed < c.speed * 0.9;
+    pe.textContent = `${Math.round(fps)} FPS · ${w.colony.ants.length} 只${perf ? ` · 模拟 ${perf.sim.toFixed(1)} / 画面 ${(perf.views + perf.render).toFixed(1)} ms` : ''}${lagging ? ` · 实际 ${w.effectiveSpeed.toFixed(1)}×` : ''}`;
+    pe.classList.toggle('lag', lagging);
+    if (perf) pe.title = `每帧主线程耗时：模拟 ${perf.sim.toFixed(2)} ms，视图同步 ${perf.views.toFixed(2)} ms，提交渲染 ${perf.render.toFixed(2)} ms`;
     this.top.querySelectorAll<HTMLButtonElement>('[data-a="speed"]').forEach((b) => {
       b.classList.toggle('on', !c.paused && Number(b.dataset.v) === c.speed);
     });

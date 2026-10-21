@@ -41,6 +41,8 @@ export class World {
   private acc = 0;
   /** 最近一帧实际执行的模拟步数（性能面板用） */
   lastSteps = 0;
+  /** 最近的实际倍速（指数平均），模拟跟不上时低于 clock.speed */
+  effectiveSpeed = 1;
 
   constructor(seed = CONFIG.seed) {
     this.rng = new Rng(seed);
@@ -209,17 +211,27 @@ export class World {
     return this.clock.temperatureAt(a.depth(this));
   }
 
-  /** 推进真实时间 realDt 秒（已乘以倍速） */
-  advance(realDt: number): void {
+  /**
+   * 推进真实时间 realDt 秒（内部乘以倍速）。一帧内模拟耗时超过 budgetMs 就停下，
+   * 丢掉没来得及算的时间，这时实际倍速低于设定倍速（见 effectiveSpeed）。
+   */
+  advance(realDt: number, budgetMs = Infinity): void {
     this.lastSteps = 0;
     if (this.clock.paused) return;
     const step = CONFIG.time.fixedStep;
     this.acc += Math.min(realDt * this.clock.speed, step * CONFIG.time.maxStepsPerFrame);
+    const start = performance.now();
     while (this.acc >= step) {
       this.acc -= step;
       this.tick(step);
       this.lastSteps++;
+      if (performance.now() - start > budgetMs) {
+        this.acc = Math.min(this.acc, step);
+        break;
+      }
     }
+    const eff = (this.lastSteps * step) / Math.max(realDt, 1e-3);
+    this.effectiveSpeed += (eff - this.effectiveSpeed) * 0.05;
   }
 
   private tick(dt: number): void {

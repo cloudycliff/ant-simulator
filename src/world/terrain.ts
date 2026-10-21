@@ -3,6 +3,9 @@ import { CONFIG } from '../config';
 import { Noise2D } from '../util/random';
 import { smoothstep } from '../util/math';
 
+/** 高度缓存网格的间距（cm），比土丘中心凹陷的宽度小 */
+const GRID_STEP = 0.5;
+
 interface Mound {
   x: number;
   z: number;
@@ -10,13 +13,15 @@ interface Mound {
   height: number;
 }
 
-/** 地表高度场。高度函数是解析式，蚂蚁可以在任意点 O(1) 采样。 */
+/** 地表高度场。高度函数是解析式，建好后缓存成网格供蚂蚁 O(1) 采样。 */
 export class Terrain {
   readonly size = CONFIG.world.size;
   readonly half = CONFIG.world.size / 2;
   readonly noise: Noise2D;
   readonly detail: Noise2D;
   private mounds: Mound[] = [];
+  private grid: Float32Array | null = null;
+  private gridN = 0;
   mesh!: THREE.Mesh;
   material!: THREE.MeshStandardMaterial;
 
@@ -38,7 +43,24 @@ export class Terrain {
     return big * flatten + small;
   }
 
+  /** 建好地形后高度不再变化，缓存成网格双线性插值，避免每次都算多层噪声 */
   heightAt(x: number, z: number): number {
+    const g = this.grid;
+    if (!g) return this.exactHeight(x, z);
+    const n = this.gridN;
+    const fx = Math.min(n - 1.001, Math.max(0, (x + this.half) / GRID_STEP));
+    const fz = Math.min(n - 1.001, Math.max(0, (z + this.half) / GRID_STEP));
+    const i = fx | 0;
+    const j = fz | 0;
+    const tx = fx - i;
+    const tz = fz - j;
+    const k = j * n + i;
+    const a = g[k] + (g[k + 1] - g[k]) * tx;
+    const b = g[k + n] + (g[k + n + 1] - g[k + n]) * tx;
+    return a + (b - a) * tz;
+  }
+
+  private exactHeight(x: number, z: number): number {
     let h = this.baseHeight(x, z);
     for (const m of this.mounds) {
       const d = Math.hypot(x - m.x, z - m.z) / m.radius;
@@ -75,6 +97,12 @@ export class Terrain {
   }
 
   build(): THREE.Mesh {
+    const n = Math.ceil(this.size / GRID_STEP) + 1;
+    const grid = new Float32Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) grid[j * n + i] = this.exactHeight(-this.half + i * GRID_STEP, -this.half + j * GRID_STEP);
+    this.gridN = n;
+    this.grid = grid;
+
     const seg = CONFIG.world.terrainSegments;
     const geo = new THREE.PlaneGeometry(this.size, this.size, seg, seg);
     geo.rotateX(-Math.PI / 2);

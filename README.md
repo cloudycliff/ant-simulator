@@ -25,11 +25,12 @@ npx tsx scripts/simtest.ts 3000   # 无界面模拟 5 个游戏日（6000 为 10
 npx tsx scripts/savetest.ts       # 存档往返测试
 npx tsx scripts/defensetest.ts    # 放入狼蛛，观察警报、围攻与入口警戒
 npx tsx scripts/weathertest.ts    # 招来一场雨，观察躲雨、封堵入口与进水
+npx tsx scripts/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 ```
 
 ### 不用服务器直接打开
 
-双击根目录下的 **`赛博养蚂蚁.html`**，用 Chrome / Edge / Firefox 打开即可运行。它内联了全部脚本和样式（约 630 KB），没有其他依赖文件，可以复制到任意位置单独分享。
+双击根目录下的 **`赛博养蚂蚁.html`**，用 Chrome / Edge / Firefox 打开即可运行。它内联了全部脚本和样式（约 700 KB），没有其他依赖文件，可以复制到任意位置单独分享。
 
 - 这个文件由 `npm run build` 生成（内容与 `dist/index.html` 相同），改了代码后要重新构建才会更新
 - 根目录的 `index.html` 是给 Vite 用的源码模板，引用的是 TypeScript 源码，不能直接双击运行
@@ -61,6 +62,8 @@ npx tsx scripts/weathertest.ts    # 招来一场雨，观察躲雨、封堵入�
 | `?skip=1500` | 开局先在后台快进模拟若干秒（上限 20000），用来直接观察扩建等慢过程 |
 | `?new=1` | 不读取存档，从新的蚁群开始（之后的自动保存会覆盖原存档） |
 | `?view=xray,pheromone,roles,stats` | 开局打开地下透视 / 信息素 / 分工着色 / 统计曲线 |
+| `?rain=60` | 开局招来一场雨，并在后台快进指定秒数（上限 2000），用来直接观察雨中的蚁穴 |
+| `?ants=3000` | 用指定数量的工蚁开局（上限 5000，人口上限随之提高），用来测性能；和 `new=1` 一样不读存档，之后的自动保存会覆盖原存档 |
 
 ## 文档
 

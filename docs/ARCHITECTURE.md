@@ -53,6 +53,7 @@ scripts/
   savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
   defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
   weathertest.ts        天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
+  perftest.ts           性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
   extract-shots.mjs     从浏览器捕获结果中提取截图
 docs/                   本文档目录
 ```
@@ -61,7 +62,7 @@ docs/                   本文档目录
 
 ```
 requestAnimationFrame
- ├─ world.advance(dt)           按倍速累积时间，按固定步长 1/30 秒逐步 tick
+ ├─ world.advance(dt, 10 ms)    按倍速累积时间，按固定步长 1/30 秒逐步 tick；超过帧预算就丢掉剩余时间
  │    └─ tick: clock → weather.update → colony.update → predators.update → alarm.update → food.update → aphids.update → water.update → pheromone.update
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
@@ -158,6 +159,8 @@ requestAnimationFrame
 ## 渲染层要点
 - **地下透视**：`Terrain.setXray` 让地表变透明；`NestView.setXray` 切换蚁穴与地表洞口的可见性；`AntView`、`ItemView` 的 `xray` 决定是否显示巢内的蚂蚁和物品
 - **实例容量**：工蚁 `maxPopulation + 50`；物品各类有固定上限（见 `itemView.ts`）
+- **蚂蚁细节层级**：`AntView` 有完整和简化两套工蚁实例网格，每帧按离相机的距离（`ant.lodDistance`）分配，共用同一个步态材质；简化网格不投影
+- **地形高度**：`Terrain.heightAt` 在网格建好后查 0.5 cm 间距的高度表，模拟里所有地表高度都走这里；`exactHeight` 只用来建表
 - **阴影**：方向光的阴影相机 ±45 单位，跟随视点前方的地面点
 
 ## 扩展指南
