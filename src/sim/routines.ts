@@ -113,17 +113,22 @@ function* offerCrop(a: Ant, w: World, maxPartners: number, pred: (b: Ant) => boo
   if (given) a.note(w, `通过交哺把甜液分给 ${given} 只同伴`);
 }
 
+/** 走到房间里的随机位置再交哺：offerCrop 找最近的同伴，停在门口就会和刚进门的同伴挤成一团 */
+function* walkIntoRoom(w: World, c: Chamber): Routine {
+  yield { k: 'room', chamber: c.id, time: 0, point: w.nest.randomFloorPoint(c, rng.next.bind(rng), new THREE.Vector3()) };
+}
+
 /** 返巢后在储食室（不够再去休息室）把嗉囊里的甜液分出去 */
 function* unloadCrop(a: Ant, w: World): Routine {
   const col = w.colony;
   const store = col.foodChamber();
   a.activity = '进入储食室，把甜液分给巢内同伴';
-  yield { k: 'room', chamber: store.id, time: rng.range(0.5, 1.5) };
+  yield* walkIntoRoom(w, store);
   yield* offerCrop(a, w, 4);
   if (a.crop > 0.3) {
     const c = rng.pick(w.nest.chamberOfType('rest'));
     a.activity = `前往${c.name}分享甜液`;
-    yield { k: 'room', chamber: c.id, time: 0.3 };
+    yield* walkIntoRoom(w, c);
     yield* offerCrop(a, w, 3);
   }
 }
@@ -136,7 +141,7 @@ function* distributeCrop(a: Ant, w: World): Routine {
   const c = rng.pick(options);
   yield* goHome(a);
   a.activity = `把嗉囊中的甜液带到${c.name}`;
-  yield { k: 'room', chamber: c.id, time: 0.3 };
+  yield* walkIntoRoom(w, c);
   yield* offerCrop(a, w, 3, (b) => b.role === 'nurse' && b.crop < 0.4);
 }
 
