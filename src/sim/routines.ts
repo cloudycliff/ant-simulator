@@ -399,6 +399,9 @@ function* maintenanceRoutine(a: Ant, w: World): Routine {
   }
 
   // 有扩建工程时大量投入挖掘，否则只缓慢延长现有隧道
+  const D = CONFIG.defense;
+  if (w.predators.threatEntrance >= 0 && w.predators.guardsOut < D.maxGuards && rng.chance(D.guardProb)) return yield* guard(a, w, true);
+
   const digP = col.expansion.project ? 0.45 : 0.15;
   const r = rng.next();
   if (r < digP) return yield* dig(a, w);
@@ -492,14 +495,18 @@ function* dig(a: Ant, w: World): Routine {
   yield { k: 'enter' };
 }
 
-function* guard(a: Ant, w: World): Routine {
+/** 入口警戒；threat 为 true 时是因为有狼蛛逼近，去受威胁的那个入口，巡逻范围更大 */
+function* guard(a: Ant, w: World, threat = false): Routine {
   yield* goHome(a);
-  a.activity = '前往入口执勤';
+  a.guarding = threat;
+  a.activity = threat ? '狼蛛逼近巢口，出巢警戒' : '前往入口执勤';
   yield { k: 'exit' };
-  const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
-  a.activity = '在入口附近警戒巡逻，检查来者气味';
-  a.note(w, `在${ent.name}警戒`);
-  yield { k: 'patrol', x: ent.x, z: ent.z, radius: 4.5, time: rng.range(25, 60) };
+  const ti = w.predators.threatEntrance;
+  const ent = threat && ti >= 0 ? w.nest.entrances[ti] : w.nest.nearestEntrance(a.pos.x, a.pos.z);
+  a.activity = threat ? '在巢口外警戒，准备迎击狼蛛' : '在入口附近警戒巡逻，检查来者气味';
+  a.note(w, `在${ent.name}警戒${threat ? '（有狼蛛逼近）' : ''}`);
+  yield { k: 'patrol', x: ent.x, z: ent.z, radius: threat ? 7 : 4.5, time: rng.range(25, 60) };
+  a.guarding = false;
   a.activity = '结束警戒，返回巢内';
   yield { k: 'enter' };
 }
@@ -558,6 +565,10 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   if (a.domain === 'nest' && rng.chance(satiation)) {
     if (a.crop > 0.6 && rng.chance(0.4)) return yield* distributeCrop(a, w);
     return yield* rest(a, w, '食物储备充足，留在巢内待命');
+  }
+
+  if (a.domain === 'nest' && w.predators.threatEntrance >= 0 && rng.chance(CONFIG.defense.holdBackProb)) {
+    return yield* rest(a, w, '巢口附近有狼蛛，暂时留在巢内');
   }
 
   const herd = pickHerd(a, w);

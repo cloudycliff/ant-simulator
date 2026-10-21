@@ -218,7 +218,8 @@ export class Hud {
       <canvas id="chart-food"></canvas>`;
     this.legendEl.innerHTML = `
       <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>路径信息素：携带食物返巢的工蚁释放，约 1.5 分钟减半</div>
-      <div><i style="background:#3c96ff"></i>领地足迹：所有工蚁在地表留下的碳氢化合物，挥发很慢</div>`;
+      <div><i style="background:#3c96ff"></i>领地足迹：所有工蚁在地表留下的碳氢化合物，挥发很慢</div>
+      <div><i style="background:transparent;border:2px solid #ff4a3a;height:4px"></i>警报信息素：受到攻击时释放，几秒内散去，附近的工蚁会赶来围攻</div>`;
     const handler = (e: Event) => {
       const b = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
       if (!b) return;
@@ -407,7 +408,7 @@ export class Hud {
         <span>采集蜜露</span><b>${st.honeydew.toFixed(0)}</b><span>交哺</span><b>${st.trophallaxis}</b>
         <span>运出垃圾</span><b>${st.wasteRemoved}</b><span>挖出土粒</span><b>${st.soilExcavated}</b>
         <span>分工转换</span><b>${st.roleChanges}</b><span>触角接触</span><b>${st.contacts >= 10000 ? (st.contacts / 1000).toFixed(0) + 'k' : st.contacts}</b>
-        <span>被天敌捕食</span><b>${st.preyed}</b>
+        <span>被天敌捕食</span><b>${st.preyed}</b><span>赶走狼蛛</span><b>${st.repelled}</b>
       </div>`;
   }
 
@@ -474,8 +475,9 @@ export class Hud {
     let state: string;
     let extra = '';
     if (p instanceof Spider) {
-      state = SPIDER_STATE[p.state];
-      extra = `<span>还能再吃</span><b>${Math.max(0, CONFIG.predators.spiderMeals - p.meals)} 只</b>`;
+      state = p.mob > 0 ? `正被 ${p.mob} 只工蚁围攻` : p.state === 'leave' && p.fled ? '被工蚁赶走，正在逃离' : SPIDER_STATE[p.state];
+      const D = CONFIG.defense;
+      extra = `<span>还能再吃</span><b>${Math.max(0, CONFIG.predators.spiderMeals - p.meals)} 只</b><span>被咬程度</span><b>${bar(p.harass / D.harassLimit, '#e0604a')}</b>`;
     } else state = p.feedT > 0 ? `正在进食（还要 ${Math.ceil(p.feedT)} 秒）` : '埋在坑底等待';
     return `<h2>${info.name}${tag}</h2>
       <p class="desc">${info.desc}</p>

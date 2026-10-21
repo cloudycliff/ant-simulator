@@ -5,6 +5,7 @@ import { Nest, type Chamber } from '../nest/nest';
 import type { Ant } from '../sim/ant';
 import { SimClock } from '../sim/clock';
 import { Colony } from '../sim/colony';
+import { AlarmField } from './alarm';
 import { AphidManager } from './aphids';
 import { FoodManager, SOURCE_INFO, type FoodSourceType } from './food';
 import { PheromoneField } from './pheromone';
@@ -33,6 +34,7 @@ export class World {
   readonly pheromone: PheromoneField;
   readonly water: WaterManager;
   readonly predators: PredatorManager;
+  readonly alarm: AlarmField;
   readonly colony: Colony;
   private acc = 0;
   /** 最近一帧实际执行的模拟步数（性能面板用） */
@@ -56,6 +58,7 @@ export class World {
     this.pheromone = new PheromoneField(this.terrain);
     this.water = new WaterManager(this.terrain, this.veg, this.pheromone);
     this.predators = new PredatorManager(this.terrain, this.veg, this.rng);
+    this.alarm = new AlarmField(this.terrain);
     this.colony = new Colony(this);
     this.colony.init();
   }
@@ -213,6 +216,7 @@ export class World {
     this.clock.seconds += dt;
     this.colony.update(dt);
     this.predators.update(dt, this);
+    this.alarm.update(dt);
     this.food.update(dt);
     this.aphids.update(dt, this.clock.seconds);
     this.water.update(dt, this.clock);

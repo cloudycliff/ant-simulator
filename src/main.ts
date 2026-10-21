@@ -54,7 +54,7 @@ async function boot(): Promise<void> {
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);
   for (let t = 0; t < skip; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
-  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group, world.predators.group);
+  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group, world.predators.group, world.alarm.group);
 
   const nestView = new NestView(world.nest, world.terrain);
   nestView.build();
@@ -434,6 +434,7 @@ async function boot(): Promise<void> {
     world.veg.update(time);
     world.aphids.sync();
     world.predators.sync(time);
+    world.alarm.sync(hud.state.pheromone);
     nestView.sync();
     antView.update(time);
     itemView.update();

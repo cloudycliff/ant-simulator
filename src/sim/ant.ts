@@ -130,6 +130,21 @@ export class Ant {
   wadeT = 0;
   /** 在蚁狮陷阱里的时间 */
   pitT = 0;
+  private pitX = 0;
+  private pitZ = 0;
+  /** 爬出过的陷阱，之后绕开走 */
+  avoidPit: { x: number; z: number } | null = null;
+  private pitAvoidT = 0;
+  /** 闻到警报后增援的剩余秒数，期间暂停原来的任务 */
+  alarmT = 0;
+  private alarmX = 0;
+  private alarmZ = 0;
+  private nextAlarmCheck = rng.range(0, 0.5);
+  private taskActivity = '';
+  /** 正在撕咬的狼蛛 */
+  mobTarget = -1;
+  /** 因为狼蛛逼近而出巢警戒（日常的入口巡逻不算） */
+  guarding = false;
   private avoidSign = 1;
   private avoidT = 0;
   private blockedT = 0;
@@ -312,6 +327,13 @@ export class Ant {
       if (this.domain === 'nest') this.smoothNest(dt);
       return;
     }
+    if (this.domain === 'surface' && this.role !== 'queen') {
+      if (this.alarmT <= 0 && w.clock.seconds >= this.nextAlarmCheck) this.checkAlarm(w);
+      if (this.alarmT > 0) {
+        this.defend(dt, w);
+        return;
+      }
+    }
     for (let guard = 0; guard < 4; guard++) {
       if (!this.cmd) {
         if (!this.routine) this.routine = w.colony.newRoutine(this);
@@ -329,6 +351,57 @@ export class Ant {
       this.cmd = null;
     }
     if (this.domain === 'nest') this.smoothNest(dt);
+  }
+
+  // ---------------- 警报与防御 ----------------
+
+  /** 搬着东西、爬在植物上或陷在坑里的蚂蚁不响应 */
+  private checkAlarm(w: World): void {
+    this.nextAlarmCheck = w.clock.seconds + 0.5;
+    if (this.climbing || this.carrying || this.pitT > 0) return;
+    const D = CONFIG.defense;
+    const src = w.alarm.strongest(this.pos.x, this.pos.z);
+    if (!src || src.level < D.respondLevel) return;
+    this.alarmT = rng.range(D.defendSec[0], D.defendSec[1]);
+    this.alarmX = src.x;
+    this.alarmZ = src.z;
+    this.taskActivity = this.activity;
+    this.note(w, '闻到警报信息素，赶去增援');
+  }
+
+  /** 冲向警报源；附近有狼蛛就贴身撕咬，并不断补充警报招来更多同伴 */
+  private defend(dt: number, w: World): void {
+    const D = CONFIG.defense;
+    this.alarmT -= dt;
+    this.mobTarget = -1;
+    const s = w.predators.nearestSpider(this.pos.x, this.pos.z, D.chaseRange);
+    if (s) {
+      this.alarmX = s.x;
+      this.alarmZ = s.z;
+      const d = Math.hypot(s.x - this.pos.x, s.z - this.pos.z);
+      if (d < D.biteRange) {
+        this.mobTarget = s.id;
+        this.moving = false;
+        _f.set(s.x, this.pos.y, s.z);
+        this.faceTo(_f);
+        this.alarmT = Math.max(this.alarmT, 2);
+        w.alarm.emit(s.x, s.z, D.mobEmit * dt);
+        this.activity = '围攻狼蛛：咬住它的腿，喷射蚁酸';
+        return;
+      }
+      this.activity = '闻到警报信息素，冲向狼蛛';
+      this.surfaceMove(dt, w, Math.atan2(s.z - this.pos.z, s.x - this.pos.x), 8, D.rushSpeed);
+    } else {
+      const dx = this.alarmX - this.pos.x;
+      const dz = this.alarmZ - this.pos.z;
+      const far = dx * dx + dz * dz > 2.25;
+      this.activity = '闻到警报信息素，在附近搜寻敌人';
+      this.surfaceMove(dt, w, far ? Math.atan2(dz, dx) : this.heading + rng.gauss(0, 1) * 2 * Math.sqrt(dt), 6, far ? D.rushSpeed : 0.7);
+    }
+    if (this.alarmT <= 0) {
+      this.activity = this.taskActivity;
+      this.note(w, '警报解除，回去继续工作');
+    }
   }
 
   /** 强制中断当前协程（死亡或任务失效时） */
@@ -549,8 +622,16 @@ export class Ant {
       pdz /= r;
       pull = P.pitPull * (pit.feedT > 0 ? 0.35 : 1) * (0.4 + 0.6 * (1 - r / P.pitRadius)) * dt;
       this.pitT += dt;
+      this.pitX = pit.x;
+      this.pitZ = pit.z;
       if (this.pitT > 0.6) this.heading = Math.atan2(pdz, pdx) + (((this.id * 0.618) % 1) - 0.5) * 0.8;
-    } else this.pitT = 0;
+    } else {
+      if (this.pitT > 0.6) {
+        this.avoidPit = { x: this.pitX, z: this.pitZ };
+        this.note(w, '从蚁狮的陷阱里爬了出来，记住了这个地方');
+      }
+      this.pitT = 0;
+    }
     const step = CONFIG.ant.speedSurface * this.speedFactor(w) * speedMul * (wetHere ? 0.35 : 1) * (pit ? 0.4 : 1) * dt;
     let nx = this.pos.x + Math.cos(this.heading) * step - pdx * pull;
     let nz = this.pos.z + Math.sin(this.heading) * step - pdz * pull;
@@ -568,6 +649,20 @@ export class Ant {
         nz = this.pos.z;
       }
     } else if (!pd && !wetHere) this.wadeT = Math.max(0, this.wadeT - dt * 0.5);
+    const ap = this.avoidPit;
+    if (ap && !pit) {
+      const R = CONFIG.predators.pitRadius + CONFIG.defense.pitAvoidPad;
+      if ((nx - ap.x) ** 2 + (nz - ap.z) ** 2 < R * R) {
+        this.pitAvoidT += dt;
+        // 目标就在坑里时绕不开，绕了一会儿就不再理会
+        if (this.pitAvoidT > 6) this.avoidPit = null;
+        else {
+          this.skirt(ap.x, ap.z);
+          nx = this.pos.x + Math.cos(this.heading) * step;
+          nz = this.pos.z + Math.sin(this.heading) * step;
+        }
+      } else this.pitAvoidT = Math.max(0, this.pitAvoidT - dt);
+    }
     const ob = w.veg.obstacleAt(nx, nz, 0.35, true);
     if (ob) {
       this.skirt(ob.x, ob.z);

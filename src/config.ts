@@ -145,6 +145,36 @@ export const CONFIG = {
     maxPlacedAntlions: 8,
   },
 
+  defense: {
+    /** 警报信息素半衰期（秒）、有效半径（cm）、单处上限 */
+    alarmHalfLife: 6,
+    alarmRadius: 10,
+    alarmMax: 1.5,
+    /** 狼蛛扑击时在现场释放的警报强度 */
+    alarmOnAttack: 1,
+    /** 闻到的浓度（强度 × 距离衰减）超过该值时赶去增援；增援持续秒数 */
+    respondLevel: 0.15,
+    defendSec: [15, 30] as [number, number],
+    /** 增援时的速度倍数；发现狼蛛的距离；贴身撕咬的距离 */
+    rushSpeed: 1.3,
+    chaseRange: 12,
+    biteRange: 1.3,
+    /** 每只围攻的工蚁每秒补充的警报强度 */
+    mobEmit: 0.5,
+    /** 狼蛛累计被咬（工蚁数 × 秒）超过该值就逃走；没有被咬时每秒恢复的量 */
+    harassLimit: 14,
+    harassRecover: 1,
+    /** 围攻时每只工蚁每秒被狼蛛咬死的概率 */
+    mobKillPerSec: 0.025,
+    /** 狼蛛离入口这么近时，觅食蚁留巢、内务蚁出来警戒 */
+    guardRadius: 20,
+    holdBackProb: 0.7,
+    guardProb: 0.5,
+    maxGuards: 24,
+    /** 爬出陷阱的蚂蚁记住它，此后绕开（陷阱半径之外再留的距离） */
+    pitAvoidPad: 1,
+  },
+
   save: {
     /** 自动保存间隔（现实秒数） */
     autosaveSec: 60,

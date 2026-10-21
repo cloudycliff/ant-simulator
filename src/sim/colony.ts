@@ -22,8 +22,10 @@ export interface ColonyStats {
   trophallaxis: number;
   contacts: number;
   roleChanges: number;
-  /** 被天敌捕食 */
+  /** 被天敌捕食（含围攻时被咬死的） */
   preyed: number;
+  /** 被工蚁围攻赶走的狼蛛 */
+  repelled: number;
 }
 
 /** 每游戏小时记录一次，供统计曲线使用 */
@@ -89,6 +91,7 @@ export class Colony {
     contacts: 0,
     roleChanges: 0,
     preyed: 0,
+    repelled: 0,
   };
   history: ColonySample[] = [];
   /** 新出生/死亡等事件，供 UI 做提示 */

@@ -46,6 +46,12 @@ export class Spider {
   /** 游荡时缓缓前往的地点，到了再换一个 */
   gx = 0;
   gz = 0;
+  /** 累计被咬的程度（工蚁数 × 秒），超过上限就逃走 */
+  harass = 0;
+  /** 当前贴身围攻的工蚁数 */
+  mob = 0;
+  /** 是被蚂蚁赶走的 */
+  fled = false;
   constructor(
     public x: number,
     public z: number,
@@ -92,6 +98,10 @@ export class PredatorManager {
   group = new THREE.Group();
   spiders: Spider[] = [];
   antlions: Antlion[] = [];
+  /** 有狼蛛逼近的入口编号，没有时为 -1 */
+  threatEntrance = -1;
+  /** 正在入口警戒的工蚁数 */
+  guardsOut = 0;
   private surface: Ant[] = [];
   private mats = {
     body: new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.8 }),
@@ -162,6 +172,21 @@ export class PredatorManager {
     return best;
   }
 
+  /** r 以内最近的、还在捕猎的狼蛛（离开中的不算） */
+  nearestSpider(x: number, z: number, r: number): Spider | null {
+    let best: Spider | null = null;
+    let bd = r * r;
+    for (const s of this.spiders) {
+      if (s.state === 'leave') continue;
+      const d = (s.x - x) ** 2 + (s.z - z) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = s;
+      }
+    }
+    return best;
+  }
+
   /** (x,z) 所在的蚁狮陷阱 */
   pitAt(x: number, z: number): Antlion | null {
     const R = CONFIG.predators.pitRadius;
@@ -185,7 +210,24 @@ export class PredatorManager {
     const P = CONFIG.predators;
     const days = dt / CONFIG.time.dayLength;
     this.surface.length = 0;
-    for (const a of w.colony.ants) if (a.domain === 'surface' && !a.climbing && a.role !== 'queen') this.surface.push(a);
+    this.guardsOut = 0;
+    for (const a of w.colony.ants) {
+      if (a.domain !== 'surface' || a.role === 'queen') continue;
+      if (a.guarding) this.guardsOut++;
+      if (!a.climbing) this.surface.push(a);
+    }
+    this.threatEntrance = -1;
+    let td = CONFIG.defense.guardRadius;
+    for (const s of this.spiders) {
+      if (s.state === 'leave') continue;
+      w.nest.entrances.forEach((e, i) => {
+        const d = Math.hypot(e.x - s.x, e.z - s.z);
+        if (d < td) {
+          td = d;
+          this.threatEntrance = i;
+        }
+      });
+    }
 
     const natural = this.spiders.filter((s) => !s.placed).length;
     if (natural < P.maxNaturalSpiders && this.spiders.length < P.maxSpiders && rng.chance(days * P.spiderPerDay)) {
@@ -212,6 +254,7 @@ export class PredatorManager {
     const P = CONFIG.predators;
     s.moving = false;
     if (!s.placed) s.stayLeft -= days;
+    if (s.state !== 'leave' && this.mobbed(s, dt, w)) return;
     if (s.state !== 'feed' && s.state !== 'leave' && (s.stayLeft <= 0 || s.meals >= P.spiderMeals)) {
       s.state = 'leave';
       s.timer = 90;
@@ -231,7 +274,7 @@ export class PredatorManager {
         else this.lookForPrey(s);
         return;
       case 'leave':
-        this.walk(s, Math.atan2(s.z, s.x), P.spiderWalk * 1.6 * sf * dt);
+        this.walk(s, Math.atan2(s.z, s.x), P.spiderWalk * (s.fled ? 2.4 : 1.6) * sf * dt);
         // 被石块、植物困住太久就当作已经从缝隙里钻走了
         if (Math.hypot(s.x, s.z) > CONFIG.world.forageRadius + 2 || s.timer <= 0) {
           this.remove(s);
@@ -249,6 +292,7 @@ export class PredatorManager {
         const dz = a.pos.z - s.z;
         const d = Math.hypot(dx, dz);
         if (d < 1.1) {
+          w.alarm.emit(a.pos.x, a.pos.z, CONFIG.defense.alarmOnAttack);
           if (rng.chance(P.spiderCatch)) {
             s.state = 'feed';
             s.timer = P.spiderFeedSec;
@@ -289,9 +333,38 @@ export class PredatorManager {
     }
   }
 
+  /**
+   * 贴身撕咬的工蚁让狼蛛累积“被咬程度”，超过上限就丢下猎物逃走；围攻期间它不再扑击新的猎物，
+   * 但每只围攻的工蚁都有被它咬死的风险。返回 true 表示本步狼蛛只顾着应付围攻
+   */
+  private mobbed(s: Spider, dt: number, w: World): boolean {
+    const D = CONFIG.defense;
+    const r2 = (D.biteRange + 0.5) ** 2;
+    let mob = 0;
+    for (const a of this.surface) if (a.mobTarget === s.id && a.alive && (a.pos.x - s.x) ** 2 + (a.pos.z - s.z) ** 2 < r2) mob++;
+    s.mob = mob;
+    s.harass = Math.max(0, s.harass + (mob > 0 ? mob : -D.harassRecover) * dt);
+    if (!mob) return false;
+    for (const a of this.surface) {
+      if (a.mobTarget !== s.id || !a.alive || !rng.chance(D.mobKillPerSec * dt)) continue;
+      w.colony.stats.preyed++;
+      w.colony.kill(a, '围攻狼蛛时被咬死');
+      break;
+    }
+    if (s.harass < D.harassLimit) return mob >= 2;
+    if (s.state === 'feed') this.dropHusk(w, s.x + Math.cos(s.heading) * 1.4, s.z + Math.sin(s.heading) * 1.4);
+    s.state = 'leave';
+    s.timer = 90;
+    s.fled = true;
+    s.mob = 0;
+    w.colony.stats.repelled++;
+    w.colony.pushEvent(`${mob} 只工蚁围攻狼蛛，把它赶走了`);
+    return true;
+  }
+
   private lookForPrey(s: Spider): void {
     const P = CONFIG.predators;
-    if (s.meals >= P.spiderMeals) return;
+    if (s.meals >= P.spiderMeals || s.mob >= 2) return;
     let best: Ant | null = null;
     let bd = P.spiderSense * P.spiderSense;
     for (const a of this.surface) {

@@ -28,6 +28,7 @@ src/
     food.ts             食物源类型、生成、网格
     aphids.ts           蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
     predators.ts        天敌：狼蛛（游荡、扑击、进食、离开的状态机）与蚁狮陷阱（松沙区、坑底捕食）；网格与存档
+    alarm.ts            警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
     water.ts            玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
     save.ts             存档：组装各子系统的 toSave / restore，版本与种子检查
     pheromone.ts        信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
@@ -48,6 +49,7 @@ scripts/
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
   savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
+  defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
   extract-shots.mjs     从浏览器捕获结果中提取截图
 docs/                   本文档目录
 ```
@@ -57,11 +59,12 @@ docs/                   本文档目录
 ```
 requestAnimationFrame
  ├─ world.advance(dt)           按倍速累积时间，按固定步长 1/30 秒逐步 tick
- │    └─ tick: clock → colony.update → predators.update → food.update → aphids.update → water.update → pheromone.update
+ │    └─ tick: clock → colony.update → predators.update → alarm.update → food.update → aphids.update → water.update → pheromone.update
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
  ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
  ├─ predators.sync              狼蛛位置与腿部动画、蚁狮大颚与猎物
+ ├─ alarm.sync                  信息素视图打开时更新警报红圈
  ├─ antView / itemView.update   把模拟状态写进实例矩阵
  ├─ env.update                  光照随时刻变化，阴影跟随视点
  ├─ 每 0.4 秒刷新信息素热力图（开启时）
@@ -131,6 +134,8 @@ requestAnimationFrame
 界面层（`ToolController`）只负责选工具和给出地面点，不直接改世界。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
 
 天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `Ant.surfaceMove` 里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
+
+防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines.ts` 里觅食蚁出巢前和内务蚁选任务时读取它们。
 
 地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `Ant.surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
 
