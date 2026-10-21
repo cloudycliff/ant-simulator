@@ -28,7 +28,7 @@ function metrics(w: World): Record<string, string | number> {
     sources: w.food.sources.length,
     aphids: w.aphids.colonies.map((a) => Math.round(a.count)).join(','),
     pheromone: Math.round(pher),
-    placed: w.veg.placed.length,
+    placed: w.veg.placed.map((p) => (p.kind === 'twig' ? p.kind : `${p.kind}#${p.shape.toFixed(4)}`)).join(' '),
     puddles: w.water.puddles.length,
     predators: `${w.predators.spiders.map((s) => s.state).join(',')} / ${w.predators.antlions.map((p) => `${p.caught}${p.feedT > 0 ? '*' : ''}`).join(',')}`,
     stats: JSON.stringify(c.stats),
@@ -46,9 +46,11 @@ function check(w: World): string[] {
 }
 
 const before = Number(process.argv[2]) || 1900;
-const a = new World();
+// SEED=数字：用指定种子的世界测试（默认是固定种子）
+const a = new World(Number(process.env.SEED) || undefined);
 run(a, 60);
 a.placeObstacle('twig', 14, 2, Math.PI / 2);
+for (const [x, z] of [[-20, 26], [24, -22], [-28, -14], [30, 18]]) if (a.placeObstacle('rock', x, z, 0.7).ok) break;
 a.dropFood('syrup', 25, 2);
 a.pourWater(19, 12, true);
 run(a, before - 60);
@@ -68,7 +70,7 @@ const t0 = performance.now();
 const json = JSON.stringify(saveWorld(a, Date.now()));
 const t1 = performance.now();
 const data = JSON.parse(json) as SaveData;
-const b = new World();
+const b = new World(data.seed);
 const t2 = performance.now();
 loadWorld(b, data);
 const t3 = performance.now();

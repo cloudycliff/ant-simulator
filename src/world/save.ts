@@ -1,4 +1,3 @@
-import { CONFIG } from '../config';
 import type { NestSave } from '../nest/nest';
 import type { ColonySave } from '../sim/colony';
 import type { PlaceableObstacle } from './vegetation';
@@ -23,7 +22,8 @@ export interface SaveData {
   food: FoodSave;
   aphids: ReturnType<World['aphids']['toSave']>;
   pheromone: { trail: string; home: string };
-  placed: { kind: PlaceableObstacle; x: number; z: number; yaw: number }[];
+  /** shape 是石块的形状参数，较早的存档没有 */
+  placed: { kind: PlaceableObstacle; x: number; z: number; yaw: number; shape?: number }[];
   puddles: ReturnType<World['water']['toSave']>;
   /** 天敌之后才加入，旧存档没有这一项时沿用新世界自然生成的蚁狮 */
   predators?: PredatorSave;
@@ -34,13 +34,13 @@ export interface SaveData {
 }
 
 /**
- * 地形、植被、初始蚁穴由世界种子决定，不写进存档；
+ * 地形、植被、初始蚁穴由世界种子决定，读档时用存档里的种子重新生成；
  * 存档记录之后会变化的一切：蚁穴扩建、蚁群、食物源、蚜虫群、信息素和玩家的干预。
  */
 export function saveWorld(w: World, savedAt: number): SaveData {
   return {
     version: SAVE_VERSION,
-    seed: CONFIG.seed,
+    seed: w.seed,
     savedAt,
     stamp: w.clock.stamp(),
     clock: { seconds: w.clock.seconds, speed: w.clock.speed },
@@ -49,7 +49,7 @@ export function saveWorld(w: World, savedAt: number): SaveData {
     food: w.food.toSave(),
     aphids: w.aphids.toSave(),
     pheromone: w.pheromone.toSave(),
-    placed: w.veg.placed.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw })),
+    placed: w.veg.placed.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw, ...(p.kind === 'twig' ? {} : { shape: p.shape }) })),
     puddles: w.water.toSave(),
     predators: w.predators.toSave(),
     weather: w.weather.toSave(w),
@@ -59,18 +59,17 @@ export function saveWorld(w: World, savedAt: number): SaveData {
 /** 存档不能用于当前版本时返回原因 */
 export function saveProblem(d: SaveData): string | null {
   if (d.version !== SAVE_VERSION) return '存档来自不兼容的旧版本';
-  if (d.seed !== CONFIG.seed) return '存档对应的世界种子不同';
   return null;
 }
 
-/** 把存档套到一个刚生成的世界上，必须在创建任何视图之前调用 */
+/** 把存档套到一个用 d.seed 刚生成的世界上，必须在创建任何视图之前调用 */
 export function loadWorld(w: World, d: SaveData): void {
-  const problem = saveProblem(d);
+  const problem = saveProblem(d) ?? (w.seed !== d.seed ? '世界种子与存档不同' : null);
   if (problem) throw new Error(problem);
   w.clock.seconds = d.clock.seconds;
   w.clock.speed = d.clock.speed;
   w.nest.restore(d.nest);
-  for (const p of d.placed) w.veg.place(p.kind, p.x, p.z, p.yaw);
+  for (const p of d.placed) w.veg.place(p.kind, p.x, p.z, p.yaw, p.shape);
   w.water.restore(d.puddles);
   if (d.predators) w.predators.restore(d.predators);
   if (d.weather) w.weather.restore(d.weather, w);

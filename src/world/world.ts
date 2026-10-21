@@ -44,7 +44,7 @@ export class World {
   /** 最近的实际倍速（指数平均），模拟跟不上时低于 clock.speed */
   effectiveSpeed = 1;
 
-  constructor(seed = CONFIG.seed) {
+  constructor(readonly seed: number = CONFIG.seed) {
     this.rng = new Rng(seed);
     this.terrain = new Terrain(seed);
     for (const e of Nest.entranceLayout()) this.terrain.addMound(e.x, e.z, e.name === '主入口' ? 4.2 : 3.2, e.name === '主入口' ? 1.3 : 0.9);

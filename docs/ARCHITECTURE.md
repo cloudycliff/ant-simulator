@@ -210,7 +210,7 @@ npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 4. 提取图片：`node scripts/extract-shots.mjs <捕获结果文件> shots/名称`（`shots/` 已加入 .gitignore）
 5. 无头 Chrome 用软件渲染，帧率很低：等 `#loading` 消失后再等 8–10 秒，否则界面面板可能还没刷新。用了 `skip` 时加载本身也要十几秒
 
-常用视角：
+常用视角（坐标按默认地图测得；新开局会随机换地图，截图时加 `seed=20261021`）：
 
 | 用途 | URL |
 |---|---|
@@ -223,7 +223,7 @@ npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 | 高空看信息素 | `?cam=0,150,95,0,0,-10&view=pheromone&hour=12&skip=1200` |
 | 夜景 | `?hour=21.5` |
 
-房间坐标由固定种子决定。改动生成代码后，可以用下面的命令重新打印：
+房间坐标由地图种子决定（`new World()` 用默认种子 `CONFIG.seed`）。改动生成代码后，可以用下面的命令重新打印：
 ```
 npx tsx -e "import { World } from './src/world/world'; const w = new World(); for (const c of w.nest.chambers) console.log(c.id, c.name, c.floor.toArray().map(v=>v.toFixed(1)).join(','))"
 ```

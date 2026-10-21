@@ -25,6 +25,8 @@ export interface PlacedObstacle {
   x: number;
   z: number;
   yaw: number;
+  /** 石块网格的形状参数，存档后按它还原同样的形状 */
+  shape: number;
   parts: Obstacle[];
   mesh: THREE.Object3D;
 }
@@ -191,10 +193,9 @@ export class Vegetation {
     this.group.add(this.grass);
   }
 
-  private stoneMesh(x: number, z: number, r: number, yaw: number): THREE.Mesh {
+  private stoneMesh(x: number, z: number, r: number, yaw: number, off = this.rng.range(0, 100)): THREE.Mesh {
     const geo = new THREE.IcosahedronGeometry(1, 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;
-    const off = this.rng.range(0, 100);
     for (let i = 0; i < pos.count; i++) {
       // 位移只取决于顶点方向，非索引几何中重复的顶点得到相同位移，避免面片裂开
       const px = pos.getX(i);
@@ -215,8 +216,9 @@ export class Vegetation {
   }
 
   /** 放置玩家障碍物。调用方负责检查位置是否可用 */
-  place(kind: PlaceableObstacle, x: number, z: number, yaw: number): PlacedObstacle {
+  place(kind: PlaceableObstacle, x: number, z: number, yaw: number, shape?: number): PlacedObstacle {
     const info = OBSTACLE_INFO[kind];
+    if (shape === undefined) shape = kind === 'twig' ? 0 : this.rng.range(0, 100);
     const parts: Obstacle[] = [];
     let mesh: THREE.Object3D;
     if (kind === 'twig') {
@@ -233,10 +235,10 @@ export class Vegetation {
         parts.push({ x: x + Math.cos(yaw) * t, z: z + Math.sin(yaw) * t, r: info.r, kind: 'twig' });
       }
     } else {
-      mesh = this.stoneMesh(x, z, info.r, yaw);
+      mesh = this.stoneMesh(x, z, info.r, yaw, shape);
       parts.push({ x, z, r: info.r * 0.85, kind: 'stone' });
     }
-    const p: PlacedObstacle = { id: this.nextPlacedId++, kind, x, z, yaw, parts, mesh };
+    const p: PlacedObstacle = { id: this.nextPlacedId++, kind, x, z, yaw, shape, parts, mesh };
     mesh.traverse((o) => (o.userData.pick = { kind: 'placed', id: p.id }));
     for (const o of parts) this.addObstacle(o);
     this.placedGroup.add(mesh);

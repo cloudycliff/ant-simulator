@@ -451,9 +451,23 @@ export class Colony {
     return best;
   }
 
-  findItem(pred: (it: Item) => boolean): Item | null {
-    for (const arr of this.byChamber) for (const it of arr) if (it.free && pred(it)) return it;
-    return null;
+  /** 房间里符合条件的空闲物品，取从 from 节点出发路程最近的房间；from < 0 时按房间顺序 */
+  findItem(pred: (it: Item) => boolean, from = -1): Item | null {
+    const nest = this.w.nest;
+    let best: Item | null = null;
+    let bd = Infinity;
+    for (let c = 0; c < this.byChamber.length; c++) {
+      const d = from >= 0 ? nest.routeLength(from, nest.chambers[c].door) : c;
+      if (d >= bd) continue;
+      for (const it of this.byChamber[c]) {
+        if (it.free && pred(it)) {
+          best = it;
+          bd = d;
+          break;
+        }
+      }
+    }
+    return best;
   }
 
   countIn(chamber: number, type: ItemType): number {

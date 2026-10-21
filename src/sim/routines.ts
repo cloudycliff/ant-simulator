@@ -222,13 +222,13 @@ function* nurseRoutine(a: Ant, w: World): Routine {
   const col = w.colony;
   if (wantsToEat(a, w)) return yield* eat(a, w);
 
-  const egg = col.findItem((i) => i.type === 'egg' && col.chamberType(i.chamber) === 'queen');
+  const egg = col.findItem((i) => i.type === 'egg' && col.chamberType(i.chamber) === 'queen', here(a, w));
   if (egg && rng.chance(0.85)) return yield* carryBrood(a, w, egg, '把卵从蚁后室搬到卵室');
 
-  const ready = col.findItem((i) => i.type === 'pupa' && i.ready);
+  const ready = col.findItem((i) => i.type === 'pupa' && i.ready, here(a, w));
   if (ready && rng.chance(0.8)) return yield* helpEclose(a, w, ready);
 
-  const mover = col.findItem((i) => i.isBrood && i.wantsMove);
+  const mover = col.findItem((i) => i.isBrood && i.wantsMove, here(a, w));
   if (mover && rng.chance(0.75)) {
     const target = col.targetChamberFor(mover);
     return yield* carryBrood(a, w, mover, `把${ITEM_NAMES[mover.type]}搬到${target.name}`);
@@ -399,16 +399,16 @@ function* maintenanceRoutine(a: Ant, w: World): Routine {
   if (job && rng.chance(0.8)) return yield* plugEntrance(a, w, job);
   // 入口封着或地面还湿时，只做巢内的工作
   if (w.weather.keepIn) {
-    const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste');
+    const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste', here(a, w));
     if (waste && rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
     if (a.crop > 0.6 && rng.chance(0.5)) return yield* distributeCrop(a, w);
     return yield* patrolNest(a, w);
   }
 
-  const corpse = findCorpse(w);
+  const corpse = findCorpse(a, w);
   if (corpse && rng.chance(0.85)) return yield* carryOut(a, w, corpse, '把同伴尸体搬到巢外垃圾堆');
 
-  const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste');
+  const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste', here(a, w));
   if (waste && rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
 
   const wc = chamber(w, 'waste');
@@ -443,9 +443,14 @@ function* plugEntrance(a: Ant, w: World, job: PlugJob): Routine {
   a.note(w, job.open ? `清开了${e.name}的一部分封土` : `往${e.name}填了一层土`);
 }
 
-function findCorpse(w: World): Item | null {
+/** 蚂蚁所在的巢内节点；在地表时取最近的入口 */
+function here(a: Ant, w: World): number {
+  return a.domain === 'nest' ? a.currentNode(w) : w.nest.nearestEntrance(a.pos.x, a.pos.z).node;
+}
+
+function findCorpse(a: Ant, w: World): Item | null {
   for (const it of w.colony.nodeItems) if (it.type === 'corpse' && it.free) return it;
-  const c = w.colony.findItem((i) => i.type === 'corpse');
+  const c = w.colony.findItem((i) => i.type === 'corpse', here(a, w));
   if (c) return c;
   for (const it of w.colony.surfaceItems)
     if (it.type === 'corpse' && it.place === 'surface' && it.free && Math.hypot(it.pos.x, it.pos.z) < 30) return it;

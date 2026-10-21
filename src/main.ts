@@ -39,24 +39,28 @@ async function boot(): Promise<void> {
     CONFIG.colony.maxPopulation = Math.max(CONFIG.colony.maxPopulation, CONFIG.colony.initialWorkers + 200);
   }
   // 有存档时接着上次继续；?new=1 忽略存档（之后的自动保存会覆盖它）
-  let world = new World();
+  // 新开局每次随机生成地图；?seed=数字 指定地图，便于复现和截图
+  const seedParam = Number(params.get('seed'));
+  const newSeed = seedParam > 0 ? seedParam >>> 0 : (Math.random() * 2 ** 31) >>> 0;
+  let world: World;
   let loadMsg = '';
   let savedCamera: number[] | undefined;
   const saved = params.get('new') === '1' || antsParam > 0 ? null : readSave();
-  if (saved) {
-    const problem = saveProblem(saved);
-    if (problem) loadMsg = `${problem}，已开始新的蚁群`;
-    else {
-      try {
-        loadWorld(world, saved);
-        loadMsg = `已读取存档：${saved.stamp}`;
-        savedCamera = saved.camera;
-      } catch (e) {
-        console.error(e);
-        world = new World();
-        loadMsg = '存档无法读取，已开始新的蚁群';
-      }
+  const problem = saved ? saveProblem(saved) : null;
+  if (saved && !problem) {
+    try {
+      world = new World(saved.seed);
+      loadWorld(world, saved);
+      loadMsg = `已读取存档：${saved.stamp}`;
+      savedCamera = saved.camera;
+    } catch (e) {
+      console.error(e);
+      world = new World(newSeed);
+      loadMsg = '存档无法读取，已开始新的蚁群';
     }
+  } else {
+    world = new World(newSeed);
+    if (problem) loadMsg = `${problem}，已开始新的蚁群`;
   }
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);

@@ -248,6 +248,7 @@ export class Hud {
       this.saveEl.innerHTML = `
         <div class="head"><b>存档</b>保存在本浏览器里；每分钟和关闭页面时自动保存</div>
         <div class="row" id="save-status"></div>
+        <div class="row">地图编号 ${this.world.seed} <small>（重新开始会随机换一张地图，网址加 ?new=1&amp;seed=编号 可以用这张地图重新开局）</small></div>
         <div class="opts">
           <button data-a="saveNow">立即保存 <kbd>Ctrl S</kbd></button>
           <button data-a="loadSave" ${m ? '' : 'disabled'}>读取上次存档</button>
