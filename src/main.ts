@@ -10,6 +10,8 @@ import { CameraController } from './ui/camera';
 import { Picker, type Selection } from './ui/picking';
 import { Hud, type HudAction } from './ui/hud';
 import { ToolController } from './ui/tools';
+import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
+import { loadWorld, saveProblem, saveWorld } from './world/save';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
 
@@ -28,8 +30,27 @@ async function boot(): Promise<void> {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 2500);
 
-  const world = new World();
   const params = new URLSearchParams(location.search);
+  // 有存档时接着上次继续；?new=1 忽略存档（之后的自动保存会覆盖它）
+  let world = new World();
+  let loadMsg = '';
+  let savedCamera: number[] | undefined;
+  const saved = params.get('new') === '1' ? null : readSave();
+  if (saved) {
+    const problem = saveProblem(saved);
+    if (problem) loadMsg = `${problem}，已开始新的蚁群`;
+    else {
+      try {
+        loadWorld(world, saved);
+        loadMsg = `已读取存档：${saved.stamp}`;
+        savedCamera = saved.camera;
+      } catch (e) {
+        console.error(e);
+        world = new World();
+        loadMsg = '存档无法读取，已开始新的蚁群';
+      }
+    }
+  }
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);
   for (let t = 0; t < skip; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
@@ -49,8 +70,8 @@ async function boot(): Promise<void> {
 
   const controller = new CameraController(camera, renderer.domElement, (x, z) => world.terrain.heightAt(x, z));
   controller.setPose(new THREE.Vector3(16, 13, 22), new THREE.Vector3(0, 0, 1));
-  // 支持 ?cam=x,y,z,tx,ty,tz 指定初始视角，便于分享观察位置
-  const camParam = new URLSearchParams(location.search).get('cam')?.split(',').map(Number);
+  // 支持 ?cam=x,y,z,tx,ty,tz 指定初始视角，便于分享观察位置；否则恢复存档时的视角
+  const camParam = params.get('cam')?.split(',').map(Number) ?? savedCamera;
   if (camParam?.length === 6 && camParam.every(Number.isFinite)) {
     controller.setPose(new THREE.Vector3(camParam[0], camParam[1], camParam[2]), new THREE.Vector3(camParam[3], camParam[4], camParam[5]));
   }
@@ -61,6 +82,7 @@ async function boot(): Promise<void> {
     terrain: world.terrain.mesh,
   });
   const hud = new Hud(world);
+  hud.saveMeta = readMeta();
   const tools = new ToolController(world);
   hud.tools = tools;
   scene.add(tools.preview);
@@ -145,6 +167,33 @@ async function boot(): Promise<void> {
     hud.toast('跟随中：左键拖拽环绕，滚轮缩放，WASD 退出');
   };
 
+  // 读档和重新开始都通过重新载入页面完成；载入前不再自动保存，以免覆盖
+  let saveBlocked = false;
+  let autosaveWarned = false;
+  const camDir = new THREE.Vector3();
+  const save = (manual: boolean) => {
+    if (saveBlocked) return;
+    const d = saveWorld(world, Date.now());
+    camera.getWorldDirection(camDir);
+    const target = camera.position.clone().addScaledVector(camDir, 10);
+    d.camera = [...camera.position.toArray(), ...target.toArray()].map((n) => Math.round(n * 100) / 100);
+    const err = writeSave(d);
+    hud.saveMeta = readMeta();
+    if (manual) hud.toast(err ? `保存失败：${err}` : `已保存（${d.stamp}）`);
+    else if (err && !autosaveWarned) {
+      autosaveWarned = true;
+      hud.toast(`自动保存失败：${err}`);
+    }
+  };
+  const reloadClean = () => {
+    saveBlocked = true;
+    location.replace(location.href.split(/[?#]/)[0]);
+  };
+  window.addEventListener('pagehide', () => save(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) save(false);
+  });
+
   const action = (a: HudAction, v?: number) => {
     const c = world.clock;
     switch (a) {
@@ -207,8 +256,24 @@ async function boot(): Promise<void> {
         if (r.ok) select(null);
         break;
       }
+      case 'savePanel':
+        hud.saveOpen = !hud.saveOpen;
+        hud.saveMeta = readMeta();
+        break;
+      case 'saveNow':
+        save(true);
+        break;
+      case 'loadSave':
+        if (readMeta()) reloadClean();
+        break;
+      case 'newGame':
+        if (!confirm('重新开始会删除当前存档，用一个新的蚁群从头开始。确定吗？')) break;
+        clearSave();
+        reloadClean();
+        break;
     }
     hud.renderTool();
+    hud.renderSave();
     applyView();
   };
   hud.onAction = action;
@@ -238,6 +303,10 @@ async function boot(): Promise<void> {
 
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+      e.preventDefault();
+      return action('saveNow');
+    }
     if (e.code in SPEED_KEYS) return action('speed', SPEED_KEYS[e.code]);
     switch (e.code) {
       case 'Space':
@@ -302,6 +371,7 @@ async function boot(): Promise<void> {
 
   applyView();
   document.getElementById('loading')?.remove();
+  if (loadMsg) hud.toast(loadMsg);
   setTimeout(() => {
     const help = document.getElementById('help')!;
     if (!help.classList.contains('hidden')) hud.toggleHelp();
@@ -313,6 +383,7 @@ async function boot(): Promise<void> {
   let fps = 60;
   let hudTimer = 0;
   let pherTimer = 0;
+  let autosaveTimer = 0;
   let time = 0;
 
   const frame = (now: number) => {
@@ -361,6 +432,11 @@ async function boot(): Promise<void> {
       world.pheromone.refreshTexture();
     }
     hud.tick(dt);
+    autosaveTimer += dt;
+    if (autosaveTimer > CONFIG.save.autosaveSec) {
+      autosaveTimer = 0;
+      save(false);
+    }
     hudTimer += dt;
     if (hudTimer > 0.25) {
       hudTimer = 0;

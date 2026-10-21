@@ -2,6 +2,23 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import type { Terrain } from './terrain';
 
+function encodeField(f: Float32Array, max: number): string {
+  const q = new Uint8Array(f.length);
+  for (let i = 0; i < f.length; i++) q[i] = Math.round(Math.sqrt(Math.min(1, f[i] / max)) * 255);
+  let s = '';
+  for (let i = 0; i < q.length; i += 0x8000) s += String.fromCharCode(...q.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+function decodeField(b64: string, max: number, out: Float32Array): void {
+  const s = atob(b64);
+  const n = Math.min(s.length, out.length);
+  for (let i = 0; i < n; i++) {
+    const v = s.charCodeAt(i) / 255;
+    out[i] = v * v * max;
+  }
+}
+
 /**
  * 地表化学信号网格，两个通道：
  * - trail：路径信息素，携带食物返巢的觅食蚁释放，挥发快（半衰期约 1.5 分钟）
@@ -56,6 +73,16 @@ export class PheromoneField {
   depositHome(x: number, z: number, amount: number): void {
     const k = this.idx(x, z);
     if (k >= 0) this.home[k] = Math.min(4, this.home[k] + amount);
+  }
+
+  /** 存档：两个通道按平方根量化到 0–255 后 base64 编码，低浓度保留更多精度 */
+  toSave(): { trail: string; home: string } {
+    return { trail: encodeField(this.trail, 12), home: encodeField(this.home, 4) };
+  }
+
+  restore(s: { trail: string; home: string }): void {
+    decodeField(s.trail, 12, this.trail);
+    decodeField(s.home, 4, this.home);
   }
 
   /** 半径 r 内的两种信息素分别乘以保留比例（水冲刷） */

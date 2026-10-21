@@ -18,6 +18,27 @@ export const ITEM_NAMES: Record<ItemType, string> = {
 
 let nextItemId = 1;
 
+export interface ItemSave {
+  id: number;
+  t: ItemType;
+  pl: ItemPlace;
+  ch: number;
+  nd: number;
+  p: number[];
+  yaw: number;
+  fk: FoodKind;
+  am: number;
+  sa: number;
+  hu: number;
+  fe: number;
+  wm: boolean;
+  rd: boolean;
+  rt: number;
+  age: number;
+}
+
+const r3 = (v: number) => Math.round(v * 1000) / 1000;
+
 export class Item {
   id = nextItemId++;
   place: ItemPlace = 'none';
@@ -49,5 +70,48 @@ export class Item {
 
   get free(): boolean {
     return this.claimedBy < 0 && this.carriedBy < 0 && this.place !== 'gone';
+  }
+
+  toSave(): ItemSave {
+    return {
+      id: this.id,
+      t: this.type,
+      pl: this.place,
+      ch: this.chamber,
+      nd: this.node,
+      p: [r3(this.pos.x), r3(this.pos.y), r3(this.pos.z)],
+      yaw: r3(this.yaw),
+      fk: this.foodKind,
+      am: r3(this.amount),
+      sa: r3(this.stageAge),
+      hu: r3(this.hunger),
+      fe: this.feeds,
+      wm: this.wantsMove,
+      rd: this.ready,
+      rt: r3(this.readyTime),
+      age: r3(this.age),
+    };
+  }
+
+  /** 读档：认领与携带关系不恢复（蚂蚁的任务会重新开始） */
+  static fromSave(s: ItemSave): Item {
+    const it = new Item(s.t);
+    it.id = s.id;
+    nextItemId = Math.max(nextItemId, s.id + 1);
+    it.place = s.pl;
+    it.chamber = s.ch;
+    it.node = s.nd;
+    it.pos.set(s.p[0], s.p[1], s.p[2]);
+    it.yaw = s.yaw;
+    it.foodKind = s.fk;
+    it.amount = s.am;
+    it.stageAge = s.sa;
+    it.hunger = s.hu;
+    it.feeds = s.fe;
+    it.wantsMove = s.wm;
+    it.ready = s.rd;
+    it.readyTime = s.rt;
+    it.age = s.age;
+    return it;
   }
 }

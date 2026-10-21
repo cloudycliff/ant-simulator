@@ -109,6 +109,29 @@ export interface Entrance {
   name: string;
 }
 
+/** 存档中的蚁穴结构；坐标展平为 [x, y, z, x, y, z, …] */
+export interface NestSave {
+  nodes: { kind: NodeKind; p: number[]; e: number[]; c?: number }[];
+  edges: { a: number; b: number; p: number[]; r: number; s: boolean }[];
+  chambers: { type: ChamberType; name: string; floor: number[]; rx: number; rz: number; ry: number; yaw: number; door: number; ready: boolean; grow: number; stone: boolean }[];
+  faces: { node: number; edge: number; full: number[]; len: number; maxLen: number }[];
+  reserved: { x: number; y: number; z: number; r: number }[];
+}
+
+const r3 = (v: number) => Math.round(v * 1000) / 1000;
+const flat = (pts: THREE.Vector3[]) => pts.flatMap((p) => [r3(p.x), r3(p.y), r3(p.z)]);
+const unflat = (a: number[]) => {
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i + 2 < a.length; i += 3) out.push(new THREE.Vector3(a[i], a[i + 1], a[i + 2]));
+  return out;
+};
+
+function pathOf(points: THREE.Vector3[]): Path {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + points[i].distanceTo(points[i - 1]));
+  return { points, cum, length: cum[cum.length - 1] };
+}
+
 const _tmp = new THREE.Vector3();
 
 export class Nest {
@@ -357,10 +380,46 @@ export class Nest {
     ctrl.push(pb.clone());
     const curve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal');
     const samples = Math.max(8, Math.round(curve.getLength() / 0.8));
-    const points = curve.getSpacedPoints(samples);
-    const cum = [0];
-    for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + points[i].distanceTo(points[i - 1]));
-    return { points, cum, length: cum[cum.length - 1] };
+    return pathOf(curve.getSpacedPoints(samples));
+  }
+
+  toSave(): NestSave {
+    return {
+      nodes: this.nodes.map((n) => ({ kind: n.kind, p: flat([n.pos]), e: n.edges.slice(), ...(n.chamber !== undefined ? { c: n.chamber } : {}) })),
+      edges: this.edges.map((e) => ({ a: e.a, b: e.b, p: flat(e.points), r: e.radius, s: e.isShaft })),
+      chambers: this.chambers.map((c) => ({
+        type: c.type,
+        name: c.name,
+        floor: flat([c.floor]),
+        rx: c.rx,
+        rz: c.rz,
+        ry: c.ry,
+        yaw: c.yaw,
+        door: c.door,
+        ready: c.ready,
+        grow: c.grow,
+        stone: c.underStone,
+      })),
+      faces: this.faces.map((f) => ({ node: f.node, edge: f.edge.id, full: flat(f.full.points), len: f.len, maxLen: f.maxLen })),
+      reserved: this.reserved.map((r) => ({ ...r })),
+    };
+  }
+
+  /** 读档：替换整个蚁穴结构。入口是最先生成的节点，编号不变 */
+  restore(s: NestSave): void {
+    this.nodes = s.nodes.map((n, id) => ({ id, kind: n.kind, pos: unflat(n.p)[0], edges: n.e.slice(), ...(n.c !== undefined ? { chamber: n.c } : {}) }));
+    this.edges = s.edges.map((e, id) => {
+      const { points, cum, length } = pathOf(unflat(e.p));
+      return { id, a: e.a, b: e.b, points, cum, length, radius: e.r, isShaft: e.s, rev: 0 };
+    });
+    this.chambers = s.chambers.map((c, id) => {
+      const floor = unflat(c.floor)[0];
+      return { id, type: c.type, name: c.name, floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone };
+    });
+    this.faces = s.faces.map((f) => ({ node: f.node, edge: this.edges[f.edge], full: pathOf(unflat(f.full)), len: f.len, maxLen: f.maxLen }));
+    this.reserved = s.reserved.map((r) => ({ ...r }));
+    this.rev++;
+    this.computeRouting();
   }
 
   private computeRouting(): void {

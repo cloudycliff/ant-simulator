@@ -35,6 +35,37 @@ const DOWN = new THREE.Vector3(0, -1, 0);
 
 let nextAntId = 1;
 
+export interface AntSave {
+  id: number;
+  role: Role;
+  scout: boolean;
+  age: number;
+  life: number;
+  hunger: number;
+  health: number;
+  size: number;
+  bias: number;
+  surface: boolean;
+  p: number[];
+  h: number;
+  room: number;
+  node: number;
+  crop: number;
+  eatAt: number;
+  trips: number;
+  delivered: number;
+  next: Role | null;
+  excited: number;
+  /** 照料的蚜虫群在 AphidManager.colonies 中的序号 */
+  herd: number;
+  mem: number[] | null;
+  contacts: number;
+  shares: number;
+  log: LogEntry[];
+}
+
+const r3 = (v: number) => Math.round(v * 1000) / 1000;
+
 export class Ant {
   id = nextAntId++;
   role: Role;
@@ -92,7 +123,7 @@ export class Ant {
   /** 分工调整后待切换的职别，在当前任务结束后生效 */
   nextRole: Role | null = null;
   /** 行为年龄相对真实日龄的偏移：同龄工蚁转换分工有早有晚 */
-  readonly ageBias = rng.gauss(0, CONFIG.polyethism.ageJitterDays);
+  ageBias = rng.gauss(0, CONFIG.polyethism.ageJitterDays);
   /** 触角接触、交哺时原地停留的剩余秒数 */
   holdT = 0;
   /** 被水洼挡住的累计时间，超过阈值后蹚水通过 */
@@ -122,6 +153,78 @@ export class Ant {
     this.ageDays = ageDays;
     const [a, b] = CONFIG.colony.workerLifespanDays;
     this.lifespan = role === 'queen' ? 9999 : rng.range(a, b);
+  }
+
+  toSave(w: World): AntSave {
+    const surface = this.domain === 'surface';
+    return {
+      id: this.id,
+      role: this.role,
+      scout: this.scout,
+      age: r3(this.ageDays),
+      life: r3(this.lifespan),
+      hunger: r3(this.hunger),
+      health: r3(this.health),
+      size: r3(this.size),
+      bias: r3(this.ageBias),
+      surface,
+      p: [r3(this.pos.x), r3(this.pos.y), r3(this.pos.z)],
+      h: r3(this.heading),
+      room: surface ? -1 : this.room,
+      node: surface || this.room >= 0 ? -1 : this.currentNode(w),
+      crop: r3(this.crop),
+      eatAt: Math.round(this.eatRetryAt),
+      trips: this.trips,
+      delivered: this.delivered,
+      next: this.nextRole,
+      excited: Math.round(this.excitedUntil),
+      herd: w.aphids.colonies.findIndex((c) => c.id === this.herd),
+      mem: this.memory ? [r3(this.memory.x), r3(this.memory.z)] : null,
+      contacts: this.contacts,
+      shares: this.shares,
+      log: this.log.slice(0, 4),
+    };
+  }
+
+  /** 读档：恢复个体状态和位置，任务协程从头开始。走在隧道中途的蚂蚁放到最近的节点上，爬在植物上的放回地面 */
+  static fromSave(s: AntSave, w: World): Ant {
+    const a = new Ant(s.role, s.age);
+    a.id = s.id;
+    nextAntId = Math.max(nextAntId, s.id + 1);
+    a.scout = s.scout;
+    a.lifespan = s.life;
+    a.hunger = s.hunger;
+    a.health = s.health;
+    a.size = s.size;
+    a.ageBias = s.bias;
+    a.crop = s.crop;
+    a.eatRetryAt = s.eatAt;
+    a.trips = s.trips;
+    a.delivered = s.delivered;
+    a.nextRole = s.next;
+    a.excitedUntil = s.excited;
+    a.herd = w.aphids.colonies[s.herd]?.id ?? -1;
+    a.memory = s.mem ? { x: s.mem[0], z: s.mem[1] } : null;
+    a.contacts = s.contacts;
+    a.shares = s.shares;
+    a.log = s.log;
+    a.heading = s.h;
+    const nest = w.nest;
+    if (s.surface) {
+      a.placeOnSurface(s.p[0], s.p[2], w);
+      a.fwd.set(Math.cos(s.h), 0, Math.sin(s.h));
+    } else if (s.room >= 0 && nest.chambers[s.room]) {
+      a.domain = 'nest';
+      a.room = s.room;
+      a.pos.set(s.p[0], s.p[1], s.p[2]);
+    } else {
+      a.domain = 'nest';
+      a.node = nest.nodes[s.node] ? s.node : nest.entrances[0].node;
+      a.pos.copy(nest.nodes[a.node].pos);
+    }
+    a.localTarget.copy(a.pos);
+    a.navTarget.copy(a.pos);
+    return a;
   }
 
   note(w: World, msg: string): void {

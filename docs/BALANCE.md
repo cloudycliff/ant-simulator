@@ -54,6 +54,7 @@
 | `intervention.waterRadius` | 4 / 8 | 一点水、一大杯水形成的水洼半径（cm）；倒在已有水洼上会合并成更大的一片 |
 | `intervention.waterDays` | 0.25 | 水洼在约 20°C 时完全蒸发所需的游戏日；越冷越慢（见下表） |
 | `intervention.washTrail / washHome` | 0.05 / 0.3 | 浇水时浇到的地方信息素保留的比例（路径 / 足迹） |
+| `save.autosaveSec` | 60 | 自动保存间隔（现实秒数）；切到后台和关闭页面时也会保存 |
 
 ### 写在代码里的数值
 

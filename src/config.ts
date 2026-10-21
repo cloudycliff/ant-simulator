@@ -116,6 +116,11 @@ export const CONFIG = {
     washHome: 0.3,
   },
 
+  save: {
+    /** 自动保存间隔（现实秒数） */
+    autosaveSec: 60,
+  },
+
   nest: {
     tunnelRadius: 1.0,
     shaftRadius: 1.25,

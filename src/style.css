@@ -329,6 +329,36 @@ button.on kbd {
 #tool .opts .exit {
   margin-left: auto;
 }
+#save {
+  right: 10px;
+  width: 330px;
+  padding: 10px 14px 12px;
+  z-index: 5;
+}
+#save .head {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #b8ae9c;
+}
+#save .head b {
+  margin-right: 8px;
+  color: #f2c98a;
+  font-size: 13px;
+}
+#save .row {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #d8cfbf;
+}
+#save .opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+#save .opts .danger {
+  margin-left: auto;
+  color: #f0a08a;
+}
 body.tooling #stats {
   bottom: 96px;
 }

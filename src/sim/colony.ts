@@ -5,9 +5,9 @@ import { rng } from '../util/random';
 import type { Chamber, ChamberType } from '../nest/nest';
 import type { World } from '../world/world';
 import type { FoodKind } from '../world/food';
-import { Ant, type Routine } from './ant';
-import { NestExpansion } from './expansion';
-import { Item, type ItemType } from './items';
+import { Ant, type AntSave, type Routine } from './ant';
+import { NestExpansion, type ExpansionSave } from './expansion';
+import { Item, type ItemSave, type ItemType } from './items';
 import { routineFor } from './routines';
 import { SpatialHash } from './spatial';
 
@@ -41,6 +41,18 @@ export interface RoleTargets {
   nurse: number;
   maintenance: number;
   forager: number;
+}
+
+export interface ColonySave {
+  ants: AntSave[];
+  items: ItemSave[];
+  eggCredit: number;
+  pupaChamber: number;
+  targets: RoleTargets;
+  stats: ColonyStats;
+  history: ColonySample[];
+  events: { t: string; msg: string }[];
+  expansion: ExpansionSave;
 }
 
 const ROLE_ORDER: Record<Role, number> = { queen: -1, nurse: 0, maintenance: 1, forager: 2 };
@@ -170,6 +182,61 @@ export class Colony {
     this.updateClimate();
     this.reviewRoles();
     this.sample();
+  }
+
+  toSave(): ColonySave {
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    return {
+      ants: this.ants.map((a) => a.toSave(this.w)),
+      items: [...this.items].filter((it) => it.place !== 'gone' && it.place !== 'none').map((it) => it.toSave()),
+      eggCredit: this.eggCredit,
+      pupaChamber: this.pupaChamber,
+      targets: { ...this.targets },
+      stats: { ...this.stats },
+      history: this.history.map((h) => ({ ...h, day: Math.round(h.day * 1e4) / 1e4, food: r2(h.food), liquid: r2(h.liquid) })),
+      events: this.events.slice(),
+      expansion: this.expansion.toSave(),
+    };
+  }
+
+  /** 读档：在蚁穴结构恢复之后调用。被搬运中的物品直接送到它的目的地 */
+  restore(s: ColonySave): void {
+    this.ants = s.ants.map((as) => Ant.fromSave(as, this.w));
+    const queen = this.ants.find((a) => a.role === 'queen');
+    if (!queen) throw new Error('存档里没有蚁后');
+    this.queen = queen;
+    this.items.clear();
+    this.byChamber = [];
+    this.surfaceItems = [];
+    this.nodeItems = [];
+    this.ensureChamberSlots();
+    this.pupaChamber = s.pupaChamber;
+    const carried: Item[] = [];
+    for (const is of s.items) {
+      const it = Item.fromSave(is);
+      if (it.place === 'chamber' && this.byChamber[it.chamber]) this.byChamber[it.chamber].push(it);
+      else if (it.place === 'node') this.nodeItems.push(it);
+      else if (it.place === 'surface' || it.place === 'midden' || it.place === 'mound') this.surfaceItems.push(it);
+      else {
+        carried.push(it);
+        continue;
+      }
+      this.items.add(it);
+    }
+    for (const it of carried) {
+      it.place = 'none';
+      if (it.type === 'corpse') this.dropAtMidden(it);
+      else if (it.type !== 'soil') this.addToChamber(it, this.targetChamberFor(it));
+    }
+    this.eggCredit = s.eggCredit;
+    this.queenTender = -1;
+    this.targets = s.targets;
+    this.stats = s.stats;
+    this.history = s.history;
+    this.events = s.events;
+    this.expansion.restore(s.expansion);
+    this.refreshFoodStock();
+    this.liquidStock = this.ants.reduce((sum, a) => sum + a.crop, 0);
   }
 
   /** 新增房间后为它分配物品索引 */

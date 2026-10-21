@@ -20,6 +20,23 @@ export interface ExpansionProject {
   startedDay: number;
 }
 
+export interface ExpansionSave {
+  project: {
+    face: number;
+    type: ChamberType;
+    floor: number[];
+    rx: number;
+    rz: number;
+    ry: number;
+    yaw: number;
+    chamber: number;
+    soil: number;
+    soilNeeded: number;
+    startedDay: number;
+  } | null;
+  completed: number;
+}
+
 /**
  * 蚁穴扩建：蚁群拥挤时规划一间新房间，先挖通往它的隧道，再从门口向内挖出房间。
  * 每一粒运出巢外的土都推进对应工作面的几何形状。
@@ -30,6 +47,44 @@ export class NestExpansion {
   private acc = 0;
 
   constructor(private w: World) {}
+
+  toSave(): ExpansionSave {
+    const p = this.project;
+    return {
+      project: p && {
+        face: p.face.node,
+        type: p.type,
+        floor: [p.floor.x, p.floor.y, p.floor.z],
+        rx: p.rx,
+        rz: p.rz,
+        ry: p.ry,
+        yaw: p.yaw,
+        chamber: p.chamber?.id ?? -1,
+        soil: p.soil,
+        soilNeeded: p.soilNeeded,
+        startedDay: p.startedDay,
+      },
+      completed: this.completed,
+    };
+  }
+
+  /** 在蚁穴结构恢复之后调用 */
+  restore(s: ExpansionSave): void {
+    this.completed = s.completed;
+    this.project = null;
+    const p = s.project;
+    if (!p) return;
+    const nest = this.w.nest;
+    const chamber = p.chamber >= 0 ? (nest.chambers[p.chamber] ?? null) : null;
+    let face = nest.faces.find((f) => f.node === p.face);
+    // 隧道挖通后工作面已从 faces 中移除，房间阶段只用到它的 node（即房门）
+    if (!face && chamber) {
+      const edge = nest.edges[nest.nodes[p.face].edges[0]];
+      face = { node: p.face, edge, full: { points: edge.points, cum: edge.cum, length: edge.length }, len: edge.length, maxLen: edge.length };
+    }
+    if (!face) return;
+    this.project = { ...p, face, floor: new THREE.Vector3(p.floor[0], p.floor[1], p.floor[2]), chamber };
+  }
 
   /** 已完工房间可容纳的成虫与幼体总数 */
   capacity(): number {

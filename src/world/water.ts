@@ -63,16 +63,31 @@ export class WaterManager {
       this.reshape(hit);
       return hit;
     }
+    return this.create(x, z, r, 1);
+  }
+
+  private create(x: number, z: number, r0: number, water: number): Puddle {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.mat);
     mesh.receiveShadow = true;
     mesh.renderOrder = 1;
-    const p = new Puddle(x, z, r, mesh);
+    const p = new Puddle(x, z, r0, mesh);
+    p.water = water;
+    p.obstacle.r = p.r;
     mesh.userData.pick = { kind: 'puddle', id: p.id };
     this.reshape(p);
     this.group.add(mesh);
     this.veg.addObstacle(p.obstacle);
     this.puddles.push(p);
     return p;
+  }
+
+  toSave(): { x: number; z: number; r0: number; water: number }[] {
+    return this.puddles.map((p) => ({ x: p.x, z: p.z, r0: p.r0, water: p.water }));
+  }
+
+  /** 读档：直接重建水洼，不再冲刷信息素（信息素网格单独恢复） */
+  restore(list: { x: number; z: number; r0: number; water: number }[]): void {
+    for (const s of list) this.create(s.x, s.z, s.r0, s.water);
   }
 
   at(x: number, z: number): Puddle | null {

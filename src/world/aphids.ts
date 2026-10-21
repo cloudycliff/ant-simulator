@@ -126,6 +126,23 @@ export class AphidManager {
     return this.colonies.find((c) => c.id === id);
   }
 
+  /** 蚜虫群的位置由世界种子决定，存档只记录各群的状态（按顺序） */
+  toSave(): { count: number; honeydew: number; discovered: boolean; lastTended: number; collected: number }[] {
+    return this.colonies.map((c) => ({ count: c.count, honeydew: c.honeydew, discovered: c.discovered, lastTended: Math.max(-1e6, c.lastTended), collected: c.collected }));
+  }
+
+  restore(s: ReturnType<AphidManager['toSave']>): void {
+    s.forEach((x, i) => {
+      const c = this.colonies[i];
+      if (!c) return;
+      c.count = x.count;
+      c.honeydew = x.honeydew;
+      c.discovered = x.discovered;
+      c.lastTended = x.lastTended;
+      c.collected = x.collected;
+    });
+  }
+
   byPlant(index: number): AphidColony | undefined {
     return this.colonies.find((c) => c.plant.index === index);
   }

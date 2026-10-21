@@ -59,7 +59,7 @@ let nextFoodId = 1;
 export class FoodSource {
   id = nextFoodId++;
   amount: number;
-  readonly initial: number;
+  initial: number;
   mesh: THREE.Object3D;
   /** 已被觅食蚁发现 */
   discovered = false;
@@ -97,10 +97,17 @@ export class FoodSource {
     this.amount -= 1;
     this.takenTotal++;
     this.discovered = true;
-    const s = 0.35 + 0.65 * Math.sqrt(this.fraction);
-    this.mesh.scale.setScalar(s);
+    this.rescale();
     return true;
   }
+  rescale(): void {
+    this.mesh.scale.setScalar(0.35 + 0.65 * Math.sqrt(this.fraction));
+  }
+}
+
+export interface FoodSave {
+  sources: { type: FoodSourceType; x: number; z: number; amount: number; initial: number; discovered: boolean; taken: number; placed: boolean }[];
+  spawnTimer: number;
 }
 
 export class FoodManager {
@@ -198,6 +205,29 @@ export class FoodManager {
       add(sphere, this.mats.syrup, 0.6, 0.05, 0.5, 0.9, 0.25, 0.8);
     }
     return g;
+  }
+
+  toSave(): FoodSave {
+    return {
+      sources: this.sources.map((s) => ({ type: s.type, x: s.x, z: s.z, amount: s.amount, initial: s.initial, discovered: s.discovered, taken: s.takenTotal, placed: s.placed })),
+      spawnTimer: this.spawnTimer,
+    };
+  }
+
+  restore(s: FoodSave): void {
+    for (const src of this.sources) this.group.remove(src.mesh);
+    this.sources = [];
+    for (const f of s.sources) {
+      const src = this.spawn(0, f.type, f);
+      if (!src) continue;
+      src.amount = f.amount;
+      src.initial = f.initial;
+      src.discovered = f.discovered;
+      src.takenTotal = f.taken;
+      src.placed = f.placed;
+      src.rescale();
+    }
+    this.spawnTimer = s.spawnTimer;
   }
 
   placedCount(): number {

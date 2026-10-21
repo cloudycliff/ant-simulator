@@ -7,6 +7,7 @@ import { OBSTACLE_INFO } from '../world/vegetation';
 import type { World } from '../world/world';
 import type { Selection } from './picking';
 import { TOOLS, type ToolController } from './tools';
+import type { SaveMeta } from './saveSlot';
 
 const ROLE_DESC: Record<Role, string> = {
   queen: '蚁群唯一的繁殖者。婚飞交配后脱落翅膀、独自建巢，此后终生产卵；交配时储存的精子可使用十余年。',
@@ -30,7 +31,11 @@ export type HudAction =
   | 'tool'
   | 'toolopt'
   | 'toolexit'
-  | 'removePlaced';
+  | 'removePlaced'
+  | 'savePanel'
+  | 'saveNow'
+  | 'loadSave'
+  | 'newGame';
 
 const SPEEDS = [1, 2, 5, 10, 20];
 
@@ -41,6 +46,15 @@ function bar(v: number, color: string): string {
 
 function hex(n: number): string {
   return '#' + n.toString(16).padStart(6, '0');
+}
+
+function agoText(ms: number): string {
+  const s = Math.max(0, ms / 1000);
+  if (s < 10) return '刚刚';
+  if (s < 60) return `${Math.floor(s / 10) * 10} 秒前`;
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  return `${Math.floor(s / 86400)} 天前`;
 }
 
 function esc(s: string): string {
@@ -149,6 +163,10 @@ export class Hud {
   private toolEl = document.getElementById('tool')!;
   private toolKey = '';
   tools: ToolController | null = null;
+  private saveEl = document.getElementById('save')!;
+  private saveKey = '';
+  saveOpen = false;
+  saveMeta: SaveMeta | null = null;
   private toastTimer = 0;
   private statsDrawn = -1;
   onAction: ((a: HudAction, arg?: number) => void) | null = null;
@@ -173,6 +191,9 @@ export class Hud {
       <div class="group" id="tools">
         ${TOOLS.map((t, i) => `<button data-a="tool" data-v="${i}" title="快捷键 ${t.key}，重复按切换选项">${t.name} <kbd>${t.key}</kbd></button>`).join('')}
       </div>
+      <div class="group">
+        <button data-a="savePanel" id="btn-save" title="保存、读取存档或重新开始">存档</button>
+      </div>
       <div class="perf" id="perf"></div>`;
     this.helpEl.innerHTML = `
       <b>操作</b>
@@ -181,7 +202,7 @@ export class Hud {
       <div>左键单击 选择蚂蚁/房间/食物/植物　双击 飞到目标</div>
       <div><kbd>F</kbd> 跟随选中的蚂蚁　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续</div>
       <div><kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线</div>
-      <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水（重复按切换选项，<kbd>Esc</kbd> 退出工具）</div>`;
+      <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水（重复按切换选项，<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）</div>`;
     this.statsEl.innerHTML = `
       <canvas id="chart-pop"></canvas>
       <canvas id="chart-food"></canvas>`;
@@ -197,9 +218,32 @@ export class Hud {
     this.infoEl.addEventListener('click', handler);
     this.helpEl.addEventListener('click', handler);
     this.toolEl.addEventListener('click', handler);
+    this.saveEl.addEventListener('click', handler);
     this.infoEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.statsEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.toolEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.saveEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+  }
+
+  /** 存档面板：按钮只在有无存档变化时重写，“多久之前”单独更新文字 */
+  renderSave(): void {
+    document.getElementById('btn-save')!.classList.toggle('on', this.saveOpen);
+    this.saveEl.classList.toggle('hidden', !this.saveOpen);
+    if (!this.saveOpen) return;
+    const m = this.saveMeta;
+    const key = m ? 'has' : 'none';
+    if (key !== this.saveKey) {
+      this.saveKey = key;
+      this.saveEl.innerHTML = `
+        <div class="head"><b>存档</b>保存在本浏览器里；每分钟和关闭页面时自动保存</div>
+        <div class="row" id="save-status"></div>
+        <div class="opts">
+          <button data-a="saveNow">立即保存 <kbd>Ctrl S</kbd></button>
+          <button data-a="loadSave" ${m ? '' : 'disabled'}>读取上次存档</button>
+          <button data-a="newGame" class="danger">重新开始</button>
+        </div>`;
+    }
+    document.getElementById('save-status')!.textContent = m ? `上次保存：${m.stamp}，${m.ants} 只蚂蚁（${agoText(Date.now() - m.savedAt)}）` : '还没有存档';
   }
 
   toggleHelp(): void {
@@ -240,6 +284,7 @@ export class Hud {
     this.legendEl.classList.toggle('hidden', !s.pheromone);
     if (s.stats) this.renderStats();
     this.renderTool();
+    this.renderSave();
 
     this.renderColony();
     this.renderInfo(sel);
@@ -271,7 +316,7 @@ export class Hud {
   private layout(): void {
     const top = Math.round(this.top.getBoundingClientRect().bottom + 8);
     const H = window.innerHeight;
-    this.colonyEl.style.top = this.infoEl.style.top = `${top}px`;
+    this.colonyEl.style.top = this.infoEl.style.top = this.saveEl.style.top = `${top}px`;
     this.colonyEl.style.maxHeight = `${Math.max(160, H - top - this.eventsEl.offsetHeight - 20)}px`;
     const legend = this.state.pheromone ? this.legendEl.offsetHeight + 10 : 0;
     this.infoEl.style.maxHeight = `${Math.max(160, H - top - legend - 10)}px`;
