@@ -70,6 +70,11 @@ export const CONFIG = {
     chamberSoilPerArea: 4,
     maxDiggers: 18,
     maxChambers: 22,
+    /** 需要扩建时改为扩大已有房间的概率（房间数到上限后只扩大） */
+    enlargeChance: 0.4,
+    /** 每次扩大的线性倍数（以门口为不动点）；房间半径的上限 */
+    enlargeScale: 1.2,
+    maxRoomRadius: 12,
   },
 
   brood: {

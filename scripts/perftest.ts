@@ -50,7 +50,7 @@ for (let i = 0; i < steps; i++) {
   worst = Math.max(worst, took);
   if (took > 15) {
     const slow = parts.map((p) => [p, cost[p] - before[p]] as const).sort((a, b) => b[1] - a[1])[0];
-    console.log(`  慢步 ${took.toFixed(0)} ms @${w.clock.stamp()}：${slow[0]} ${slow[1].toFixed(0)} ms，扩建 ${w.colony.expansion.project ? (w.colony.expansion.project.chamber ? '房间' : '隧道') : '-'}`);
+    console.log(`  慢步 ${took.toFixed(0)} ms @${w.clock.stamp()}：${slow[0]} ${slow[1].toFixed(0)} ms，扩建 ${w.colony.expansion.project ? (w.colony.expansion.project.enlarge ? '扩大' : w.colony.expansion.project.chamber ? '房间' : '隧道') : '-'}`);
   }
   if (i > 0 && i % Math.round(60 / step) === 0) {
     const el = performance.now() - s0;

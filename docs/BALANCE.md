@@ -53,6 +53,8 @@
 | `expansion.trigger` | 0.88 | 占用率超过该值时规划新房间 |
 | `expansion.tunnelSoilPerUnit / chamberSoilPerArea` | 4 / 4 | 每 cm 隧道、每单位房间面积需要挖的土粒数 |
 | `expansion.maxDiggers / maxChambers` | 18 / 22 | 同时挖掘的内务蚁上限、房间总数上限 |
+| `expansion.enlargeChance` | 0.4 | 需要扩建时先尝试扩大已有房间的概率；房间数到上限后总是扩大 |
+| `expansion.enlargeScale / maxRoomRadius` | 1.2 / 12 | 每次扩大的线性倍数（面积约 1.44 倍）、房间半径上限（cm） |
 | `pheromone.homeHalfLife / depositHome` | 900 / 0.03 | 领地足迹的半衰期（秒）与每秒沉积量 |
 | `intervention.maxPlacedFood / maxPlacedObstacles` | 30 / 40 | 玩家投放的食物、障碍物同时存在的上限 |
 | `intervention.waterRadius` | 4 / 8 | 一点水、一大杯水形成的水洼半径（cm）；倒在已有水洼上会合并成更大的一片 |
@@ -109,7 +111,7 @@
 | `routines.ts` `pickHerd` | 有固定蚜虫群的觅食蚁 80% 回到该群；其他非侦察蚁 30% 按蜜露量挑一群 | |
 | `routines.ts` `eat` | 先喝自己嗉囊 → 60% 概率向同伴乞食 → 储食室 → 在储食室乞食 | |
 | `routines.ts` 内务蚁 | 有扩建项目时挖掘概率 0.45，否则 0.15 | |
-| `expansion.ts` | 每 0.05 天检查一次；挖隧道每粒土延长 0.25 cm；新房间锚定在深于 8 cm 的分岔点，距巢中心 40 cm 内 | |
+| `expansion.ts` | 每 0.05 天检查一次；挖隧道每粒土延长 0.25 cm；新房间锚定在深于 8 cm 的分岔点，距巢中心 40 cm 内；扩大房间要求与其他房间相距 2 cm、与其他隧道相距 1.2 cm，挖掘点在地板椭圆 0.62 倍处的随机方向 | |
 | `ant.ts` `stepSearch` | 侦察蚁前方足迹浓度大于 0.3 时转向足迹最少的方向；嗅到蚜虫群的距离 1.9 cm | |
 | `pheromone.ts` | 路径信息素单格上限 12，足迹上限 4 | |
 | `colony.ts` `dropOnMound` | 蚁丘土粒上限 1200 | |

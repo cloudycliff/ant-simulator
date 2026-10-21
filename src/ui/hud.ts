@@ -383,8 +383,8 @@ export class Hud {
     let build = '<div class="row sub">扩建<b>无</b></div>';
     if (p) {
       const prog = p.chamber ? p.soil / p.soilNeeded : p.face.len / p.face.full.length;
-      build = `<div class="row sub">扩建<b>${CHAMBER_INFO[p.type].name}</b></div>
-      <div class="row sub">${p.chamber ? '挖房间' : '挖隧道'} ${bar(prog, '#d9a066')}</div>`;
+      build = `<div class="row sub">${p.enlarge ? '扩大' : '扩建'}<b>${p.enlarge ? p.chamber!.name : CHAMBER_INFO[p.type].name}</b></div>
+      <div class="row sub">${p.enlarge ? '挖边缘' : p.chamber ? '挖房间' : '挖隧道'} ${bar(prog, '#d9a066')}</div>`;
     }
     this.colonyEl.innerHTML = `
       <h3>蚁群概况</h3>
@@ -403,7 +403,7 @@ export class Hud {
       <div class="row">地表食物源<b>${w.food.sources.length}</b></div>
       <div class="row">已发现的蚜虫群<b>${known} / ${aph.length}</b></div>
       <h3>蚁穴</h3>
-      <div class="row">房间<b>${w.nest.chambers.filter((c) => c.ready).length}</b></div>
+      <div class="row">房间<b>${w.nest.chambers.filter((c) => c.ready).length}${ex.enlarged ? ` <small>· 扩大过 ${ex.enlarged} 次</small>` : ''}</b></div>
       <div class="row">拥挤程度 ${bar(ex.occupancy(), ex.occupancy() > 0.88 ? '#e0803a' : '#7ec06a')}</div>
       ${build}
       <h3>累计</h3>
@@ -578,16 +578,20 @@ export class Hud {
       c.type === 'pupa' || c.type === 'solar'
         ? `<span>蛹的去向</span><b>${col.pupaChamber === id ? '保育蚁正把蛹集中到这里' : '目前蛹被安置在另一处'}</b>`
         : '';
+    const ep = col.expansion.enlarging() === c ? col.expansion.project! : null;
+    const eprog = ep ? Math.min(1, ep.soil / ep.soilNeeded) : 0;
     const building = !c.ready
       ? `<span>挖掘进度</span><b>${bar(c.grow, '#d9a066')} ${Math.round(c.grow * 100)}%</b>`
-      : '';
+      : ep
+        ? `<span>扩大进度</span><b>${bar(eprog, '#d9a066')} ${Math.round(eprog * 100)}%</b>`
+        : '';
     return `
-      <h2>${c.name}${c.ready ? '' : '<span class="tag next">扩建中</span>'}</h2>
+      <h2>${c.name}${!c.ready ? '<span class="tag next">扩建中</span>' : ep ? '<span class="tag next">扩大中</span>' : ''}</h2>
       <p class="desc">${CHAMBER_INFO[c.type].desc}${c.underStone ? ' 这间房间正位于大石块下方。' : ''}</p>
       <div class="kv">
         ${building}
         <span>深度</span><b>${c.depth.toFixed(0)} cm</b>
-        <span>尺寸</span><b>${(c.rx * 2 * 0.71).toFixed(0)} × ${(c.rz * 2 * 0.71).toFixed(0)} × ${(c.ry * 1.7).toFixed(0)} cm</b>
+        <span>尺寸</span><b>${(c.rx * 2 * 0.71).toFixed(0)} × ${(c.rz * 2 * 0.71).toFixed(0)} × ${(c.ry * 1.7).toFixed(0)} cm${c.enlarged ? `（扩大过 ${c.enlarged} 次）` : ''}</b>
         <span>温度</span><b>${t.toFixed(1)}°C${stoneBonus > 0.05 ? `（石块 +${stoneBonus.toFixed(1)}°C）` : ''}</b>
         <span>相对湿度</span><b>${Math.round(h)}%</b>
         ${c.wet > 0.02 ? `<span>积水</span><b>${Math.round(c.wet * 100)}%${c.wet >= CONFIG.weather.floodedAt ? '（进水，蛹会被搬走、储食加快变质）' : ''}</b>` : ''}

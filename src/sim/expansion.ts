@@ -13,11 +13,13 @@ export interface ExpansionProject {
   rz: number;
   ry: number;
   yaw: number;
-  /** 隧道挖通后才创建 */
+  /** 隧道挖通后才创建；扩大已有房间时就是那间房间 */
   chamber: Chamber | null;
   soil: number;
   soilNeeded: number;
   startedDay: number;
+  /** 扩大已有房间：地板中心与半径从 from 渐变到 to（[x, z, rx, rz]） */
+  enlarge: { from: number[]; to: number[] } | null;
 }
 
 export interface ExpansionSave {
@@ -33,17 +35,24 @@ export interface ExpansionSave {
     soil: number;
     soilNeeded: number;
     startedDay: number;
+    enlarge?: { from: number[]; to: number[] } | null;
   } | null;
   completed: number;
+  enlarged?: number;
 }
 
+/** 可以扩大的房间类型 */
+const ENLARGEABLE: ChamberType[] = ['egg', 'larva', 'pupa', 'food', 'rest'];
+
 /**
- * 蚁穴扩建：蚁群拥挤时规划一间新房间，先挖通往它的隧道，再从门口向内挖出房间。
- * 每一粒运出巢外的土都推进对应工作面的几何形状。
+ * 蚁穴扩建：蚁群拥挤时规划一间新房间，先挖通往它的隧道，再从门口向内挖出房间；
+ * 或者把最拥挤的一间房间以门口为不动点放大。每一粒运出巢外的土都推进对应的几何形状。
  */
 export class NestExpansion {
   project: ExpansionProject | null = null;
   completed = 0;
+  /** 已完成的房间扩大次数 */
+  enlarged = 0;
   private acc = 0;
 
   constructor(private w: World) {}
@@ -63,14 +72,17 @@ export class NestExpansion {
         soil: p.soil,
         soilNeeded: p.soilNeeded,
         startedDay: p.startedDay,
+        enlarge: p.enlarge,
       },
       completed: this.completed,
+      enlarged: this.enlarged,
     };
   }
 
   /** 在蚁穴结构恢复之后调用 */
   restore(s: ExpansionSave): void {
     this.completed = s.completed;
+    this.enlarged = s.enlarged ?? 0;
     this.project = null;
     const p = s.project;
     if (!p) return;
@@ -83,7 +95,7 @@ export class NestExpansion {
       face = { node: p.face, edge, full: { points: edge.points, cum: edge.cum, length: edge.length }, len: edge.length, maxLen: edge.length };
     }
     if (!face) return;
-    this.project = { ...p, face, floor: new THREE.Vector3(p.floor[0], p.floor[1], p.floor[2]), chamber };
+    this.project = { ...p, face, floor: new THREE.Vector3(p.floor[0], p.floor[1], p.floor[2]), chamber, enlarge: p.enlarge ?? null };
   }
 
   /** 已完工房间可容纳的成虫与幼体总数 */
@@ -104,7 +116,46 @@ export class NestExpansion {
     if (this.acc < 0.05) return;
     this.acc = 0;
     const E = CONFIG.expansion;
-    if (!this.project && this.w.nest.chambers.length < E.maxChambers && this.occupancy() > E.trigger) this.plan();
+    if (this.project || this.occupancy() <= E.trigger) return;
+    const full = this.w.nest.chambers.length >= E.maxChambers;
+    if ((full || rng.chance(E.enlargeChance)) && this.planEnlarge()) return;
+    if (!full) this.plan();
+  }
+
+  /** 选一间拥挤（每单位面积的蚂蚁最多）、放大后不碰到其他结构的房间 */
+  private planEnlarge(): boolean {
+    const E = CONFIG.expansion;
+    const nest = this.w.nest;
+    const crowd = new Map<number, number>();
+    for (const a of this.w.colony.ants) if (a.room >= 0) crowd.set(a.room, (crowd.get(a.room) ?? 0) + 1);
+    const cands = nest.chambers
+      .filter((c) => c.ready && ENLARGEABLE.includes(c.type) && Math.max(c.rx, c.rz) * E.enlargeScale <= E.maxRoomRadius)
+      .sort((a, b) => (crowd.get(b.id) ?? 0) / (b.rx * b.rz) - (crowd.get(a.id) ?? 0) / (a.rx * a.rz));
+    const s = E.enlargeScale;
+    for (const c of cands) {
+      const door = nest.nodes[c.door].pos;
+      const x = door.x + (c.floor.x - door.x) * s;
+      const z = door.z + (c.floor.z - door.z) * s;
+      if (!nest.canEnlarge(c, x, z, c.rx * s, c.rz * s)) continue;
+      const edge = nest.edges[nest.nodes[c.door].edges[0]];
+      this.project = {
+        face: { node: c.door, edge, full: { points: edge.points, cum: edge.cum, length: edge.length }, len: edge.length, maxLen: edge.length },
+        type: c.type,
+        floor: c.floor.clone(),
+        rx: c.rx,
+        rz: c.rz,
+        ry: c.ry,
+        yaw: c.yaw,
+        chamber: c,
+        soil: 0,
+        soilNeeded: Math.round(c.rx * c.rz * (s * s - 1) * E.chamberSoilPerArea),
+        startedDay: this.w.clock.totalDays,
+        enlarge: { from: [c.floor.x, c.floor.z, c.rx, c.rz], to: [x, z, c.rx * s, c.rz * s] },
+      };
+      this.w.colony.pushEvent(`蚁穴拥挤（占用 ${Math.round(this.occupancy() * 100)}%），开始扩大${c.name}`);
+      return true;
+    }
+    return false;
   }
 
   private plan(): boolean {
@@ -140,6 +191,7 @@ export class NestExpansion {
         soil: 0,
         soilNeeded: Math.round(rx * rz * CONFIG.expansion.chamberSoilPerArea),
         startedDay: this.w.clock.totalDays,
+        enlarge: null,
       };
       col.pushEvent(`蚁穴拥挤（占用 ${Math.round(this.occupancy() * 100)}%），开始挖掘新的${CHAMBER_INFO[type].name}`);
       return true;
@@ -165,10 +217,23 @@ export class NestExpansion {
     return this.project?.face.node === node;
   }
 
-  /** 房间阶段的挖掘点：已挖出部分的远端 */
+  /** 正在扩大的房间 */
+  enlarging(): Chamber | null {
+    return this.project?.enlarge ? this.project.chamber : null;
+  }
+
+  /** 房间阶段的挖掘点：已挖出部分的远端；扩大房间时是墙边的随机一处 */
   digPoint(out: THREE.Vector3): THREE.Vector3 | null {
     const c = this.project?.chamber;
     if (!c) return null;
+    if (this.project!.enlarge) {
+      const a = rng.range(0, TAU);
+      const lx = Math.cos(a) * c.rx * 0.62;
+      const lz = Math.sin(a) * c.rz * 0.62;
+      const cy = Math.cos(c.yaw);
+      const sy = Math.sin(c.yaw);
+      return out.set(c.floor.x + lx * cy - lz * sy, c.floor.y, c.floor.z + lx * sy + lz * cy);
+    }
     const door = this.w.nest.nodes[c.door].pos;
     const k = Math.min(0.85, c.grow * 0.9);
     out.copy(door).lerp(c.floor, k);
@@ -185,6 +250,26 @@ export class NestExpansion {
     const col = this.w.colony;
     const p = this.project;
     if (p && p.face.node === node) {
+      if (p.enlarge && p.chamber) {
+        const c = p.chamber;
+        p.soil++;
+        const k = Math.min(1, p.soil / p.soilNeeded);
+        const [x0, z0, rx0, rz0] = p.enlarge.from;
+        const [x1, z1, rx1, rz1] = p.enlarge.to;
+        c.floor.x = x0 + (x1 - x0) * k;
+        c.floor.z = z0 + (z1 - z0) * k;
+        c.rx = rx0 + (rx1 - rx0) * k;
+        c.rz = rz0 + (rz1 - rz0) * k;
+        if (k >= 1) {
+          nest.rev++;
+          this.enlarged++;
+          c.enlarged++;
+          this.project = null;
+          const days = this.w.clock.totalDays - p.startedDay;
+          col.pushEvent(`${c.name}扩大完成（用时 ${days.toFixed(1)} 天），现在 ${(c.rx * 2 * 0.71).toFixed(0)} × ${(c.rz * 2 * 0.71).toFixed(0)} cm`);
+        }
+        return;
+      }
       if (!p.chamber) {
         nest.growFace(p.face, p.face.len + 1 / E.tunnelSoilPerUnit);
         if (p.face.len >= p.face.full.length - 1e-3) {

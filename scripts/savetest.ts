@@ -24,7 +24,7 @@ function metrics(w: World): Record<string, string | number> {
     liquid: c.liquidStock.toFixed(1),
     chambers: w.nest.chambers.length,
     edges: w.nest.edges.length,
-    project: p ? `${p.type} ${p.chamber ? `房间 ${(p.soil / p.soilNeeded).toFixed(2)}` : `隧道 ${(p.face.len / p.face.full.length).toFixed(2)}`}` : '-',
+    project: p ? `${p.type} ${p.enlarge ? `扩大#${p.chamber!.id} ${(p.soil / p.soilNeeded).toFixed(2)} r=${p.chamber!.rx.toFixed(2)}` : p.chamber ? `房间 ${(p.soil / p.soilNeeded).toFixed(2)}` : `隧道 ${(p.face.len / p.face.full.length).toFixed(2)}`}` : '-',
     sources: w.food.sources.length,
     aphids: w.aphids.colonies.map((a) => Math.round(a.count)).join(','),
     pheromone: Math.round(pher),
@@ -52,7 +52,7 @@ a.placeObstacle('twig', 14, 2, Math.PI / 2);
 a.dropFood('syrup', 25, 2);
 a.pourWater(19, 12, true);
 run(a, before - 60);
-// 第二个参数：tunnel / chamber 等扩建进行到对应阶段再存档；rain 在下雨、入口封堵中途存档
+// 第二个参数：tunnel / chamber / enlarge 等扩建进行到对应阶段再存档；rain 在下雨、入口封堵中途存档
 const stage = process.argv[3];
 if (stage === 'rain') {
   a.callRain();
@@ -60,7 +60,7 @@ if (stage === 'rain') {
 }
 for (let t = 0; stage && stage !== 'rain' && t < 12000; t += 10) {
   const p = a.colony.expansion.project;
-  if (p && (stage === 'chamber') === !!p.chamber) break;
+  if (p && (stage === 'enlarge' ? !!p.enlarge && p.soil > 5 : !p.enlarge && (stage === 'chamber') === !!p.chamber)) break;
   run(a, 10);
 }
 

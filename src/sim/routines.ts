@@ -503,13 +503,14 @@ function* dig(a: Ant, w: World): Routine {
   const project = ex.isProjectFace(node);
   a.digNode = node;
   yield* goHome(a);
-  a.activity = project ? '前往扩建工地' : '前往隧道尽头的挖掘面';
+  const enlarge = project && ex.enlarging() !== null;
+  a.activity = enlarge ? '前往要扩大的房间' : project ? '前往扩建工地' : '前往隧道尽头的挖掘面';
   yield { k: 'goto', node };
   // 房间阶段：走进已挖出的部分，在远端继续挖
   const spot = ex.isProjectFace(node) ? ex.digPoint(new THREE.Vector3()) : null;
   const room = w.nest.nodes[node].chamber;
   if (spot && room !== undefined) yield { k: 'room', chamber: room, time: 0.3, point: spot };
-  a.activity = spot ? '在新房间里挖掘，扩大空间' : project ? '挖掘通往新房间的隧道' : '用上颚挖掘土壤，延长隧道';
+  a.activity = !spot ? (project ? '挖掘通往新房间的隧道' : '用上颚挖掘土壤，延长隧道') : ex.enlarging() ? '啃下房间边缘的土，扩大房间' : '在新房间里挖掘，扩大空间';
   yield { k: 'wait', time: rng.range(3, 6) };
   a.digNode = -1;
   ex.excavate(node);

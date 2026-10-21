@@ -98,6 +98,7 @@ requestAnimationFrame
 - **房间**：`Nest.openChamber` 把工作面末端变成新房间的门；`ready = false` 的房间不参与 `chamberOfType` / `chamberAt`，`grow` 控制视图缩放
 - **重建**：`Nest.rev` 在节点或房间增减时递增；`NestView.sync` 比较 rev，只重建变化的隧道网格，必要时按新的包围盒重建土壤剖面墙
 - **规划**：`NestExpansion.plan` 用 `Nest.isClear` 检查新房间不与已有结构重叠，并在 `nest.reserved` 里占位，避免两个项目抢同一块地
+- **扩大房间**：`NestExpansion.planEnlarge` 选每单位面积蚂蚁最多、`Nest.canEnlarge` 通过的房间，项目的 `enlarge` 记录地板中心和半径的起止值，工作面是房间门口。每粒土按比例插值 `floor.x/z`、`rx`、`rz`；房间一直可用。`NestView` 不重建房间网格，而是按建模时的半径（`userData.bx/bz`）非均匀缩放
 
 ### 蚂蚁的两层结构
 

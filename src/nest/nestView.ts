@@ -105,12 +105,15 @@ export class NestView {
     }
     for (const c of nest.chambers) {
       const mesh = this.chamberMeshes[c.id];
-      if (mesh.userData.grow === c.grow) continue;
-      mesh.userData.grow = c.grow;
-      // 以门口为不动点缩放：未完工的房间从门口向内长大
+      const u = mesh.userData;
+      if (u.grow === c.grow && u.rx === c.rx && u.rz === c.rz) continue;
+      u.grow = c.grow;
+      u.rx = c.rx;
+      u.rz = c.rz;
+      // 以门口为不动点缩放：未完工的房间从门口向内长大；扩大时按建模时的半径拉伸
       const door = nest.nodes[c.door].pos;
       mesh.position.copy(door).lerp(c.floor, c.grow);
-      mesh.scale.setScalar(c.grow);
+      mesh.scale.set((c.grow * c.rx) / u.bx, c.grow, (c.grow * c.rz) / u.bz);
     }
 
     if (nest.rev !== this.builtRev) {
@@ -148,7 +151,8 @@ export class NestView {
       }
       m.visible = true;
       const k = 0.55 + 0.4 * Math.min(1, c.wet * 2);
-      m.scale.set(c.rx * k, 1, c.rz * k);
+      const u = this.chamberMeshes[c.id].userData;
+      m.scale.set(u.bx * k, 1, u.bz * k);
       m.position.y = 0.12 + c.wet * c.ry * 0.6;
     }
   }
@@ -214,6 +218,8 @@ export class NestView {
     mesh.position.copy(c.floor);
     mesh.rotation.y = -c.yaw;
     mesh.userData.pick = { kind: 'chamber', id: c.id };
+    mesh.userData.bx = c.rx;
+    mesh.userData.bz = c.rz;
     mesh.name = c.name;
     return mesh;
   }

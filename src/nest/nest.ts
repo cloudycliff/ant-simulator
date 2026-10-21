@@ -87,6 +87,8 @@ export interface Chamber {
   underStone: boolean;
   /** 雨水灌入的积水程度 0..1 */
   wet: number;
+  /** 完工后被扩大过的次数 */
+  enlarged: number;
 }
 
 interface Path {
@@ -117,7 +119,7 @@ export interface Entrance {
 export interface NestSave {
   nodes: { kind: NodeKind; p: number[]; e: number[]; c?: number }[];
   edges: { a: number; b: number; p: number[]; r: number; s: boolean }[];
-  chambers: { type: ChamberType; name: string; floor: number[]; rx: number; rz: number; ry: number; yaw: number; door: number; ready: boolean; grow: number; stone: boolean }[];
+  chambers: { type: ChamberType; name: string; floor: number[]; rx: number; rz: number; ry: number; yaw: number; door: number; ready: boolean; grow: number; stone: boolean; big?: number }[];
   faces: { node: number; edge: number; full: number[]; len: number; maxLen: number }[];
   reserved: { x: number; y: number; z: number; r: number }[];
 }
@@ -265,6 +267,7 @@ export class Nest {
       grow: ready ? 1 : 0.08,
       underStone: false,
       wet: 0,
+      enlarged: 0,
     };
     this.chambers.push(c);
     this.rev++;
@@ -348,6 +351,26 @@ export class Nest {
     return true;
   }
 
+  /** 房间放大到地板中心 (x, z)、半径 rx × rz 后，是否仍与其他房间、隧道（不含自己门口的隧道）保持距离 */
+  canEnlarge(c: Chamber, x: number, z: number, rx: number, rz: number): boolean {
+    if (Math.hypot(x, z) > 40) return false;
+    const R = Math.max(rx, rz);
+    for (const o of this.chambers) {
+      if (o !== c && Math.abs(o.floor.y - c.floor.y) < 8 && Math.hypot(o.floor.x - x, o.floor.z - z) < R + Math.max(o.rx, o.rz) + 2) return false;
+    }
+    for (const p of this.reserved) {
+      if (Math.abs(p.y - c.floor.y) < 8 && Math.hypot(p.x - x, p.z - z) < R + p.r + 2) return false;
+    }
+    for (const e of this.edges) {
+      if (e.a === c.door || e.b === c.door) continue;
+      for (let i = 0; i < e.points.length; i += 2) {
+        const p = e.points[i];
+        if (Math.abs(p.y - c.floor.y - c.ry * 0.5) < c.ry + 2 && Math.hypot(p.x - x, p.z - z) < R + 1.2) return false;
+      }
+    }
+    return true;
+  }
+
   private ellipseRadius(rx: number, rz: number, yaw: number, ang: number): number {
     const a = ang - yaw;
     const c = Math.cos(a);
@@ -404,6 +427,7 @@ export class Nest {
         ready: c.ready,
         grow: c.grow,
         stone: c.underStone,
+        ...(c.enlarged ? { big: c.enlarged } : {}),
       })),
       faces: this.faces.map((f) => ({ node: f.node, edge: f.edge.id, full: flat(f.full.points), len: f.len, maxLen: f.maxLen })),
       reserved: this.reserved.map((r) => ({ ...r })),
@@ -419,7 +443,7 @@ export class Nest {
     });
     this.chambers = s.chambers.map((c, id) => {
       const floor = unflat(c.floor)[0];
-      return { id, type: c.type, name: c.name, floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone, wet: 0 };
+      return { id, type: c.type, name: c.name, floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone, wet: 0, enlarged: c.big ?? 0 };
     });
     this.faces = s.faces.map((f) => ({ node: f.node, edge: this.edges[f.edge], full: pathOf(unflat(f.full)), len: f.len, maxLen: f.maxLen }));
     this.reserved = s.reserved.map((r) => ({ ...r }));
