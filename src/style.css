@@ -105,8 +105,14 @@ button.on kbd {
 #colony {
   top: 66px;
   left: 10px;
-  width: 210px;
+  width: 230px;
   padding: 10px 14px 12px;
+  max-height: calc(100% - 250px);
+  overflow-y: auto;
+}
+#colony small {
+  color: #8f877a;
+  font-weight: 400;
 }
 #colony h3,
 #info h3 {
@@ -202,6 +208,9 @@ button.on kbd {
 #info .tag.scout {
   background: #d8d0ff;
 }
+#info .tag.next {
+  background: #f2d49a;
+}
 #info .desc {
   color: #c4baa8;
   line-height: 1.6;
@@ -276,6 +285,46 @@ button.on kbd {
 }
 .hidden {
   display: none !important;
+}
+
+#stats {
+  bottom: 10px;
+  left: max(50%, 672px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  padding: 10px 14px;
+}
+#stats canvas {
+  width: 320px;
+  height: 190px;
+  display: block;
+}
+
+#legend {
+  right: 10px;
+  bottom: 10px;
+  max-width: 330px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  color: #c4baa8;
+}
+#legend div {
+  display: flex;
+  align-items: baseline;
+  margin: 2px 0;
+}
+#legend i {
+  flex: none;
+}
+#legend i {
+  display: inline-block;
+  width: 22px;
+  height: 8px;
+  border-radius: 4px;
+  margin-right: 8px;
+  vertical-align: middle;
 }
 
 #toast {

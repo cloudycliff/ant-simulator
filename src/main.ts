@@ -28,7 +28,11 @@ async function boot(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 2500);
 
   const world = new World();
-  scene.add(world.terrain.mesh, world.veg.group, world.food.group);
+  const params = new URLSearchParams(location.search);
+  // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
+  const skip = Math.min(20000, Number(params.get('skip')) || 0);
+  for (let t = 0; t < skip; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
+  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group);
 
   const nestView = new NestView(world.nest, world.terrain);
   nestView.build();
@@ -95,6 +99,11 @@ async function boot(): Promise<void> {
         const m = world.colony.midden;
         return new THREE.Vector3(m.x, world.terrain.heightAt(m.x, m.z), m.z);
       }
+      case 'plant': {
+        const p = world.veg.plants[sel.id];
+        const ac = world.aphids.byPlant(sel.id);
+        return p ? new THREE.Vector3(p.x, ac ? ac.bandLo : p.baseY + 4, p.z) : null;
+      }
       default:
         return null;
     }
@@ -152,6 +161,14 @@ async function boot(): Promise<void> {
       case 'grass':
         hud.state.grass = !hud.state.grass;
         break;
+      case 'stats': {
+        hud.state.stats = !hud.state.stats;
+        hud.invalidateStats();
+        const help = document.getElementById('help')!;
+        if (hud.state.stats && !help.classList.contains('hidden')) hud.toggleHelp();
+        hud.refresh(selection, 60);
+        break;
+      }
       case 'follow':
         toggleFollow();
         break;
@@ -193,6 +210,8 @@ async function boot(): Promise<void> {
         return action('roleColors');
       case 'KeyG':
         return action('grass');
+      case 'KeyT':
+        return action('stats');
       case 'KeyF':
         return action('follow');
       case 'KeyH':
@@ -208,20 +227,28 @@ async function boot(): Promise<void> {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // 支持 ?select=ant:1 / chamber:4 直接选中对象，&follow=1 跟随；?hour=21 从指定时刻开始
-  const params = new URLSearchParams(location.search);
+  // 支持 ?select=ant:1 / chamber:4 / plant:0 直接选中对象，&follow=1 跟随；?hour=21 从指定时刻开始
   const hourParam = Number(params.get('hour'));
   if (params.has('hour') && hourParam >= 0 && hourParam < 24) {
-    world.clock.seconds = (((hourParam - CONFIG.time.startHour + 24) % 24) / 24) * CONFIG.time.dayLength;
+    world.clock.seconds += (((hourParam - world.clock.hour + 24) % 24) / 24) * CONFIG.time.dayLength;
   }
   const selParam = params.get('select')?.split(':');
   if (selParam?.length === 2) {
     const id = Number(selParam[1]);
     if (selParam[0] === 'ant' && world.colony.antById(id)) select({ kind: 'ant', id });
     if (selParam[0] === 'chamber' && world.nest.chambers[id]) select({ kind: 'chamber', id });
+    if (selParam[0] === 'plant' && world.veg.plants[id]) select({ kind: 'plant', id });
     if (params.get('follow') === '1') toggleFollow();
     else if (params.get('fly') === '1') flyToSelection();
   }
+  // ?view=xray,pheromone,stats,roles 开局打开对应的显示开关
+  for (const v of params.get('view')?.split(',') ?? []) {
+    if (v === 'xray') hud.state.xray = true;
+    if (v === 'pheromone') hud.state.pheromone = true;
+    if (v === 'roles') hud.state.roleColors = true;
+    if (v === 'stats') hud.state.stats = true;
+  }
+  if (hud.state.pheromone) world.pheromone.refreshTexture();
 
   applyView();
   document.getElementById('loading')?.remove();
@@ -271,6 +298,8 @@ async function boot(): Promise<void> {
     }
 
     world.veg.update(time);
+    world.aphids.sync();
+    nestView.sync();
     antView.update(time);
     itemView.update();
     env.update(world.clock, camera, focus, xrayOn());
@@ -290,6 +319,7 @@ async function boot(): Promise<void> {
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   };
+  hud.refresh(selection, fps);
   requestAnimationFrame(frame);
 
   (window as unknown as { world: World }).world = world;

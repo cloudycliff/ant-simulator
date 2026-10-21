@@ -9,7 +9,7 @@ export type Selection =
   | { kind: 'entrance'; id: number }
   | { kind: 'midden' }
   | { kind: 'stone' }
-  | { kind: 'plant' };
+  | { kind: 'plant'; id: number };
 
 const _v = new THREE.Vector3();
 

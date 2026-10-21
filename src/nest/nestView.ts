@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Noise2D } from '../util/random';
-import type { Nest, Chamber } from './nest';
+import type { Nest, Chamber, NestEdge } from './nest';
 import type { Terrain } from '../world/terrain';
 
 const CHAMBER_TINT: Record<string, number> = {
@@ -8,21 +8,31 @@ const CHAMBER_TINT: Record<string, number> = {
   egg: 0x8f6a4a,
   larva: 0x8c6646,
   pupa: 0x977050,
+  solar: 0xa0764c,
   food: 0x87633f,
   waste: 0x6c5a45,
   rest: 0x7f6248,
   winter: 0x6f5a48,
 };
 
-/** 蚁穴网格：隧道和房间都用背面渲染，近侧墙自动剔除，从任意角度都能看进空腔。 */
+/**
+ * 蚁穴网格：隧道和房间都用背面渲染，近侧墙自动剔除，从任意角度都能看进空腔。
+ * 每帧调用 sync()，跟随扩建中变长的隧道、长大的房间和扩大的土壤剖面。
+ */
 export class NestView {
   group = new THREE.Group();
   /** 只在地表视图显示的入口洞口 */
   surfaceGroup = new THREE.Group();
   chamberMeshes: THREE.Mesh[] = [];
-  private soil!: THREE.Mesh;
+  private edgeMeshes = new Map<number, THREE.Mesh>();
+  private nodeMeshes = new Map<number, THREE.Mesh>();
+  private soil: THREE.Mesh | null = null;
+  private soilKey = '';
+  private builtRev = -1;
   private noise = new Noise2D(99);
   private tunnelMat: THREE.MeshStandardMaterial;
+  private freshMat: THREE.MeshStandardMaterial;
+  private selected: number | null = null;
 
   constructor(private nest: Nest, private terrain: Terrain) {
     this.group.name = 'nest';
@@ -33,33 +43,82 @@ export class NestView {
       emissive: 0x2a1a0e,
       emissiveIntensity: 0.6,
     });
+    // 新挖的工作面土色更浅
+    this.freshMat = this.tunnelMat.clone();
+    this.freshMat.color.setHex(0xa98058);
   }
 
   build(): void {
-    for (const e of this.nest.edges) {
-      const curve = new THREE.CatmullRomCurve3(e.points);
-      const geo = new THREE.TubeGeometry(curve, Math.max(6, Math.round(e.length / 1.2)), e.radius * 1.08, 9, false);
-      this.roughen(geo, 0.12);
-      const m = new THREE.Mesh(geo, this.tunnelMat);
-      m.userData.pickable = false;
-      this.group.add(m);
+    this.sync();
+    this.buildEntranceHoles();
+  }
+
+  sync(): void {
+    const nest = this.nest;
+    const faceEdges = new Set(nest.faces.map((f) => f.edge.id));
+    for (const e of nest.edges) {
+      const m = this.edgeMeshes.get(e.id);
+      if (m && m.userData.rev === e.rev) continue;
+      if (m) {
+        m.geometry.dispose();
+        m.geometry = this.tubeGeometry(e);
+      } else {
+        const mesh = new THREE.Mesh(this.tubeGeometry(e), this.tunnelMat);
+        this.edgeMeshes.set(e.id, mesh);
+        this.group.add(mesh);
+      }
+      this.edgeMeshes.get(e.id)!.userData.rev = e.rev;
     }
-    for (const n of this.nest.nodes) {
-      if (n.kind !== 'junction' && n.kind !== 'deadend') continue;
-      const r = n.kind === 'junction' ? 1.75 : 1.2;
-      const geo = new THREE.SphereGeometry(r, 12, 9);
-      this.roughen(geo, 0.15);
-      const m = new THREE.Mesh(geo, this.tunnelMat);
+    for (const [id, m] of this.edgeMeshes) m.material = faceEdges.has(id) ? this.freshMat : this.tunnelMat;
+
+    for (const n of nest.nodes) {
+      const want = n.kind === 'junction' || n.kind === 'deadend';
+      let m = this.nodeMeshes.get(n.id);
+      if (!want) {
+        if (m) {
+          this.group.remove(m);
+          this.nodeMeshes.delete(n.id);
+        }
+        continue;
+      }
+      if (!m) {
+        const geo = new THREE.SphereGeometry(n.kind === 'junction' ? 1.75 : 1.2, 12, 9);
+        this.roughen(geo, 0.15);
+        m = new THREE.Mesh(geo, n.kind === 'junction' ? this.tunnelMat : this.freshMat);
+        this.nodeMeshes.set(n.id, m);
+        this.group.add(m);
+      }
       m.position.copy(n.pos);
-      this.group.add(m);
     }
-    for (const c of this.nest.chambers) {
+
+    while (this.chamberMeshes.length < nest.chambers.length) {
+      const c = nest.chambers[this.chamberMeshes.length];
       const mesh = this.buildChamber(c);
       this.chamberMeshes.push(mesh);
       this.group.add(mesh);
+      this.applyHighlight();
     }
-    this.buildSoil();
-    this.buildEntranceHoles();
+    for (const c of nest.chambers) {
+      const mesh = this.chamberMeshes[c.id];
+      if (mesh.userData.grow === c.grow) continue;
+      mesh.userData.grow = c.grow;
+      // 以门口为不动点缩放：未完工的房间从门口向内长大
+      const door = nest.nodes[c.door].pos;
+      mesh.position.copy(door).lerp(c.floor, c.grow);
+      mesh.scale.setScalar(c.grow);
+    }
+
+    if (nest.rev !== this.builtRev) {
+      this.builtRev = nest.rev;
+      this.buildSoil();
+    }
+  }
+
+  private tubeGeometry(e: NestEdge): THREE.BufferGeometry {
+    const curve = new THREE.CatmullRomCurve3(e.points);
+    const geo = new THREE.TubeGeometry(curve, Math.max(4, Math.round(e.length / 1.2)), e.radius * 1.08, 9, false);
+    this.roughen(geo, 0.12);
+    return geo;
   }
 
   private roughen(geo: THREE.BufferGeometry, amount: number): void {
@@ -120,26 +179,35 @@ export class NestView {
     return mesh;
   }
 
-  /** 蚁穴区域外围的土壤剖面墙（四壁 + 底面），带土层分层着色 */
+  /** 蚁穴区域外围的土壤剖面墙（四壁 + 底面），带土层分层着色；范围包含已规划的扩建位置 */
   private buildSoil(): void {
     let minX = Infinity;
     let maxX = -Infinity;
     let minZ = Infinity;
     let maxZ = -Infinity;
     let minY = Infinity;
-    for (const c of this.nest.chambers) {
-      minX = Math.min(minX, c.floor.x - c.rx);
-      maxX = Math.max(maxX, c.floor.x + c.rx);
-      minZ = Math.min(minZ, c.floor.z - c.rz);
-      maxZ = Math.max(maxZ, c.floor.z + c.rz);
-      minY = Math.min(minY, c.floor.y);
+    const extend = (x: number, z: number, r: number, y: number) => {
+      minX = Math.min(minX, x - r);
+      maxX = Math.max(maxX, x + r);
+      minZ = Math.min(minZ, z - r);
+      maxZ = Math.max(maxZ, z + r);
+      minY = Math.min(minY, y);
+    };
+    for (const c of this.nest.chambers) extend(c.floor.x, c.floor.z, Math.max(c.rx, c.rz), c.floor.y);
+    for (const p of this.nest.reserved) extend(p.x, p.z, p.r, p.y);
+    for (const f of this.nest.faces) {
+      const end = f.full.points[f.full.points.length - 1];
+      extend(end.x, end.z, 2, end.y);
     }
     const pad = 8;
-    minX -= pad;
-    maxX += pad;
-    minZ -= pad;
-    maxZ += pad;
-    const bottom = minY - 8;
+    minX = Math.floor(minX - pad);
+    maxX = Math.ceil(maxX + pad);
+    minZ = Math.floor(minZ - pad);
+    maxZ = Math.ceil(maxZ + pad);
+    const bottom = Math.floor(minY - 8);
+    const key = `${minX},${maxX},${minZ},${maxZ},${bottom}`;
+    if (key === this.soilKey) return;
+    this.soilKey = key;
     const surf = this.nest.surfaceY;
 
     const positions: number[] = [];
@@ -218,6 +286,11 @@ export class NestView {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geo.setIndex(indices);
     geo.computeVertexNormals();
+    if (this.soil) {
+      this.soil.geometry.dispose();
+      this.soil.geometry = geo;
+      return;
+    }
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 1,
@@ -248,10 +321,15 @@ export class NestView {
   }
 
   highlightChamber(id: number | null): void {
+    this.selected = id;
+    this.applyHighlight();
+  }
+
+  private applyHighlight(): void {
     this.chamberMeshes.forEach((m, i) => {
       const mat = m.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(i === id ? 0x6a4a20 : 0x2a1a0e);
-      mat.emissiveIntensity = i === id ? 1.0 : 0.6;
+      mat.emissive.setHex(i === this.selected ? 0x6a4a20 : 0x2a1a0e);
+      mat.emissiveIntensity = i === this.selected ? 1.0 : 0.6;
     });
   }
 }

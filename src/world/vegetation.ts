@@ -10,12 +10,24 @@ export interface Obstacle {
   kind: 'stone' | 'twig' | 'plant';
 }
 
+export interface Plant {
+  index: number;
+  x: number;
+  z: number;
+  /** 茎基部高度 */
+  baseY: number;
+  height: number;
+  /** 蚜虫的寄主植物 */
+  host: boolean;
+}
+
 /** 草、石块、落叶、枯枝和小型植物。石块和植物茎同时登记为蚂蚁的避障圆。 */
 export class Vegetation {
   group = new THREE.Group();
   grass!: THREE.InstancedMesh;
   private leaves!: THREE.InstancedMesh;
   obstacles: Obstacle[] = [];
+  plants: Plant[] = [];
   private grid = new Map<number, number[]>();
   private readonly gcell = 8;
   private grassMat!: THREE.MeshStandardMaterial;
@@ -230,12 +242,34 @@ export class Vegetation {
     const stemMat = new THREE.MeshStandardMaterial({ color: 0x4d7a2e, roughness: 0.8 });
     const leafMat = new THREE.MeshStandardMaterial({ color: 0x5f9a35, roughness: 0.7, side: THREE.DoubleSide });
     const flowerMat = new THREE.MeshStandardMaterial({ color: 0xf2e26a, roughness: 0.6 });
+    const spots: { x: number; z: number; host: boolean }[] = [];
+    // 蚁穴附近的蚜虫寄主植物，避开默认视角所在的东南方向
+    for (const [ang, dist] of [
+      [2.1, 30],
+      [3.3, 42],
+      [4.4, 27],
+      [5.5, 48],
+    ]) {
+      for (let k = 0; k < 12; k++) {
+        const a = ang + this.rng.range(-0.25, 0.25);
+        const d = dist + this.rng.range(-4, 4);
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        if (!this.placeable(x, z, 20)) continue;
+        spots.push({ x, z, host: true });
+        break;
+      }
+    }
     for (let i = 0; i < 26; i++) {
       const x = this.rng.range(-105, 105);
       const z = this.rng.range(-105, 105);
       if (!this.placeable(x, z, 22)) continue;
       // 不挡住默认视角（相机在蚁穴东南方向）
       if (x > 0 && z > 0 && Math.hypot(x, z) < 70) continue;
+      if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < 8)) continue;
+      spots.push({ x, z, host: false });
+    }
+    for (const { x, z, host } of spots) {
       const g = new THREE.Group();
       const h = this.rng.range(18, 34);
       const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.45, h, 6), stemMat);
@@ -257,9 +291,12 @@ export class Vegetation {
         fl.position.y = h + 0.8;
         g.add(fl);
       }
-      g.position.set(x, this.terrain.heightAt(x, z) - 0.2, z);
-      g.userData.pick = { kind: 'plant' };
+      const baseY = this.terrain.heightAt(x, z) - 0.2;
+      g.position.set(x, baseY, z);
+      const index = this.plants.length;
+      g.userData.pick = { kind: 'plant', id: index };
       this.group.add(g);
+      this.plants.push({ index, x, z, baseY, height: h, host });
       this.addObstacle({ x, z, r: 0.9, kind: 'plant' });
     }
   }

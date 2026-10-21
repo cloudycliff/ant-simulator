@@ -3,7 +3,7 @@ import { CONFIG } from '../config';
 import { Rng } from '../util/random';
 import type { Terrain } from '../world/terrain';
 
-export type ChamberType = 'queen' | 'egg' | 'larva' | 'pupa' | 'food' | 'waste' | 'rest' | 'winter';
+export type ChamberType = 'queen' | 'egg' | 'larva' | 'pupa' | 'solar' | 'food' | 'waste' | 'rest' | 'winter';
 
 export const CHAMBER_INFO: Record<ChamberType, { name: string; desc: string }> = {
   queen: {
@@ -21,6 +21,10 @@ export const CHAMBER_INFO: Record<ChamberType, { name: string; desc: string }> =
   pupa: {
     name: '蛹室',
     desc: '黑毛蚁老熟幼虫吐丝结茧化蛹。蛹偏好较温暖干燥的环境，白天常被搬到靠近地表的房间。',
+  },
+  solar: {
+    name: '向阳育幼室',
+    desc: '紧贴在石块下方的浅层房间。石块白天吸收阳光、升温很快，保育蚁会在午后把蛹搬到这里“晒暖”加速发育，夜间降温后再搬回深处。',
   },
   food: {
     name: '储食室',
@@ -59,6 +63,8 @@ export interface NestEdge {
   length: number;
   radius: number;
   isShaft: boolean;
+  /** 几何版本号，隧道变长时递增，供视图重建网格 */
+  rev: number;
 }
 
 export interface Chamber {
@@ -73,6 +79,27 @@ export interface Chamber {
   yaw: number;
   door: number;
   depth: number;
+  /** 挖掘完成、可以使用 */
+  ready: boolean;
+  /** 已挖出的比例 0..1（扩建中的房间从门口向内长大） */
+  grow: number;
+  /** 位于石块下方，白天额外升温 */
+  underStone: boolean;
+}
+
+interface Path {
+  points: THREE.Vector3[];
+  cum: number[];
+  length: number;
+}
+
+/** 隧道尽头的挖掘工作面：边按规划路径逐步变长，尽头节点随之前移 */
+export interface DigFace {
+  node: number;
+  edge: NestEdge;
+  full: Path;
+  len: number;
+  maxLen: number;
 }
 
 export interface Entrance {
@@ -89,7 +116,11 @@ export class Nest {
   edges: NestEdge[] = [];
   chambers: Chamber[] = [];
   entrances: Entrance[] = [];
-  deadEnds: number[] = [];
+  faces: DigFace[] = [];
+  /** 已规划但尚未挖出的房间位置（用于避让和土壤剖面范围） */
+  reserved: { x: number; y: number; z: number; r: number }[] = [];
+  /** 结构版本号：新增房间、隧道时递增 */
+  rev = 0;
   surfaceY = 0;
   private next: Int16Array = new Int16Array(0);
   private distM: Float32Array = new Float32Array(0);
@@ -146,6 +177,8 @@ export class Nest {
       { type: 'queen', j: 4, ang: 5.2, dist: 13, rx: 9, rz: 8 },
       { type: 'rest', j: 5, ang: 3.5, dist: 13, rx: 8, rz: 7 },
       { type: 'winter', j: 6, ang: 1.5, dist: 14, rx: 12, rz: 9.5 },
+      // 朝向蚁穴西北侧的大石块
+      { type: 'solar', j: 0, ang: 2.57, dist: 11, rx: 7, rz: 6 },
     ];
     for (const s of specs) {
       const jn = this.nodes[junctions[s.j]];
@@ -155,31 +188,11 @@ export class Nest {
       const floor = jn.pos.clone().addScaledVector(dir, s.dist);
       floor.y -= r.range(1.0, 3.0);
       const yaw = r.range(0, Math.PI);
-      const cid = this.chambers.length;
-      // 门在地板边缘，朝向分岔点
-      const toJ = jn.pos.clone().sub(floor).setY(0).normalize();
-      const edgeR = this.ellipseRadius(s.rx, s.rz, yaw, Math.atan2(toJ.z, toJ.x)) * 0.68;
-      const doorPos = floor.clone().addScaledVector(toJ, edgeR);
-      doorPos.y += 0.15;
-      const door = this.addNode('door', doorPos);
-      this.nodes[door].chamber = cid;
-      const info = CHAMBER_INFO[s.type];
-      const sameType = this.chambers.filter((c) => c.type === s.type).length;
-      this.chambers.push({
-        id: cid,
-        type: s.type,
-        name: sameType > 0 ? `${info.name} ${sameType + 1}` : info.name,
-        floor,
-        rx: s.rx,
-        rz: s.rz,
-        ry,
-        yaw,
-        door,
-        depth: this.surfaceY - floor.y,
-      });
+      const door = this.addNode('door', this.doorPosition(floor, s.rx, s.rz, yaw, jn.pos));
+      this.addChamber(s.type, floor, s.rx, s.rz, ry, yaw, door, true);
       this.addTunnel(junctions[s.j], door, r, CONFIG.nest.tunnelRadius, false, 2.2);
     }
-    // 正在挖掘的盲端隧道（工作面）
+    // 正在挖掘的盲端隧道（工作面），每条还能继续向前挖 8 cm
     const digs = [
       { j: 3, ang: 2.5, len: 9 },
       { j: 5, ang: 0.4, len: 10 },
@@ -187,13 +200,124 @@ export class Nest {
     ];
     for (const d of digs) {
       const jn = this.nodes[junctions[d.j]];
-      const p = jn.pos.clone().add(new THREE.Vector3(Math.cos(d.ang) * d.len, -r.range(0.5, 2), Math.sin(d.ang) * d.len));
-      const id = this.addNode('deadend', p);
-      this.deadEnds.push(id);
-      this.addTunnel(junctions[d.j], id, r, CONFIG.nest.tunnelRadius * 0.9, false, 1.5);
+      const total = d.len + 8;
+      const drop = -r.range(0.5, 2) * (total / d.len);
+      const target = jn.pos.clone().add(new THREE.Vector3(Math.cos(d.ang) * total, drop, Math.sin(d.ang) * total));
+      this.planFace(junctions[d.j], target, r, CONFIG.nest.tunnelRadius * 0.9, 1.5, d.len, false);
     }
 
     this.computeRouting();
+  }
+
+  /** 门在地板边缘，朝向连接它的分岔点 */
+  doorPosition(floor: THREE.Vector3, rx: number, rz: number, yaw: number, from: THREE.Vector3): THREE.Vector3 {
+    const toJ = from.clone().sub(floor).setY(0).normalize();
+    const edgeR = this.ellipseRadius(rx, rz, yaw, Math.atan2(toJ.z, toJ.x)) * 0.68;
+    const p = floor.clone().addScaledVector(toJ, edgeR);
+    p.y += 0.15;
+    return p;
+  }
+
+  private addChamber(type: ChamberType, floor: THREE.Vector3, rx: number, rz: number, ry: number, yaw: number, door: number, ready: boolean): Chamber {
+    const cid = this.chambers.length;
+    this.nodes[door].chamber = cid;
+    const info = CHAMBER_INFO[type];
+    const sameType = this.chambers.filter((c) => c.type === type).length;
+    const c: Chamber = {
+      id: cid,
+      type,
+      name: sameType > 0 ? `${info.name} ${sameType + 1}` : info.name,
+      floor,
+      rx,
+      rz,
+      ry,
+      yaw,
+      door,
+      depth: this.surfaceY - floor.y,
+      ready,
+      grow: ready ? 1 : 0.08,
+      underStone: false,
+    };
+    this.chambers.push(c);
+    this.rev++;
+    return c;
+  }
+
+  /** 规划一条从 from 通往 target 的隧道，先挖出 initLen 长度，返回其工作面 */
+  planFace(from: number, target: THREE.Vector3, r: Rng, radius: number, wobble: number, initLen: number, reroute = true): DigFace {
+    const full = this.makePath(this.nodes[from].pos, target, r, wobble);
+    const tip = this.addNode('deadend', full.points[0].clone());
+    const edge: NestEdge = { id: this.edges.length, a: from, b: tip, points: [], cum: [], length: 0, radius, isShaft: false, rev: 0 };
+    this.edges.push(edge);
+    this.nodes[from].edges.push(edge.id);
+    this.nodes[tip].edges.push(edge.id);
+    const face: DigFace = { node: tip, edge, full, len: 0, maxLen: full.length };
+    this.faces.push(face);
+    this.growFace(face, initLen, reroute);
+    this.rev++;
+    return face;
+  }
+
+  /** 把工作面推进到规划路径上的 len 处 */
+  growFace(face: DigFace, len: number, reroute = true): void {
+    const { points, cum } = face.full;
+    len = Math.min(face.full.length, Math.max(0.3, len));
+    face.len = len;
+    const out = [points[0].clone()];
+    const oc = [0];
+    let i = 1;
+    while (i < points.length && cum[i] < len) {
+      out.push(points[i].clone());
+      oc.push(cum[i]);
+      i++;
+    }
+    if (i < points.length) {
+      const k = (len - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
+      out.push(points[i - 1].clone().lerp(points[i], k));
+      oc.push(len);
+    }
+    const e = face.edge;
+    e.points = out;
+    e.cum = oc;
+    e.length = oc[oc.length - 1];
+    e.rev++;
+    this.nodes[face.node].pos.copy(out[out.length - 1]);
+    if (reroute) this.computeRouting();
+  }
+
+  /** 工作面挖到规划位置后，在尽头开出一间新房间（尚未完工） */
+  openChamber(face: DigFace, type: ChamberType, floor: THREE.Vector3, rx: number, rz: number, ry: number, yaw: number): Chamber {
+    const node = this.nodes[face.node];
+    node.kind = 'door';
+    this.faces.splice(this.faces.indexOf(face), 1);
+    this.reserved = this.reserved.filter((p) => Math.hypot(p.x - floor.x, p.z - floor.z) > 0.5);
+    return this.addChamber(type, floor, rx, rz, ry, yaw, face.node, false);
+  }
+
+  /** 新房间位置是否与现有房间、隧道保持距离，且连接隧道不会穿过其他房间 */
+  isClear(floor: THREE.Vector3, rx: number, rz: number, ry: number, anchor: THREE.Vector3): boolean {
+    const R = Math.max(rx, rz);
+    const blockers = [
+      ...this.chambers.map((c) => ({ x: c.floor.x, y: c.floor.y, z: c.floor.z, r: Math.max(c.rx, c.rz), h: c.ry })),
+      ...this.reserved.map((p) => ({ ...p, h: 3 })),
+    ];
+    for (const b of blockers) {
+      if (Math.abs(floor.y - b.y) < 8 && Math.hypot(floor.x - b.x, floor.z - b.z) < R + b.r + 2.5) return false;
+    }
+    for (let t = 0.15; t < 0.86; t += 0.1) {
+      const px = anchor.x + (floor.x - anchor.x) * t;
+      const py = anchor.y + (floor.y - anchor.y) * t;
+      const pz = anchor.z + (floor.z - anchor.z) * t;
+      for (const b of blockers) {
+        if (Math.abs(py - b.y - b.h * 0.5) < b.h * 1.5 + 1 && Math.hypot(px - b.x, pz - b.z) < b.r + 1.2) return false;
+      }
+    }
+    for (const e of this.edges)
+      for (let i = 0; i < e.points.length; i += 2) {
+        const p = e.points[i];
+        if (Math.abs(p.y - floor.y - ry * 0.5) < ry + 2.5 && Math.hypot(p.x - floor.x, p.z - floor.z) < R + 1.5) return false;
+      }
+    return true;
   }
 
   private ellipseRadius(rx: number, rz: number, yaw: number, ang: number): number {
@@ -210,8 +334,15 @@ export class Nest {
   }
 
   private addTunnel(a: number, b: number, r: Rng, radius: number, isShaft: boolean, wobble: number): void {
-    const pa = this.nodes[a].pos;
-    const pb = this.nodes[b].pos;
+    const { points, cum, length } = this.makePath(this.nodes[a].pos, this.nodes[b].pos, r, wobble);
+    const id = this.edges.length;
+    this.edges.push({ id, a, b, points, cum, length, radius, isShaft, rev: 0 });
+    this.nodes[a].edges.push(id);
+    this.nodes[b].edges.push(id);
+  }
+
+  /** 两点之间带随机弯曲的隧道中心线，按约 0.8 单位等距采样 */
+  private makePath(pa: THREE.Vector3, pb: THREE.Vector3, r: Rng, wobble: number): Path {
     const ctrl: THREE.Vector3[] = [pa.clone()];
     const len = pa.distanceTo(pb);
     const n = Math.max(1, Math.round(len / 7));
@@ -229,10 +360,7 @@ export class Nest {
     const points = curve.getSpacedPoints(samples);
     const cum = [0];
     for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + points[i].distanceTo(points[i - 1]));
-    const id = this.edges.length;
-    this.edges.push({ id, a, b, points, cum, length: cum[cum.length - 1], radius, isShaft });
-    this.nodes[a].edges.push(id);
-    this.nodes[b].edges.push(id);
+    return { points, cum, length: cum[cum.length - 1] };
   }
 
   private computeRouting(): void {
@@ -299,8 +427,9 @@ export class Nest {
     if (from !== e.a) outTan.negate();
   }
 
+  /** 指定类型的已完工房间 */
   chamberOfType(type: ChamberType): Chamber[] {
-    return this.chambers.filter((c) => c.type === type);
+    return this.chambers.filter((c) => c.type === type && c.ready);
   }
 
   /** 房间地板内的随机点 */
@@ -317,6 +446,7 @@ export class Nest {
   /** 判断世界坐标点落在哪个房间内（用于统计与信息面板） */
   chamberAt(p: THREE.Vector3): Chamber | null {
     for (const c of this.chambers) {
+      if (!c.ready) continue;
       const dy = p.y - c.floor.y;
       if (dy < -1 || dy > c.ry * 1.8) continue;
       const dx = p.x - c.floor.x;

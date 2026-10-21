@@ -15,7 +15,9 @@ export type Command =
   | { k: 'search'; time: number }
   | { k: 'walk'; x: number; z: number; r: number }
   | { k: 'patrol'; x: number; z: number; radius: number; time: number }
-  | { k: 'wait'; time: number };
+  | { k: 'wait'; time: number }
+  /** 沿植物茎爬到 top 高度，停留 stay 秒后爬回地面 */
+  | { k: 'climb'; x: number; z: number; angle: number; r: number; top: number; stay: number };
 
 export type Routine = Generator<Command, void, unknown>;
 
@@ -87,6 +89,27 @@ export class Ant {
   trips = 0;
   delivered = 0;
 
+  /** 分工调整后待切换的职别，在当前任务结束后生效 */
+  nextRole: Role | null = null;
+  /** 行为年龄相对真实日龄的偏移：同龄工蚁转换分工有早有晚 */
+  readonly ageBias = rng.gauss(0, CONFIG.polyethism.ageJitterDays);
+  /** 触角接触、交哺时原地停留的剩余秒数 */
+  holdT = 0;
+  nextContactAt = rng.range(0, 10);
+  contacts = 0;
+  shares = 0;
+  /** 被满载归来的同伴激发、更想出巢觅食的截止时刻 */
+  excitedUntil = 0;
+  /** 照料的蚜虫群（蚜虫放牧同样有地点忠诚性） */
+  herd = -1;
+  /** 正在前往或挖掘的工作面节点 */
+  digNode = -1;
+
+  private climbS = 0;
+  private climbPhase = 0;
+  private climbR0 = 0;
+  private climbY0 = 0;
+
   constructor(role: Role, ageDays: number) {
     this.role = role;
     this.ageDays = ageDays;
@@ -97,6 +120,30 @@ export class Ant {
   note(w: World, msg: string): void {
     this.log.unshift({ t: w.clock.stamp(), msg });
     if (this.log.length > 14) this.log.pop();
+  }
+
+  get behaviorAge(): number {
+    return this.ageDays + this.ageBias;
+  }
+
+  /** 原地停留 t 秒并转向 target */
+  hold(t: number, target: THREE.Vector3): void {
+    this.holdT = Math.max(this.holdT, t);
+    this.faceTo(target);
+  }
+
+  faceTo(target: THREE.Vector3): void {
+    _f.copy(target).sub(this.pos);
+    _f.addScaledVector(this.up, -_f.dot(this.up));
+    if (_f.lengthSq() > 1e-4) this.fwd.copy(_f.normalize());
+  }
+
+  /** 从自己的嗉囊中取食，返回实际消耗量 */
+  eatFromCrop(): number {
+    const used = Math.min(this.crop, CONFIG.ant.eatAmount);
+    this.crop -= used;
+    this.hunger = Math.max(0, this.hunger - (0.85 * used) / CONFIG.ant.eatAmount);
+    return used;
   }
 
   /** 立刻放到某个房间内（初始化用） */
@@ -147,6 +194,12 @@ export class Ant {
   }
 
   update(dt: number, w: World): void {
+    if (this.holdT > 0) {
+      this.holdT -= dt;
+      this.moving = false;
+      if (this.domain === 'nest') this.smoothNest(dt);
+      return;
+    }
     for (let guard = 0; guard < 4; guard++) {
       if (!this.cmd) {
         if (!this.routine) this.routine = w.colony.newRoutine(this);
@@ -195,6 +248,8 @@ export class Ant {
         if (first) this.timer = cmd.time;
         this.timer -= dt;
         return this.timer <= 0;
+      case 'climb':
+        return this.stepClimb(dt, w, cmd, first);
     }
   }
 
@@ -360,6 +415,7 @@ export class Ant {
       return;
     }
     this.pos.set(nx, w.terrain.heightAt(nx, nz), nz);
+    w.pheromone.depositHome(nx, nz, CONFIG.pheromone.depositHome * dt);
     w.terrain.normalAt(nx, nz, _n);
     this.up.lerp(_n, 0.2).normalize();
     _f.set(Math.cos(this.heading), 0, Math.sin(this.heading));
@@ -412,6 +468,7 @@ export class Ant {
     const x = this.pos.x;
     const z = this.pos.z;
     const food = w.food.nearest(x, z, CONFIG.ant.senseFoodRadius);
+    const aphid = food ? null : w.aphids.nearest(x, z, CONFIG.ant.senseFoodRadius);
     let desired: number | null = null;
     if (food) {
       const d = Math.hypot(food.x - x, food.z - z);
@@ -420,6 +477,13 @@ export class Ant {
         return true;
       }
       desired = Math.atan2(food.z - z, food.x - x);
+    } else if (aphid) {
+      // 植物茎是障碍物，走到茎旁约 1.7 单位处就算到达
+      if (Math.hypot(aphid.x - x, aphid.z - z) < 1.9) {
+        this.result = aphid;
+        return true;
+      }
+      desired = Math.atan2(aphid.z - z, aphid.x - x);
     } else if (this.memory && !this.memoryChecked) {
       const dx = this.memory.x - x;
       const dz = this.memory.z - z;
@@ -430,9 +494,29 @@ export class Ant {
     } else {
       desired = this.followTrail(w);
     }
-    if (desired === null) this.heading += rng.gauss(0, 1) * 1.4 * Math.sqrt(dt);
-    this.surfaceMove(dt, w, desired, food ? 6 : 3.5);
+    if (desired === null) {
+      this.heading += rng.gauss(0, 1) * 1.4 * Math.sqrt(dt);
+      if (this.scout && w.pheromone.sampleHome(x + Math.cos(this.heading) * 4, z + Math.sin(this.heading) * 4) > 0.3) {
+        desired = this.leastMarked(w);
+      }
+    }
+    this.surfaceMove(dt, w, desired, food || aphid ? 6 : 3.5);
     return false;
+  }
+
+  /** 侦察蚁偏向同伴足迹较少的方向，以探索未开发的区域 */
+  private leastMarked(w: World): number | null {
+    let best = Infinity;
+    let bestA: number | null = null;
+    for (const off of [-0.8, 0, 0.8]) {
+      const a = this.heading + off;
+      const v = w.pheromone.sampleHome(this.pos.x + Math.cos(a) * 4, this.pos.z + Math.sin(a) * 4);
+      if (v < best) {
+        best = v;
+        bestA = a;
+      }
+    }
+    return bestA;
   }
 
   /** 三个触角感受点比较信息素浓度；出巢时偏向远离蚁穴的一侧 */
@@ -485,6 +569,66 @@ export class Ant {
     else this.heading += rng.gauss(0, 1) * 4 * Math.sqrt(dt);
     this.surfaceMove(dt, w, desired, 4, 0.7);
     return this.timer <= 0;
+  }
+
+  /** 路径：先沿地面靠近茎，再沿茎竖直向上；climbS 是沿路径走过的距离 */
+  private stepClimb(dt: number, w: World, cmd: Extract<Command, { k: 'climb' }>, first: boolean): boolean {
+    if (this.domain === 'nest') return true;
+    const ra = cmd.r + 0.05;
+    if (first) {
+      this.climbS = 0;
+      this.climbPhase = 0;
+      this.climbR0 = Math.max(ra, Math.hypot(this.pos.x - cmd.x, this.pos.z - cmd.z));
+      this.climbY0 = w.terrain.heightAt(cmd.x + Math.cos(cmd.angle) * ra, cmd.z + Math.sin(cmd.angle) * ra);
+      this.timer = cmd.stay;
+    }
+    const flat = this.climbR0 - ra;
+    const total = flat + Math.max(0, cmd.top - this.climbY0);
+    const sp = CONFIG.ant.speedSurface * this.speedFactor(w) * 0.6 * dt;
+    if (this.climbPhase === 0) {
+      this.climbS = Math.min(total, this.climbS + sp);
+      if (this.climbS >= total) this.climbPhase = 1;
+    } else if (this.climbPhase === 1) {
+      this.timer -= dt;
+      if (this.timer <= 0) this.climbPhase = 2;
+    } else {
+      this.climbS -= sp;
+      if (this.climbS <= 0) {
+        this.heading = cmd.angle;
+        this.placeOnSurface(cmd.x + Math.cos(cmd.angle) * this.climbR0, cmd.z + Math.sin(cmd.angle) * this.climbR0, w);
+        return true;
+      }
+    }
+    const ca = Math.cos(cmd.angle);
+    const sa = Math.sin(cmd.angle);
+    const s = this.climbS;
+    const dir = this.climbPhase === 2 ? -1 : 1;
+    if (s < flat) {
+      const rad = this.climbR0 - s;
+      const px = cmd.x + ca * rad;
+      const pz = cmd.z + sa * rad;
+      this.pos.set(px, w.terrain.heightAt(px, pz), pz);
+      w.terrain.normalAt(px, pz, _n);
+      _f.set(-ca * dir, 0, -sa * dir);
+    } else {
+      this.pos.set(cmd.x + ca * ra, this.climbY0 + (s - flat), cmd.z + sa * ra);
+      _n.set(ca, 0, sa);
+      _f.set(0, dir, 0);
+    }
+    this.up.lerp(_n, 0.3).normalize();
+    // 在茎顶掉头时前向反转，插值无法跨过 180°
+    if (this.fwd.dot(_f) < -0.3) this.fwd.copy(_f);
+    else this.fwd.lerp(_f, 0.3).normalize();
+    if (this.climbPhase !== 1) {
+      this.moving = true;
+      this.gait += sp * 9;
+    }
+    return false;
+  }
+
+  /** 正在植物茎上（爬升、停留或下降中） */
+  get climbing(): boolean {
+    return this.cmd?.k === 'climb' && this.cmdInit;
   }
 
   /** 携带物在上颚处的位置 */

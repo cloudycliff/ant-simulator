@@ -1,6 +1,9 @@
+import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { TAU } from '../util/math';
 import { rng } from '../util/random';
 import type { Chamber } from '../nest/nest';
+import { AphidColony } from '../world/aphids';
 import type { FoodSource } from '../world/food';
 import type { World } from '../world/world';
 import type { Ant, Command, Routine } from './ant';
@@ -53,15 +56,109 @@ function wantsToEat(a: Ant, w: World): boolean {
   return a.hunger > 0.6 && w.clock.seconds >= a.eatRetryAt;
 }
 
+/** 交哺时站到对方面前约 0.75 单位处 */
+function approachPoint(target: Ant, from: Ant): THREE.Vector3 {
+  const p = from.pos.clone().sub(target.pos).setY(0);
+  if (p.lengthSq() < 1e-4) p.set(1, 0, 0);
+  return p.normalize().multiplyScalar(0.75).add(target.pos);
+}
+
+// ---------------- 交哺 ----------------
+
+/** 向同一房间里嗉囊饱满的同伴乞食：用触角轻拍对方头部，对方反刍出一滴液体 */
+function* solicit(a: Ant, w: World, reason: string): Generator<Command, boolean, unknown> {
+  const col = w.colony;
+  const donor = col.findRoommate(a, (b) => b.crop > 0.45);
+  if (!donor) return false;
+  donor.hold(donor.pos.distanceTo(a.pos) / 1.4 + 2, a.pos);
+  a.activity = `${reason}，向 #${donor.id} 乞食`;
+  yield { k: 'room', chamber: a.room, time: 0.2, point: approachPoint(donor, a) };
+  if (!donor.alive || donor.room !== a.room) return false;
+  a.faceTo(donor.pos);
+  donor.faceTo(a.pos);
+  donor.holdT = Math.max(donor.holdT, 2.6);
+  a.activity = `与 #${donor.id} 交哺：接受反刍的甜液`;
+  yield { k: 'wait', time: 2.4 };
+  const got = col.share(donor, a);
+  donor.holdT = Math.min(donor.holdT, 0.3);
+  return got > 0;
+}
+
+/** 把嗉囊中的甜液分给同一房间的同伴 */
+function* offerCrop(a: Ant, w: World, maxPartners: number, pred: (b: Ant) => boolean = (b) => b.crop < 0.5): Routine {
+  const col = w.colony;
+  let given = 0;
+  let tries = 0;
+  while (a.room >= 0 && a.crop > 0.15 && given < maxPartners && tries < maxPartners + 3) {
+    tries++;
+    const b = col.findRoommate(a, pred);
+    if (!b) {
+      a.activity = '在房间里寻找需要食物的同伴';
+      yield { k: 'room', chamber: a.room, time: rng.range(1.5, 3) };
+      continue;
+    }
+    b.hold(b.pos.distanceTo(a.pos) / 1.4 + 2, a.pos);
+    a.activity = `走向 #${b.id}，准备交哺`;
+    yield { k: 'room', chamber: a.room, time: 0.2, point: approachPoint(b, a) };
+    if (!b.alive || b.room !== a.room) continue;
+    a.faceTo(b.pos);
+    b.faceTo(a.pos);
+    b.holdT = Math.max(b.holdT, 2.6);
+    a.activity = `与 #${b.id} 交哺：反刍嗉囊中的甜液`;
+    yield { k: 'wait', time: 2.4 };
+    if (col.share(a, b) > 0) given++;
+    b.holdT = Math.min(b.holdT, 0.3);
+  }
+  if (given) a.note(w, `通过交哺把甜液分给 ${given} 只同伴`);
+}
+
+/** 返巢后在储食室（不够再去休息室）把嗉囊里的甜液分出去 */
+function* unloadCrop(a: Ant, w: World): Routine {
+  const col = w.colony;
+  const store = col.foodChamber();
+  a.activity = '进入储食室，把甜液分给巢内同伴';
+  yield { k: 'room', chamber: store.id, time: rng.range(0.5, 1.5) };
+  yield* offerCrop(a, w, 4);
+  if (a.crop > 0.3) {
+    const c = rng.pick(w.nest.chamberOfType('rest'));
+    a.activity = `前往${c.name}分享甜液`;
+    yield { k: 'room', chamber: c.id, time: 0.3 };
+    yield* offerCrop(a, w, 3);
+  }
+}
+
+/** 嗉囊饱满的巢内工蚁把甜液带到育幼区，分给保育蚁 */
+function* distributeCrop(a: Ant, w: World): Routine {
+  const col = w.colony;
+  const options = broodChambers(w).filter((c) => col.ants.some((b) => b.room === c.id && b.role === 'nurse'));
+  if (!options.length) return;
+  const c = rng.pick(options);
+  yield* goHome(a);
+  a.activity = `把嗉囊中的甜液带到${c.name}`;
+  yield { k: 'room', chamber: c.id, time: 0.3 };
+  yield* offerCrop(a, w, 3, (b) => b.role === 'nurse' && b.crop < 0.4);
+}
+
+function broodChambers(w: World): Chamber[] {
+  const n = w.nest;
+  return [...n.chamberOfType('egg'), ...n.chamberOfType('larva'), ...n.chamberOfType('pupa'), ...n.chamberOfType('solar')];
+}
+
+// ---------------- 进食与休息 ----------------
+
 function* eat(a: Ant, w: World): Routine {
-  if (a.crop > 0.2) {
+  if (a.crop >= 0.1) {
     a.activity = '从自己的嗉囊中取食';
     yield { k: 'wait', time: 1.5 };
-    a.crop = Math.max(0, a.crop - 0.4);
-    a.hunger = 0;
+    a.eatFromCrop();
     return;
   }
   yield* goHome(a);
+  if (a.room >= 0 && rng.chance(0.6) && (yield* solicit(a, w, '饥饿'))) {
+    a.eatFromCrop();
+    a.note(w, '通过交哺从同伴处获得食物');
+    return;
+  }
   const store = w.colony.foodChamber();
   a.activity = '饥饿，前往储食室进食';
   yield { k: 'room', chamber: store.id, time: 1, point: w.colony.pileCenter(store, 'food') };
@@ -69,16 +166,23 @@ function* eat(a: Ant, w: World): Routine {
   if (w.colony.takeFood(CONFIG.ant.eatAmount)) {
     a.hunger = Math.max(0, a.hunger - 0.85);
     a.note(w, '在储食室进食');
+  } else if (yield* solicit(a, w, '储食室没有固体食物')) {
+    a.eatFromCrop();
+    a.note(w, '储食室空了，从同伴处乞得甜液');
   } else {
-    a.note(w, '储食室没有食物，未能进食');
+    a.note(w, '没有找到食物，未能进食');
     a.eatRetryAt = w.clock.seconds + rng.range(30, 60);
   }
 }
 
 function* rest(a: Ant, w: World, label = '在休息室休息'): Routine {
   yield* goHome(a);
+  // 随机挑两间休息室，去路程较近的一间
   const rooms = w.nest.chamberOfType('rest');
-  const c = rng.pick(rooms);
+  const from = a.currentNode(w);
+  const c1 = rng.pick(rooms);
+  const c2 = rng.pick(rooms);
+  const c = w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
   a.activity = `前往${c.name}`;
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = label;
@@ -121,10 +225,10 @@ function* nurseRoutine(a: Ant, w: World): Routine {
     return yield* carryBrood(a, w, mover, `把${ITEM_NAMES[mover.type]}搬到${target.name}`);
   }
 
-  if (col.queen.hunger > 0.45 && col.queenTender < 0 && col.foodStock > 0.5) return yield* feedQueen(a, w);
+  if (col.queen.hunger > 0.45 && col.queenTender < 0 && (col.foodStock > 0.5 || a.crop >= 0.3)) return yield* feedQueen(a, w);
 
   const larva = hungriestLarva(w);
-  if (larva && col.foodStock > 0.5 && rng.chance(0.8)) return yield* feedLarva(a, w, larva);
+  if (larva && (col.reserve > 0.5 || a.crop >= 0.3) && rng.chance(0.8)) return yield* feedLarva(a, w, larva);
 
   return yield* tendBrood(a, w);
 }
@@ -164,7 +268,7 @@ function* carryBrood(a: Ant, w: World, it: Item, label: string): Routine {
 
 function* helpEclose(a: Ant, w: World, pupa: Item): Routine {
   pupa.claimedBy = a.id;
-  a.activity = '前往蛹室，帮助新蚁破茧';
+  a.activity = `前往${w.nest.chambers[pupa.chamber].name}，帮助新蚁破茧`;
   yield* goToItem(a, pupa);
   if (!stillMine(a, pupa)) return;
   a.activity = '用上颚撕开茧壳，帮助新工蚁羽化';
@@ -174,41 +278,53 @@ function* helpEclose(a: Ant, w: World, pupa: Item): Routine {
   else if (pupa.claimedBy === a.id) pupa.claimedBy = -1;
 }
 
-function* fetchFood(a: Ant, w: World): Generator<Command, boolean, unknown> {
+/** 准备喂食：嗉囊里有甜液就直接反哺；否则去储食室取固体食物，储食室空了就向同伴乞食 */
+function* fetchFood(a: Ant, w: World): Generator<Command, 'crop' | 'solid' | null, unknown> {
   const col = w.colony;
+  if (a.crop >= 0.3) return 'crop';
   const store = col.foodChamber();
   yield* goHome(a);
   yield { k: 'room', chamber: store.id, time: rng.range(0.8, 1.6), point: col.pileSpot(store, 'food') };
   const kind = col.takeFood(0.45);
-  if (!kind) return false;
-  const piece = new Item('food');
-  piece.foodKind = kind;
-  col.pickUp(a, piece);
-  return true;
+  if (kind) {
+    const piece = new Item('food');
+    piece.foodKind = kind;
+    col.pickUp(a, piece);
+    return 'solid';
+  }
+  if ((yield* solicit(a, w, '储食室空了')) && a.crop >= 0.2) return 'crop';
+  return null;
+}
+
+/** 反哺：喂出嗉囊里的液体或丢掉携带的固体食物块 */
+function consumeFeed(a: Ant, w: World, how: 'crop' | 'solid'): void {
+  if (how === 'crop') a.crop = Math.max(0, a.crop - 0.3);
+  else {
+    const p = w.colony.release(a);
+    if (p) w.colony.destroy(p);
+  }
 }
 
 function* feedLarva(a: Ant, w: World, larva: Item): Routine {
   const col = w.colony;
   larva.claimedBy = a.id;
-  a.activity = '前往储食室，为幼虫取食';
-  const ok = yield* fetchFood(a, w);
-  if (!ok || !stillMine(a, larva) || larva.place !== 'chamber') {
+  a.activity = a.crop >= 0.3 ? '带着嗉囊里的甜液去喂幼虫' : '前往储食室，为幼虫取食';
+  const how = yield* fetchFood(a, w);
+  if (!how || !stillMine(a, larva) || larva.place !== 'chamber') {
     if (larva.claimedBy === a.id) larva.claimedBy = -1;
-    const p = col.release(a);
-    if (p) col.destroy(p);
+    if (how === 'solid') consumeFeed(a, w, how);
     a.activity = '没有取到食物';
     return;
   }
-  a.activity = '把食物喂给幼虫';
+  a.activity = how === 'crop' ? '口对口把甜液反哺给幼虫' : '把食物碎块喂给幼虫';
   yield { k: 'room', chamber: larva.chamber, time: 0.3, point: larva.pos.clone() };
   yield { k: 'wait', time: 2.2 };
-  const p = col.release(a);
-  if (p) col.destroy(p);
+  consumeFeed(a, w, how);
   if (larva.type === 'larva') {
     larva.hunger = 0;
     larva.feeds++;
     if (rng.chance(0.15)) col.addToChamber(new Item('waste'), w.nest.chambers[larva.chamber]);
-    a.note(w, `给幼虫喂食（第 ${larva.feeds} 次）`);
+    a.note(w, `给幼虫喂食${how === 'crop' ? '甜液' : '固体食物'}（第 ${larva.feeds} 次）`);
   }
   if (larva.claimedBy === a.id) larva.claimedBy = -1;
   a.activity = '在幼虫室照料幼虫';
@@ -219,8 +335,8 @@ function* feedQueen(a: Ant, w: World): Routine {
   const col = w.colony;
   col.queenTender = a.id;
   a.activity = '为蚁后取食';
-  const ok = yield* fetchFood(a, w);
-  if (!ok) {
+  const how = yield* fetchFood(a, w);
+  if (!how) {
     col.queenTender = -1;
     return;
   }
@@ -228,8 +344,7 @@ function* feedQueen(a: Ant, w: World): Routine {
   const qc = chamber(w, 'queen');
   yield { k: 'room', chamber: qc.id, time: 0.3, point: col.queen.pos.clone() };
   yield { k: 'wait', time: 3 };
-  const p = col.release(a);
-  if (p) col.destroy(p);
+  consumeFeed(a, w, how);
   col.queen.hunger = 0;
   col.queenTender = -1;
   col.queen.note(w, `接受保育蚁 #${a.id} 喂食`);
@@ -240,10 +355,10 @@ function* feedQueen(a: Ant, w: World): Routine {
 
 function* tendBrood(a: Ant, w: World): Routine {
   const col = w.colony;
-  const options = [...w.nest.chamberOfType('egg'), ...w.nest.chamberOfType('larva'), ...w.nest.chamberOfType('pupa')].filter(
-    (c) => col.byChamber[c.id].some((i) => i.isBrood),
-  );
+  const options = broodChambers(w).filter((c) => col.byChamber[c.id].some((i) => i.isBrood));
   yield* goHome(a);
+  // 嗉囊空了的保育蚁会向路过的同伴讨要甜液，用来反哺幼虫
+  if (a.crop < 0.2 && a.room >= 0 && rng.chance(0.3) && (yield* solicit(a, w, '为喂幼虫储备食物'))) return;
   // 蚁后身边总围着一圈侍从工蚁，为它梳理、舔舐并传递蚁后信息素
   if (rng.chance(0.18)) {
     const qc = chamber(w, 'queen');
@@ -283,9 +398,12 @@ function* maintenanceRoutine(a: Ant, w: World): Routine {
     if (it) return yield* carryOut(a, w, it, '把垃圾运出巢外');
   }
 
+  // 有扩建工程时大量投入挖掘，否则只缓慢延长现有隧道
+  const digP = col.expansion.project ? 0.45 : 0.15;
   const r = rng.next();
-  if (r < 0.45) return yield* dig(a, w);
-  if (r < 0.7 && !w.clock.isNight) return yield* guard(a, w);
+  if (r < digP) return yield* dig(a, w);
+  if (r < digP + 0.25 && !w.clock.isNight) return yield* guard(a, w);
+  if (a.crop > 0.6 && rng.chance(0.5)) return yield* distributeCrop(a, w);
   return yield* patrolNest(a, w);
 }
 
@@ -342,23 +460,34 @@ function* carryOut(a: Ant, w: World, it: Item, label: string): Routine {
 
 function* dig(a: Ant, w: World): Routine {
   const col = w.colony;
+  const ex = col.expansion;
+  const face = ex.pickFace();
+  if (!face) return yield* patrolNest(a, w);
+  const node = face.node;
+  const project = ex.isProjectFace(node);
+  a.digNode = node;
   yield* goHome(a);
-  const face = rng.pick(w.nest.deadEnds);
-  a.activity = '前往隧道尽头的挖掘面';
-  yield { k: 'goto', node: face };
-  a.activity = '用上颚挖掘土壤，扩建隧道';
+  a.activity = project ? '前往扩建工地' : '前往隧道尽头的挖掘面';
+  yield { k: 'goto', node };
+  // 房间阶段：走进已挖出的部分，在远端继续挖
+  const spot = ex.isProjectFace(node) ? ex.digPoint(new THREE.Vector3()) : null;
+  const room = w.nest.nodes[node].chamber;
+  if (spot && room !== undefined) yield { k: 'room', chamber: room, time: 0.3, point: spot };
+  a.activity = spot ? '在新房间里挖掘，扩大空间' : project ? '挖掘通往新房间的隧道' : '用上颚挖掘土壤，延长隧道';
   yield { k: 'wait', time: rng.range(3, 6) };
+  a.digNode = -1;
+  ex.excavate(node);
   const soil = new Item('soil');
   col.pickUp(a, soil);
   col.stats.soilExcavated++;
   a.activity = '把土粒运出巢外';
   yield { k: 'exit' };
   const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
-  const ang = rng.range(0, Math.PI * 2);
+  const ang = rng.range(0, TAU);
   yield { k: 'walk', x: ent.x + Math.cos(ang) * 3, z: ent.z + Math.sin(ang) * 3, r: 0.8 };
   const d = col.release(a);
   if (d) col.dropOnMound(d, ent);
-  a.note(w, '挖出一粒土堆在蚁丘上');
+  a.note(w, project ? '为扩建工程挖出一粒土' : '挖出一粒土堆在蚁丘上');
   a.activity = '返回巢内';
   yield { k: 'enter' };
 }
@@ -377,7 +506,7 @@ function* guard(a: Ant, w: World): Routine {
 
 function* patrolNest(a: Ant, w: World): Routine {
   yield* goHome(a);
-  const c = rng.pick(w.nest.chambers.filter((x) => x.type !== 'queen'));
+  const c = rng.pick(w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
   a.activity = `巡视${c.name}`;
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = `在${c.name}内整理、清洁巢壁`;
@@ -386,26 +515,69 @@ function* patrolNest(a: Ant, w: World): Routine {
 
 // ---------------- 觅食蚁 ----------------
 
+function tenders(w: World, c: AphidColony): number {
+  let n = 0;
+  for (const a of w.colony.ants) if (a.herd === c.id) n++;
+  return n;
+}
+
+/** 选择要去照料的蚜虫群：已有照料对象的大多回到原处，其余按蜜露多少被吸引 */
+function pickHerd(a: Ant, w: World): AphidColony | null {
+  const aph = w.aphids;
+  if (a.herd >= 0) {
+    const c = aph.byId(a.herd);
+    if (c && rng.chance(0.8)) return c;
+    if (!c) a.herd = -1;
+  }
+  if (a.scout || !rng.chance(0.3)) return null;
+  const known = aph.colonies.filter((c) => c.discovered && tenders(w, c) < 4 + c.count / 8);
+  if (!known.length) return null;
+  let total = 0;
+  for (const c of known) total += c.honeydew + 0.5;
+  let r = rng.next() * total;
+  for (const c of known) {
+    r -= c.honeydew + 0.5;
+    if (r <= 0) return c;
+  }
+  return known[known.length - 1];
+}
+
 function* foragerRoutine(a: Ant, w: World): Routine {
   const col = w.colony;
-  // 储食室空了的时候，觅食蚁不会留在巢里挨饿，而是出去在食物源处进食
-  if (wantsToEat(a, w) && (col.foodStock > 1 || a.crop > 0.2)) return yield* eat(a, w);
+  const now = w.clock.seconds;
+  // 储备耗尽时，觅食蚁不会留在巢里挨饿，而是出去在食物源处进食
+  if (wantsToEat(a, w) && (col.reserve > 3 || a.crop >= 0.1)) return yield* eat(a, w);
+  if (a.domain === 'nest' && a.crop > 0.3 && a.room >= 0 && rng.chance(0.5)) return yield* offerCrop(a, w, 3);
   const surfaceT = w.clock.temperatureAt(0);
-  if (a.domain === 'nest' && ((w.clock.isNight && rng.chance(0.6)) || surfaceT < 8)) {
+  const excited = a.excitedUntil > now;
+  if (a.domain === 'nest' && ((w.clock.isNight && rng.chance(excited ? 0.3 : 0.6)) || surfaceT < 8)) {
     return yield* rest(a, w, surfaceT < 8 ? '地表太冷，在巢内等待' : '夜间在巢内休息');
   }
-  // 储备越充足，返巢蚁在巢内越难卸下食物，出巢觅食的积极性随之下降
-  const satiation = Math.min(0.9, Math.max(0, (col.foodStock - 150) / 200)) * (a.scout ? 0.5 : 1);
+  // 储备越充足，返巢蚁越难把食物交出去，出巢觅食的积极性随之下降；被同伴激发时则更容易出巢
+  const satiation = Math.min(0.9, Math.max(0, (col.reserve - 150) / 200)) * (a.scout ? 0.5 : 1) * (excited ? 0.3 : 1);
   if (a.domain === 'nest' && rng.chance(satiation)) {
+    if (a.crop > 0.6 && rng.chance(0.4)) return yield* distributeCrop(a, w);
     return yield* rest(a, w, '食物储备充足，留在巢内待命');
   }
 
+  const herd = pickHerd(a, w);
+  if (herd) return yield* tendAphids(a, w, herd, false);
+
   if (a.domain === 'nest') {
-    a.activity = a.scout ? '出巢侦察' : '出巢觅食';
+    a.activity = a.scout ? '出巢侦察' : excited ? '受同伴激发，出巢觅食' : '出巢觅食';
     yield { k: 'exit' };
   }
   a.activity = a.memory ? '前往记忆中的觅食地点' : a.scout ? '侦察新的食物源' : '搜索食物，留意信息素路径';
-  const found = (yield { k: 'search', time: a.scout ? 220 : 140 }) as FoodSource | null;
+  const found = (yield { k: 'search', time: a.scout ? 220 : 140 }) as FoodSource | AphidColony | null;
+
+  if (found instanceof AphidColony) {
+    if (!found.discovered) {
+      found.discovered = true;
+      a.note(w, '发现一群蚜虫');
+      col.pushEvent(`${a.scout ? '侦察蚁' : '觅食蚁'} #${a.id} 发现了一群蚜虫`);
+    }
+    return yield* tendAphids(a, w, found, true);
+  }
 
   if (!found || found.amount < 1) {
     a.activity = '没有找到食物，返巢';
@@ -441,16 +613,60 @@ function* foragerRoutine(a: Ant, w: World): Routine {
     col.pushEvent(`${a.scout ? '侦察蚁' : '觅食蚁'} #${a.id} 发现了${found.info.name}`);
   } else a.note(w, `从${found.info.name}获取食物`);
 
-  a.activity = '携带食物返巢，沿途释放路径信息素';
+  a.activity = found.kind === 'sugar' ? '嗉囊装满甜液返巢，沿途释放路径信息素' : '携带食物返巢，沿途释放路径信息素';
   yield { k: 'enter' };
   a.layTrail = 0;
+  a.trips++;
+  a.delivered++;
+  col.stats.foodCollected++;
+  if (found.kind === 'sugar') return yield* unloadCrop(a, w);
   const store = col.foodChamber();
   a.activity = '把食物送进储食室';
   yield { k: 'room', chamber: store.id, time: 0.3, point: col.pileSpot(store, 'food') };
-  col.storeFood(a, found.kind);
-  a.trips++;
-  a.delivered++;
-  a.note(w, `把${found.kind === 'sugar' ? '嗉囊里的甜液反哺' : '食物'}存入储食室`);
+  col.storeFood(a);
+  a.note(w, '把食物存入储食室');
   a.activity = '在储食室短暂停留';
   yield { k: 'room', chamber: store.id, time: rng.range(2, 6) };
+}
+
+/** 蚜虫放牧：爬上寄主植物，拍打蚜虫收集蜜露；蜜露不多时留下守护蚜虫 */
+function* tendAphids(a: Ant, w: World, c: AphidColony, arrived: boolean): Routine {
+  const col = w.colony;
+  if (a.domain === 'nest') {
+    a.activity = '出巢前往照料的蚜虫群';
+    yield { k: 'exit' };
+  }
+  if (!arrived) {
+    const ang = rng.range(0, TAU);
+    a.activity = '前往蚜虫所在的植物';
+    yield { k: 'walk', x: c.x + Math.cos(ang) * 1.6, z: c.z + Math.sin(ang) * 1.6, r: 0.6 };
+  }
+  const guard = c.honeydew < 0.6;
+  const ang = Math.atan2(a.pos.z - c.z, a.pos.x - c.x);
+  a.activity = guard ? '爬上植物守护蚜虫，驱赶瓢虫等天敌' : '爬上植物，用触角拍打蚜虫收集蜜露';
+  c.lastTended = w.clock.seconds;
+  yield { k: 'climb', x: c.x, z: c.z, angle: ang, r: c.stemRadius, top: rng.range(c.bandLo, c.bandHi) - 0.3, stay: guard ? rng.range(25, 45) : rng.range(6, 10) };
+  c.lastTended = w.clock.seconds;
+  a.herd = c.id;
+  const amt = Math.min(1 - a.crop, c.honeydew);
+  c.honeydew -= amt;
+  c.collected += amt;
+  a.crop += amt;
+  col.stats.honeydew += amt;
+  if (amt < 0.2) {
+    a.note(w, '守护了一阵蚜虫群，蜜露不多');
+    a.activity = '返巢';
+    yield { k: 'enter' };
+    if (a.crop > 0.3) yield* unloadCrop(a, w);
+    return;
+  }
+  a.note(w, `从蚜虫群收集蜜露（嗉囊 ${Math.round(a.crop * 100)}%）`);
+  a.layTrail = CONFIG.pheromone.depositFood * 0.8;
+  a.activity = '嗉囊装满蜜露返巢，沿途释放路径信息素';
+  yield { k: 'enter' };
+  a.layTrail = 0;
+  a.trips++;
+  a.delivered++;
+  col.stats.foodCollected++;
+  yield* unloadCrop(a, w);
 }

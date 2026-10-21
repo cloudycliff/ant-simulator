@@ -1,12 +1,15 @@
 import * as THREE from 'three';
-import { CONFIG, type Role } from '../config';
+import { CONFIG, ROLE_NAMES, type Role } from '../config';
+import { clamp, lerp, smoothstep } from '../util/math';
 import { rng } from '../util/random';
 import type { Chamber, ChamberType } from '../nest/nest';
 import type { World } from '../world/world';
 import type { FoodKind } from '../world/food';
 import { Ant, type Routine } from './ant';
+import { NestExpansion } from './expansion';
 import { Item, type ItemType } from './items';
 import { routineFor } from './routines';
+import { SpatialHash } from './spatial';
 
 export interface ColonyStats {
   eggsLaid: number;
@@ -15,9 +18,33 @@ export interface ColonyStats {
   foodCollected: number;
   wasteRemoved: number;
   soilExcavated: number;
+  honeydew: number;
+  trophallaxis: number;
+  contacts: number;
+  roleChanges: number;
 }
 
-const _v = new THREE.Vector3();
+/** 每游戏小时记录一次，供统计曲线使用 */
+export interface ColonySample {
+  day: number;
+  nurse: number;
+  maintenance: number;
+  forager: number;
+  brood: number;
+  food: number;
+  liquid: number;
+  outside: number;
+}
+
+/** 各职别的需求目标，由分工评估计算 */
+export interface RoleTargets {
+  nurse: number;
+  maintenance: number;
+  forager: number;
+}
+
+const ROLE_ORDER: Record<Role, number> = { queen: -1, nurse: 0, maintenance: 1, forager: 2 };
+const HISTORY_MAX = 24 * 60;
 
 export class Colony {
   ants: Ant[] = [];
@@ -26,21 +53,55 @@ export class Colony {
   byChamber: Item[][] = [];
   surfaceItems: Item[] = [];
   nodeItems: Item[] = [];
+  /** 储食室中的固体食物（份） */
   foodStock = 0;
+  /** 社会胃：所有工蚁嗉囊中的液体食物总量（份） */
+  liquidStock = 0;
   eggCredit = 0;
   queenTender = -1;
   midden = { x: 5, z: 12 };
-  stats: ColonyStats = { eggsLaid: 0, emerged: 0, deaths: 0, foodCollected: 0, wasteRemoved: 0, soilExcavated: 0 };
-  /** 新出生/死亡事件，供 UI 做提示 */
+  /** 蛹当前应放在哪个房间（按温度在深层蛹室与向阳育幼室之间切换） */
+  pupaChamber = -1;
+  targets: RoleTargets = { nurse: 0, maintenance: 0, forager: 0 };
+  stats: ColonyStats = {
+    eggsLaid: 0,
+    emerged: 0,
+    deaths: 0,
+    foodCollected: 0,
+    wasteRemoved: 0,
+    soilExcavated: 0,
+    honeydew: 0,
+    trophallaxis: 0,
+    contacts: 0,
+    roleChanges: 0,
+  };
+  history: ColonySample[] = [];
+  /** 新出生/死亡等事件，供 UI 做提示 */
   events: { t: string; msg: string }[] = [];
+  readonly spatial = new SpatialHash(2);
+  expansion: NestExpansion;
 
-  constructor(private w: World) {}
+  private tickN = 0;
+  private reviewAcc = 0;
+  private climateAcc = 0;
+  private sampleAcc = 0;
+  private lastShortageDay = -1;
+  private near: Ant[] = [];
+
+  constructor(private w: World) {
+    this.expansion = new NestExpansion(w);
+  }
+
+  /** 固体储备 + 社会胃 */
+  get reserve(): number {
+    return this.foodStock + this.liquidStock;
+  }
 
   // ---------------- 初始化 ----------------
 
   init(): void {
     const nest = this.w.nest;
-    this.byChamber = nest.chambers.map(() => []);
+    this.ensureChamberSlots();
     const ch = (t: ChamberType) => nest.chamberOfType(t);
 
     this.queen = new Ant('queen', 900);
@@ -59,6 +120,8 @@ export class Colony {
       const span = ant.lifespan;
       ant.ageDays = role === 'nurse' ? rng.range(0, 0.3) * span : role === 'maintenance' ? rng.range(0.25, 0.55) * span : rng.range(0.45, 0.95) * span;
       if (role === 'forager') ant.scout = rng.chance(CONFIG.colony.scoutRatio);
+      if (rng.chance(CONFIG.colony.initialCropShare)) ant.crop = rng.range(0.2, 0.7);
+      this.liquidStock += ant.crop;
       if (role === 'forager' && rng.chance(0.35)) {
         const a = rng.range(0, Math.PI * 2);
         const d = rng.range(6, 50);
@@ -71,6 +134,7 @@ export class Colony {
       this.ants.push(ant);
     }
 
+    this.pupaChamber = ch('pupa')[0].id;
     const b = CONFIG.colony.initialBrood;
     const qc = ch('queen')[0];
     for (let i = 0; i < b.egg; i++) {
@@ -90,10 +154,11 @@ export class Colony {
       it.stageAge = rng.range(0, CONFIG.brood.pupaDays);
       this.addToChamber(it, ch('pupa')[0]);
     }
+    // 甜液储存在工蚁的嗉囊里，储食室只放固体食物
     const store = this.foodChamber();
     for (let i = 0; i < CONFIG.colony.initialFood; i++) {
       const it = new Item('food');
-      it.foodKind = rng.pick(['prey', 'seed', 'sugar'] as FoodKind[]);
+      it.foodKind = rng.chance(0.55) ? 'prey' : 'seed';
       it.age = rng.range(0, 1.2);
       this.addToChamber(it, store);
     }
@@ -102,10 +167,30 @@ export class Colony {
     for (let i = 0; i < 45; i++) this.dropAtMidden(new Item(rng.chance(0.2) ? 'corpse' : 'waste'));
     for (let i = 0; i < 320; i++) this.dropOnMound(new Item('soil'), rng.pick(this.w.nest.entrances));
     this.refreshFoodStock();
+    this.updateClimate();
+    this.reviewRoles();
+    this.sample();
+  }
+
+  /** 新增房间后为它分配物品索引 */
+  ensureChamberSlots(): void {
+    while (this.byChamber.length < this.w.nest.chambers.length) this.byChamber.push([]);
   }
 
   newRoutine(ant: Ant): Routine {
+    if (ant.nextRole && !ant.carrying) this.applyRole(ant);
     return routineFor(ant, this.w);
+  }
+
+  private applyRole(a: Ant): void {
+    const from = a.role;
+    a.role = a.nextRole!;
+    a.nextRole = null;
+    a.scout = a.role === 'forager' && rng.chance(CONFIG.colony.scoutRatio);
+    a.memory = null;
+    a.herd = -1;
+    a.note(this.w, `由${ROLE_NAMES[from]}转为${ROLE_NAMES[a.role]}${a.scout ? '（侦察蚁）' : ''}，日龄 ${a.ageDays.toFixed(1)} 天`);
+    this.stats.roleChanges++;
   }
 
   // ---------------- 物品放置 ----------------
@@ -130,11 +215,12 @@ export class Colony {
   pileSpot(c: Chamber, type: ItemType): THREE.Vector3 {
     const p = this.pileCenter(c, type);
     const spread = type === 'food' ? 0.24 : 0.2;
+    const v = new THREE.Vector3();
     for (let i = 0; i < 6; i++) {
       const x = p.x + rng.gauss(0, c.rx * spread);
       const z = p.z + rng.gauss(0, c.rz * spread);
-      _v.set(x, c.floor.y, z);
-      if (this.w.nest.chamberAt(_v.setY(c.floor.y + 0.1)) === c) {
+      v.set(x, c.floor.y + 0.1, z);
+      if (this.w.nest.chamberAt(v) === c) {
         p.x = x;
         p.z = z;
         break;
@@ -157,7 +243,7 @@ export class Colony {
     it.chamber = c.id;
     this.byChamber[c.id].push(it);
     this.items.add(it);
-    if (it.isBrood) it.wantsMove = c.type !== this.homeTypeFor(it.type);
+    if (it.isBrood) it.wantsMove = !this.isHome(it, c);
   }
 
   dropAtMidden(it: Item): void {
@@ -255,8 +341,14 @@ export class Colony {
     return t === 'egg' ? 'egg' : t === 'larva' ? 'larva' : t === 'pupa' ? 'pupa' : t === 'food' ? 'food' : t === 'waste' ? 'waste' : null;
   }
 
-  /** 幼体应去往的房间：幼虫分散到幼虫最少的幼虫室 */
+  private isHome(it: Item, c: Chamber): boolean {
+    if (it.type === 'pupa') return c.id === this.pupaChamber;
+    return c.type === this.homeTypeFor(it.type);
+  }
+
+  /** 物品应去往的房间：蛹按温度选择，幼虫分散到幼虫最少的幼虫室 */
   targetChamberFor(it: Item): Chamber {
+    if (it.type === 'pupa' && this.pupaChamber >= 0) return this.w.nest.chambers[this.pupaChamber];
     const t = this.homeTypeFor(it.type) ?? 'rest';
     const list = this.w.nest.chamberOfType(t);
     if (list.length === 1) return list[0];
@@ -291,7 +383,7 @@ export class Colony {
     this.foodStock = s;
   }
 
-  /** 从储食室消耗食物；吃完的猎物碎块可能留下残渣 */
+  /** 从储食室消耗固体食物；吃完的猎物碎块可能留下残渣 */
   takeFood(amount: number): FoodKind | null {
     const store = this.foodChamber();
     const arr = this.byChamber[store.id];
@@ -306,7 +398,7 @@ export class Colony {
       kind = it.foodKind;
       if (it.amount <= 0.001) {
         const spot = it.pos.clone();
-        const leftover = it.foodKind !== 'sugar' && rng.chance(0.3);
+        const leftover = rng.chance(0.3);
         this.destroy(it);
         if (leftover) this.addToChamber(new Item('waste'), store, spot);
       }
@@ -315,19 +407,42 @@ export class Colony {
     return left < amount ? kind : null;
   }
 
-  storeFood(ant: Ant, kind: FoodKind): void {
-    const store = this.foodChamber();
-    let it = ant.carrying;
-    if (it && it.type === 'food') {
-      this.release(ant);
-    } else {
-      it = new Item('food');
-      it.foodKind = kind;
-    }
-    ant.crop = 0;
-    this.addToChamber(it, store, ant.pos);
-    this.stats.foodCollected++;
+  /** 觅食蚁把携带的固体食物放进储食室 */
+  storeFood(ant: Ant): void {
+    const it = ant.carrying;
+    if (!it || it.type !== 'food') return;
+    this.release(ant);
+    this.addToChamber(it, this.foodChamber(), ant.pos);
     this.refreshFoodStock();
+  }
+
+  /** 交哺：donor 把嗉囊中的液体反刍给 recipient，返回传递量 */
+  share(donor: Ant, recipient: Ant, max = CONFIG.social.shareAmount): number {
+    const amt = Math.min(donor.crop, max, 1 - recipient.crop);
+    if (amt <= 0.01) return 0;
+    donor.crop -= amt;
+    recipient.crop += amt;
+    donor.shares++;
+    recipient.shares++;
+    this.stats.trophallaxis++;
+    return amt;
+  }
+
+  /** 在同一房间内寻找满足条件、空闲的同伴，取最近的一只 */
+  findRoommate(a: Ant, pred: (b: Ant) => boolean): Ant | null {
+    if (a.domain !== 'nest' || a.room < 0) return null;
+    let best: Ant | null = null;
+    let bd = Infinity;
+    for (const b of this.ants) {
+      if (b === a || b.room !== a.room || b.domain !== 'nest' || b.holdT > 0 || b.role === 'queen' || b.carrying?.isBrood) continue;
+      if (!pred(b)) continue;
+      const d = b.pos.distanceToSquared(a.pos);
+      if (d < bd) {
+        bd = d;
+        best = b;
+      }
+    }
+    return best;
   }
 
   // ---------------- 生命周期 ----------------
@@ -399,9 +514,12 @@ export class Colony {
   update(dt: number): void {
     const days = dt / CONFIG.time.dayLength;
     const w = this.w;
+    this.tickN++;
     const queenFed = this.queen.hunger < 0.8 ? 1 : 0.3;
     this.eggCredit = Math.min(4, this.eggCredit + days * CONFIG.colony.eggsPerDay * queenFed);
+    this.spatial.rebuild(this.ants);
 
+    let liquid = 0;
     for (let i = this.ants.length - 1; i >= 0; i--) {
       const a = this.ants[i];
       a.ageDays += days;
@@ -424,13 +542,148 @@ export class Colony {
           this.kill(a, '在野外意外死亡');
           continue;
         }
+        // 错开检查，每只蚂蚁约每 8 步检查一次接触
+        if (((this.tickN + a.id) & 7) === 0) this.tryContact(a);
       }
       a.update(dt, w);
+      liquid += a.crop;
     }
+    this.liquidStock = liquid;
     this.updateBrood(days);
     this.updateStores(days);
     this.updateSurfaceItems(days);
+
+    this.reviewAcc += days;
+    if (this.reviewAcc >= CONFIG.polyethism.reviewDays) {
+      this.reviewAcc = 0;
+      this.reviewRoles();
+    }
+    this.climateAcc += days;
+    if (this.climateAcc >= 0.01) {
+      this.climateAcc = 0;
+      this.updateClimate();
+    }
+    this.sampleAcc += days;
+    if (this.sampleAcc >= 1 / 24) {
+      this.sampleAcc = 0;
+      this.sample();
+    }
+    this.expansion.update(days);
   }
+
+  // ---------------- 触角接触 ----------------
+
+  /** 相遇的两只工蚁停下来用触角互相碰触，交换气味信息 */
+  private tryContact(a: Ant): void {
+    const now = this.w.clock.seconds;
+    if (a.holdT > 0 || now < a.nextContactAt || !a.moving || a.climbing) return;
+    const p = a.pos;
+    const near = this.spatial.near(p.x, p.y, p.z, CONFIG.social.contactRadius, this.near, a);
+    for (const b of near) {
+      if (b.role === 'queen' || b.holdT > 0 || now < b.nextContactAt || b.domain !== a.domain || b.climbing) continue;
+      if (!rng.chance(0.5)) continue;
+      const t = rng.range(0.6, 1.3);
+      a.hold(t, b.pos);
+      b.hold(t, a.pos);
+      const [c0, c1] = CONFIG.social.contactCooldown;
+      a.nextContactAt = now + rng.range(c0, c1);
+      b.nextContactAt = now + rng.range(c0, c1);
+      a.contacts++;
+      b.contacts++;
+      this.stats.contacts++;
+      this.exchange(a, b, now);
+      this.exchange(b, a, now);
+      return;
+    }
+  }
+
+  /** 满载归来的觅食蚁通过接触激发巢内的觅食蚁出巢 */
+  private exchange(from: Ant, to: Ant, now: number): void {
+    if (from.layTrail <= 0 || to.role !== 'forager' || to.excitedUntil > now) return;
+    to.excitedUntil = now + 90;
+    to.note(this.w, `与满载归来的 #${from.id} 触角接触，被激发准备出巢`);
+  }
+
+  // ---------------- 分工调整 ----------------
+
+  /**
+   * 年龄多型性 + 按需调整：按幼体数量和食物储备计算各职别的需求，
+   * 再按“行为年龄”从小到大依次分配保育、内务、觅食。正向转换（年轻 → 年长的工作）随需发生，
+   * 逆向转换只在缺口明显时发生，且每次评估只转换一小部分工蚁。
+   */
+  reviewRoles(): void {
+    const P = CONFIG.polyethism;
+    const workers = this.ants.filter((a) => a.role !== 'queen');
+    const W = workers.length;
+    if (W === 0) return;
+    const bc = this.broodCounts();
+    const B = bc.egg + bc.larva + bc.pupa;
+    const nurseT = Math.round(clamp(P.nurseBase + B * P.nursePerBrood, 0.12 * W, 0.45 * W));
+    const need = W * 0.12 + bc.larva * 1.3;
+    const daysOfFood = this.reserve / Math.max(1, need);
+    const share = lerp(0.58, 0.4, smoothstep(0.5, 3, daysOfFood));
+    const forT = Math.round(Math.max(0, Math.min(W * share, W * 0.86 - nurseT)));
+    const maintT = W - nurseT - forT;
+    this.targets = { nurse: nurseT, maintenance: maintT, forager: forT };
+
+    workers.sort((a, b) => a.behaviorAge - b.behaviorAge);
+    const target: Record<Role, number> = { queen: 0, nurse: nurseT, maintenance: maintT, forager: forT };
+    const cur: Record<Role, number> = { queen: 0, nurse: 0, maintenance: 0, forager: 0 };
+    for (const a of workers) cur[a.nextRole ?? a.role]++;
+    const shortage = cur.forager < forT * 0.85;
+
+    let budget = Math.max(3, Math.round(W * P.maxShift));
+    let early = 0;
+    for (let i = 0; i < W && budget > 0; i++) {
+      const a = workers[i];
+      const want: Role = i < nurseT ? 'nurse' : i < nurseT + maintT ? 'maintenance' : 'forager';
+      const has = a.nextRole ?? a.role;
+      if (want === has) continue;
+      if (ROLE_ORDER[want] > ROLE_ORDER[has]) {
+        if (cur[has] <= target[has] || cur[want] >= target[want]) continue;
+      } else if (cur[want] > target[want] * 0.85 || cur[has] <= target[has]) continue;
+      a.nextRole = want === a.role ? null : want;
+      cur[has]--;
+      cur[want]++;
+      budget--;
+      if (want === 'forager' && shortage) early++;
+    }
+    const day = Math.floor(this.w.clock.totalDays);
+    if (early >= 5 && day !== this.lastShortageDay) {
+      this.lastShortageDay = day;
+      this.pushEvent('觅食蚁不足，较年轻的工蚁提前转为觅食蚁');
+    }
+  }
+
+  // ---------------- 幼体温度调节 ----------------
+
+  /** 蛹偏好 24–30°C：比较深层蛹室与石块下的向阳育幼室，温差明显时更换蛹的目标房间 */
+  updateClimate(): void {
+    const nest = this.w.nest;
+    const cands = [...nest.chamberOfType('pupa'), ...nest.chamberOfType('solar')];
+    if (cands.length < 2) return;
+    const score = (c: Chamber) => {
+      const t = this.w.chamberTemperature(c);
+      return t <= 30 ? t : 60 - t;
+    };
+    const cur = nest.chambers[this.pupaChamber];
+    let best = cur;
+    let bs = score(cur);
+    for (const c of cands) {
+      const s = score(c);
+      if (s > bs) {
+        bs = s;
+        best = c;
+      }
+    }
+    if (best === cur || bs < score(cur) + 1.2) return;
+    this.pupaChamber = best.id;
+    for (const arr of this.byChamber) for (const it of arr) if (it.type === 'pupa') it.wantsMove = it.chamber !== best.id;
+    const t = this.w.chamberTemperature(best).toFixed(1);
+    this.pushEvent(best.type === 'solar' ? `${best.name}升温到 ${t}°C，保育蚁开始把蛹搬上来` : `浅层降温，保育蚁把蛹搬回${best.name}（${t}°C）`);
+  }
+
+  // ---------------- 储食与幼体 ----------------
 
   /** 猎物碎块放久了会变质；种子的油质体吃完后，种子被当作垃圾丢弃 */
   private updateStores(days: number): void {
@@ -441,11 +694,9 @@ export class Colony {
         const it = arr[i];
         if (it.type !== 'food') continue;
         it.age += days;
-        const limit = it.foodKind === 'prey' ? 2.5 : it.foodKind === 'seed' ? 1.5 : 4;
+        const limit = it.foodKind === 'prey' ? 2.5 : 1.5;
         if (it.age <= limit || !it.free) continue;
-        // 甜液存放久了会干涸，不留残渣
-        if (it.foodKind === 'sugar') this.destroy(it);
-        else it.type = 'waste';
+        it.type = 'waste';
         changed = true;
       }
     }
@@ -471,7 +722,7 @@ export class Colony {
         it.stageAge = 0;
         it.hunger = 0.3;
         it.feeds = 0;
-        if (it.place === 'chamber') it.wantsMove = this.chamberType(it.chamber) !== 'larva';
+        if (it.place === 'chamber') it.wantsMove = !this.isHome(it, this.w.nest.chambers[it.chamber]);
       }
     } else if (it.type === 'larva') {
       it.hunger += days * 1.3;
@@ -479,14 +730,16 @@ export class Colony {
       if (it.stageAge >= B.larvaDays && it.feeds >= B.larvaFeedsNeeded) {
         it.type = 'pupa';
         it.stageAge = 0;
-        if (it.place === 'chamber') it.wantsMove = this.chamberType(it.chamber) !== 'pupa';
+        if (it.place === 'chamber') it.wantsMove = !this.isHome(it, this.w.nest.chambers[it.chamber]);
       } else if (it.hunger > 3.5 && it.place === 'chamber') {
         it.type = 'waste';
         it.wantsMove = false;
         this.pushEvent('一只幼虫因缺乏喂养死亡');
       }
     } else if (it.type === 'pupa') {
-      it.stageAge += days;
+      // 温暖处发育更快
+      const t = it.place === 'chamber' ? this.w.chamberTemperature(this.w.nest.chambers[it.chamber]) : 20;
+      it.stageAge += days * clamp(0.6 + (t - 16) * 0.05, 0.6, 1.3);
       if (it.stageAge >= B.pupaDays) {
         if (!it.ready) it.ready = true;
         it.readyTime += days;
@@ -506,6 +759,22 @@ export class Colony {
   }
 
   // ---------------- 统计 ----------------
+
+  private sample(): void {
+    const r = this.roleCounts();
+    const b = this.broodCounts();
+    this.history.push({
+      day: this.w.clock.totalDays,
+      nurse: r.nurse,
+      maintenance: r.maintenance,
+      forager: r.forager,
+      brood: b.egg + b.larva + b.pupa,
+      food: this.foodStock,
+      liquid: this.liquidStock,
+      outside: this.outsideCount(),
+    });
+    if (this.history.length > HISTORY_MAX) this.history.shift();
+  }
 
   roleCounts(): Record<Role, number> {
     const r: Record<Role, number> = { queen: 0, nurse: 0, maintenance: 0, forager: 0 };

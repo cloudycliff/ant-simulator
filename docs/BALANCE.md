@@ -1,11 +1,13 @@
 # 数值平衡
 
 蚁群经济由三部分组成：
-- **收入**：觅食蚁带回食物
+- **收入**：觅食蚁带回固体食物（猎物、种子）和液体（蜜露、花蜜，装在嗉囊里）
 - **消耗**：成虫进食、喂养幼虫和蚁后
-- **损耗**：储存的食物变质
+- **损耗**：储食室里的固体食物变质
 
-调整任何一项之后，都要跑 `npx tsx scripts/simtest.ts 3000`（5 个游戏日），确认储备不会单向漂移，人口也不会崩溃。
+储备 `reserve` = 储食室固体 + 社会胃（所有工蚁嗉囊之和）。饱食抑制和分工目标都看这个总量。
+
+调整任何一项之后，都要跑 `npx tsx scripts/simtest.ts 3000`（5 个游戏日），最好再跑 `6000`（10 天），确认储备不会单向漂移，人口也不会崩溃。
 
 ## 参数一览
 
@@ -32,6 +34,22 @@
 | `pheromone.trailHalfLife` | 90 | 路径信息素半衰期（秒） |
 | `pheromone.depositFood` | 1.0 | 返巢释放强度基数 |
 | `food.initialSources / spawnIntervalSec / maxSources` | 12 / 35 / 20 | 地表食物源 |
+| `world.stoneHeat / stoneHeatDepth` | 6 / 26 | 大石块正午对下方土壤的最大加温（°C），到该深度（cm）衰减为 0 |
+| `colony.initialCropShare` | 0.4 | 开局嗉囊里带甜液的工蚁比例 |
+| `polyethism.reviewDays` | 0.02 | 分工评估间隔（游戏日，约 12 秒） |
+| `polyethism.maxShift` | 0.02 | 每次评估最多转换的工蚁比例 |
+| `polyethism.ageJitterDays` | 4 | 行为年龄的个体偏移（标准差） |
+| `polyethism.nurseBase / nursePerBrood` | 50 / 1.1 | 保育蚁目标 = 50 + 1.1 × 幼体数，限制在工蚁的 12%–45% |
+| `social.shareAmount` | 0.3 | 每次交哺传递量（嗉囊容量 1） |
+| `social.contactRadius / contactCooldown` | 0.9 / 6–16 秒 | 触角接触距离与冷却 |
+| `aphid.colonies` | 6 | 蚜虫群数量（先占寄主植物，再选距巢 80 cm 内的植物） |
+| `aphid.initialCount / maxCount` | 16–36 / 80 | 每群初始与最大蚜虫数 |
+| `aphid.honeydewPerAphidDay / maxHoneydew` | 0.2 / 6 | 每只蚜虫每天产蜜露量、每群积存上限 |
+| `expansion.capacityPerArea` | 1.8 | 每单位地板面积（rx·rz）容纳的成虫 + 幼体 |
+| `expansion.trigger` | 0.88 | 占用率超过该值时规划新房间 |
+| `expansion.tunnelSoilPerUnit / chamberSoilPerArea` | 4 / 4 | 每 cm 隧道、每单位房间面积需要挖的土粒数 |
+| `expansion.maxDiggers / maxChambers` | 18 / 22 | 同时挖掘的内务蚁上限、房间总数上限 |
+| `pheromone.homeHalfLife / depositHome` | 900 / 0.03 | 领地足迹的半衰期（秒）与每秒沉积量 |
 
 ### 写在代码里的数值
 
@@ -43,8 +61,22 @@
 | `colony.ts` `update` | 产卵额度上限 4；蚁后饥饿度 ≥ 0.8 时产卵速度降为 30% | |
 | `colony.ts` `developBrood` | 幼虫饥饿每天增长 1.3；饥饿 ≥ 1 时发育减慢；饥饿大于 3.5 时死亡 | |
 | `colony.ts` `developBrood` | 蛹发育完成 0.5 天后若无保育蚁帮助则自行羽化 | |
-| `colony.ts` `updateStores` | 猎物 2.5 天、种子 1.5 天变成垃圾；甜液 4 天干涸 | |
-| `colony.ts` `takeFood` | 猎物/种子吃完时有 30% 概率留下残渣 | |
+| `colony.ts` `updateStores` | 猎物 2.5 天、种子 1.5 天变成垃圾 | 甜液不再进储食室，所以没有干涸规则 |
+| `colony.ts` `takeFood` | 吃完时有 30% 概率留下残渣 | |
+| `colony.ts` `reviewRoles` | 觅食蚁目标比例 = `lerp(0.58, 0.40, smoothstep(0.5, 3, 储备天数))`，且不超过 `86% − 保育蚁` | 储备天数 = 储备 / (工蚁 × 0.12 + 幼虫 × 1.3) |
+| `colony.ts` `reviewRoles` | 逆向转换只在目标职别低于目标 85% 时发生；觅食蚁低于目标 85% 时视为短缺 | |
+| `colony.ts` `tryContact` | 每 8 步检测一次；50% 概率发生接触；停顿 0.6–1.3 秒 | |
+| `colony.ts` `exchange` | 被满载同伴激发后 90 秒内：夜间留巢概率 0.6 → 0.3，饱食抑制 ×0.3 | |
+| `colony.ts` `updateClimate` | 每 0.01 天评估；蛹的评分以 30°C 为最佳；切换阈值 1.2°C | |
+| `colony.ts` `updateBrood` | 蛹发育速度系数 = `clamp(0.6 + (温度 − 16) × 0.05, 0.6, 1.3)` | |
+| `aphids.ts` `update` | 被照料（90 秒内有蚂蚁来过）增长率 0.35/天，否则 0.1/天并损失 0.08/天 | Logistic，上限 `maxCount` |
+| `routines.ts` `tendAphids` | 采集时停留 6–10 秒；蜜露少于 0.6 时守护 25–45 秒；返巢信息素强度 0.8 | |
+| `routines.ts` `pickHerd` | 有固定蚜虫群的觅食蚁 80% 回到该群；其他非侦察蚁 30% 按蜜露量挑一群 | |
+| `routines.ts` `eat` | 先喝自己嗉囊 → 60% 概率向同伴乞食 → 储食室 → 在储食室乞食 | |
+| `routines.ts` 内务蚁 | 有扩建项目时挖掘概率 0.45，否则 0.15 | |
+| `expansion.ts` | 每 0.05 天检查一次；挖隧道每粒土延长 0.25 cm；新房间锚定在深于 8 cm 的分岔点，距巢中心 40 cm 内 | |
+| `ant.ts` `stepSearch` | 侦察蚁前方足迹浓度大于 0.3 时转向足迹最少的方向；嗅到蚜虫群的距离 1.9 cm | |
+| `pheromone.ts` | 路径信息素单格上限 12，足迹上限 4 | |
 | `colony.ts` `dropOnMound` | 蚁丘土粒上限 1200 | |
 | `routines.ts` `wantsToEat` | 饥饿大于 0.6 时去进食；失败后冷却 30–60 秒 | |
 | `routines.ts` `eat` | 进食后饥饿减 0.85 | |
@@ -66,10 +98,14 @@
 | 第 3 版 | 加入饱食抑制 `(储备 − 180) / 250`；猎物和种子会变质 | 储备仍涨到约 1200 份（甜液不会变质） |
 | 第 4 版 | 甜液 4 天干涸；抑制改为 `(储备 − 100) / 150`，上限 0.95 | 储备 360–700 份，但巢外只有 60–100 只，太冷清 |
 | 第 5 版 | 抑制放宽到 `(储备 − 200) / 250`，上限 0.85 | 巢外 110–250 只，但储备又涨到约 1000 份 |
-| **当前** | 抑制取中间值 `(储备 − 150) / 200`，上限 0.9；初始储备 120 | 储备 560–900 份，巢外 90–180 只，人口 1001 → 1066 |
+| 第 6 版（第一阶段终版） | 抑制取中间值 `(储备 − 150) / 200`，上限 0.9；初始储备 120 | 储备 560–900 份，巢外 90–180 只，人口 1001 → 1066 |
+| 第 7 版（第二阶段初版） | 加入社会胃、按需分工、蚜虫、扩建；觅食蚁目标比例 `lerp(0.6, 0.42, smoothstep(1, 5, 储备天数))`，上限 `90% − 保育蚁` | 经济稳定，但内务蚁被压到约 12%；大量蚂蚁在去深层休息室的路上 |
+| **当前** | 觅食蚁目标改为 `lerp(0.58, 0.40, smoothstep(0.5, 3, 储备天数))`，上限改为 `86% − 保育蚁`（内务蚁至少 14%）；休息时在两间休息室中选近的；石块加温随深度衰减 | 10 天：人口 1001 → 1100，固体 230–620、社会胃 135–240，巢外 80–160 只，扩建 3 间 |
 
 ## 调参建议
 - **想让地表更热闹**：提高饱食抑制公式里的阈值（150），或者加快变质；代价是储食室堆积更多
 - **想让人口增长更快**：提高 `eggsPerDay` 或缩短发育期；人口受 `maxPopulation` 限制
 - **觅食效率不够**：先检查 `senseFoodRadius`、搜索超时和转向噪声，再考虑增加食物源
-- 第二阶段引入按日龄分工、交哺后，消耗结构会变化，需要重新校准本表
+- **想让蚁穴扩建更频繁**：降低 `expansion.capacityPerArea` 或 `trigger`；挖掘速度看 `maxDiggers` 和内务蚁的挖掘概率
+- **分工比例**：保育蚁看 `nurseBase / nursePerBrood`，觅食蚁看 `reviewRoles` 里的 58%–40% 区间
+- **蜜露太多 / 太少**：调 `aphid.honeydewPerAphidDay`；社会胃有嗉囊容量的天然上限，不会无限堆积

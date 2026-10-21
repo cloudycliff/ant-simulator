@@ -6,6 +6,9 @@ export const CONFIG = {
     size: 240,
     forageRadius: 112,
     terrainSegments: 220,
+    /** 大石块正午对下方土壤的最大加温（°C），随深度线性衰减到 stoneHeatDepth 处为 0 */
+    stoneHeat: 6,
+    stoneHeatDepth: 26,
   },
 
   time: {
@@ -25,6 +28,46 @@ export const CONFIG = {
     initialBrood: { egg: 50, larva: 70, pupa: 45 },
     eggsPerDay: 36,
     workerLifespanDays: [45, 90] as [number, number],
+    /** 开局时嗉囊里带有甜液的工蚁比例 */
+    initialCropShare: 0.4,
+  },
+
+  /** 按日龄分工（年龄多型性）与按需调整 */
+  polyethism: {
+    /** 每隔多少游戏日重新评估一次各职别需求 */
+    reviewDays: 0.02,
+    /** 每次评估最多转换的工蚁比例 */
+    maxShift: 0.02,
+    /** 个体“行为年龄”相对真实日龄的随机偏移（标准差，天） */
+    ageJitterDays: 4,
+    nurseBase: 50,
+    nursePerBrood: 1.1,
+  },
+
+  social: {
+    /** 每次交哺传递的液体量（嗉囊容量为 1） */
+    shareAmount: 0.3,
+    contactRadius: 0.9,
+    contactCooldown: [6, 16] as [number, number],
+  },
+
+  aphid: {
+    colonies: 6,
+    initialCount: [16, 36] as [number, number],
+    maxCount: 80,
+    honeydewPerAphidDay: 0.2,
+    maxHoneydew: 6,
+  },
+
+  expansion: {
+    /** 每单位房间地板面积（rx·rz）可容纳的成虫与幼体数 */
+    capacityPerArea: 1.8,
+    /** 占用率超过该值时规划新房间 */
+    trigger: 0.88,
+    tunnelSoilPerUnit: 4,
+    chamberSoilPerArea: 4,
+    maxDiggers: 18,
+    maxChambers: 22,
   },
 
   brood: {
@@ -48,6 +91,9 @@ export const CONFIG = {
     cellSize: 1,
     trailHalfLife: 90,
     depositFood: 1.0,
+    /** 工蚁足迹碳氢化合物（领地标记）的半衰期与每秒沉积量 */
+    homeHalfLife: 900,
+    depositHome: 0.03,
   },
 
   food: {

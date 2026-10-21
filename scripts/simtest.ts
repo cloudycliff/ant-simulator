@@ -25,14 +25,25 @@ while (simT < total) {
       const k = a.activity.replace(/#\d+/g, '#').replace(/\d+/g, 'n');
       acts.set(k, (acts.get(k) ?? 0) + 1);
     }
-    const top = [...acts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const top = [...acts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
     const bc = c.broodCounts();
+    const rc = c.roleCounts();
+    const t = c.targets;
+    const ex = c.expansion;
+    const p = ex.project;
+    const aph = world.aphids.colonies.map((x) => `${Math.round(x.count)}${x.discovered ? '*' : ''}/${x.honeydew.toFixed(1)}`).join(' ');
     let pher = 0;
+    let home = 0;
     for (const v of world.pheromone.trail) pher += v;
+    for (const v of world.pheromone.home) home += v;
     console.log(
-      `\n[${world.clock.stamp()}] ants=${c.ants.length} outside=${c.outsideCount()} food=${c.foodStock.toFixed(1)} ` +
-        `brood=${JSON.stringify(bc)} stats=${JSON.stringify(c.stats)} sources=${world.food.sources.length} pher=${pher.toFixed(0)} ` +
-        `queenHunger=${c.queen.hunger.toFixed(2)} avg tick=${(tickMs / ticks).toFixed(2)}ms`,
+      `\n[${world.clock.stamp()}] ants=${c.ants.length} outside=${c.outsideCount()} food=${c.foodStock.toFixed(1)} liquid=${c.liquidStock.toFixed(1)} ` +
+        `brood=${JSON.stringify(bc)} queenHunger=${c.queen.hunger.toFixed(2)} avg tick=${(tickMs / ticks).toFixed(2)}ms\n` +
+        `  roles N${rc.nurse}/${t.nurse} M${rc.maintenance}/${t.maintenance} F${rc.forager}/${t.forager}  ` +
+        `pupae@${world.nest.chambers[c.pupaChamber].name}  occupancy=${(ex.occupancy() * 100).toFixed(0)}% chambers=${world.nest.chambers.length} ` +
+        `project=${p ? `${p.type} tunnel ${p.face.len.toFixed(1)}/${p.face.full.length.toFixed(1)} soil ${p.soil}/${p.soilNeeded}` : '-'}\n` +
+        `  aphids ${aph}  sources=${world.food.sources.length} pher=${pher.toFixed(0)} home=${home.toFixed(0)}\n` +
+        `  stats=${JSON.stringify({ ...c.stats, honeydew: Math.round(c.stats.honeydew) })}`,
     );
     for (const [k, v] of top) console.log(`   ${v.toString().padStart(4)}  ${k}`);
     tickMs = 0;

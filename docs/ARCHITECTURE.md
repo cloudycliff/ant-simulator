@@ -3,7 +3,9 @@
 ## 目录结构
 
 ```
-index.html              页面骨架（各面板的容器）
+index.html              页面骨架（各面板的容器）；Vite 的源码模板，不能直接双击运行
+赛博养蚂蚁.html         构建生成的单文件发布版，双击即可运行（不要手改）
+vite.config.ts          构建配置；singleFile 插件把产物内联成单个 HTML，并复制到根目录
 src/
   main.ts               入口：创建渲染器、场景、各视图，处理按键与选择，驱动主循环
   config.ts             全局配置与常量（职别名称、颜色）；调参优先改这里
@@ -15,17 +17,20 @@ src/
     clock.ts            SimClock：游戏日、时刻、昼夜、土壤温湿度模型
     ant.ts              Ant：个体状态 + 运动层（执行指令）
     routines.ts         行为层：各职别的任务协程
-    colony.ts           Colony：种群、物品、幼体发育、食物储备、死亡、统计
+    colony.ts           Colony：种群、物品、幼体发育、食物储备、死亡、分工评估、接触、蛹的温度调节、统计历史
     items.ts            Item：卵/幼虫/蛹/食物/垃圾/土粒/尸体
+    spatial.ts          SpatialHash：每步重建的均匀网格，用于蚂蚁之间的近邻查询
+    expansion.ts        NestExpansion：拥挤度、规划新房间、分配挖掘工作面、推进隧道和房间的挖掘
   world/
-    world.ts            World：组装所有模拟子系统，按固定步长推进
+    world.ts            World：组装所有模拟子系统，按固定步长推进；房间温度（含石块加温）
     terrain.ts          解析式高度场、蚁丘、草被密度、地形网格
-    vegetation.ts       草（风动着色器）、石块、落叶、枯枝、植物；地表避障圆与空间网格
+    vegetation.ts       草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
     food.ts             食物源类型、生成、网格
-    pheromone.ts        信息素网格（沉积、挥发、采样）与热力图叠加层
+    aphids.ts           蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
+    pheromone.ts        信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
   nest/
-    nest.ts             蚁穴数据：节点、隧道、房间、入口；程序化生成；寻路
-    nestView.ts         蚁穴网格：背面渲染的房间与隧道、土壤剖面墙、入口洞口
+    nest.ts             蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
+    nestView.ts         蚁穴网格：背面渲染的房间与隧道、土壤剖面墙、入口洞口；每帧 sync 跟随蚁穴变化
   render/
     antView.ts          蚂蚁几何体、步态着色器、实例化更新、选中标记
     itemView.ts         物品的实例化渲染
@@ -33,7 +38,7 @@ src/
   ui/
     camera.ts           自由飞行 / 跟随相机、平滑飞向目标
     picking.ts          点选（蚂蚁屏幕空间 + 物体射线）
-    hud.ts              顶栏、蚁群概况、信息面板、事件列表、帮助
+    hud.ts              顶栏、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例
 scripts/
   simtest.ts            无界面模拟测试
   extract-shots.mjs     从浏览器捕获结果中提取截图
@@ -45,9 +50,10 @@ docs/                   本文档目录
 ```
 requestAnimationFrame
  ├─ world.advance(dt)           按倍速累积时间，按固定步长 1/30 秒逐步 tick
- │    └─ tick: clock → colony.update → food.update → pheromone.update
+ │    └─ tick: clock → colony.update → food.update → aphids.update → pheromone.update
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
+ ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
  ├─ antView / itemView.update   把模拟状态写进实例矩阵
  ├─ env.update                  光照随时刻变化，阴影跟随视点
  ├─ 每 0.4 秒刷新信息素热力图（开启时）
@@ -58,11 +64,24 @@ requestAnimationFrame
 ## 模拟层
 
 ### Colony.update(dt) 的顺序
-1. 蚁后的产卵额度按 `eggsPerDay × 饱食系数` 累积
-2. 逐只蚂蚁：增加日龄和饥饿 → 判断死亡（衰老、饥饿、地表意外）→ `ant.update`
-3. 幼体发育（`updateBrood`）
-4. 储食变质（`updateStores`）
-5. 地表物品分解（`updateSurfaceItems`）
+1. 重建空间哈希（`spatial.rebuild`）
+2. 蚁后的产卵额度按 `eggsPerDay × 饱食系数` 累积
+3. 逐只蚂蚁：增加日龄和饥饿 → 判断死亡（衰老、饥饿、地表意外）→ `ant.update` → 每 8 步一次接触检测（`tryContact`）；同时累加社会胃
+4. 幼体发育（`updateBrood`，蛹的速度受房间温度影响）
+5. 储食变质（`updateStores`）
+6. 地表物品分解（`updateSurfaceItems`）
+7. 定时任务：分工评估（每 0.02 天）、蛹的房间选择（每 0.01 天）、统计采样（每游戏小时，最多 1440 个点）、扩建（每 0.05 天）
+
+### 分工与社会胃
+- `Colony.reviewRoles` 计算 `targets`，按行为年龄给工蚁设置 `nextRole`；`newRoutine` 在开始下一项任务前应用它（`applyRole`）
+- 液体只存在 `Ant.crop`。交哺统一走 `Colony.share(from, to, amount)`；`findRoommate` 找同房间里可交哺的同伴
+- 交哺和触角接触时双方调用 `Ant.hold(t, 目标点)`：停顿并转向对方，期间 `update` 直接返回
+
+### 蚁穴的动态结构
+- **工作面** `DigFace`：`full` 是规划好的完整路径，`edge` 是已经挖出的一段，`node` 是末端节点。`Nest.growFace` 截断路径、移动末端节点、`edge.rev++` 并重算寻路
+- **房间**：`Nest.openChamber` 把工作面末端变成新房间的门；`ready = false` 的房间不参与 `chamberOfType` / `chamberAt`，`grow` 控制视图缩放
+- **重建**：`Nest.rev` 在节点或房间增减时递增；`NestView.sync` 比较 rev，只重建变化的隧道网格，必要时按新的包围盒重建土壤剖面墙
+- **规划**：`NestExpansion.plan` 用 `Nest.isClear` 检查新房间不与已有结构重叠，并在 `nest.reserved` 里占位，避免两个项目抢同一块地
 
 ### 蚂蚁的两层结构
 
@@ -77,6 +96,7 @@ requestAnimationFrame
 | `search {time}` | 地表觅食搜索；返回找到的食物源，超时返回 `null` |
 | `walk {x, z, r}` | 地表走到某点 |
 | `patrol {x, z, radius, time}` | 在某点周围巡逻 |
+| `climb {x, z, angle, r, top, stay}` | 走到植物茎秆旁，沿茎秆爬到 `top` 高度停留 `stay` 秒，再爬下来 |
 | `wait {time}` | 原地停留 |
 
 **行为层**（`routines.ts`）。每个职别一个入口协程，按优先级（带随机性）选择一项任务：
@@ -84,9 +104,11 @@ requestAnimationFrame
 | 职别 | 任务优先级 |
 |---|---|
 | 蚁后 | 在蚁后室漫游 → 有产卵额度时产卵 |
-| 保育蚁 | 进食 → 把蚁后室的卵搬到卵室 → 帮助待羽化的蛹破茧 → 搬运需要换房间的幼体 → 喂蚁后 → 喂饥饿的幼虫 → 侍奉蚁后（18%）/ 清洁幼体 |
-| 内务蚁 | 进食 → 搬尸体到巢外垃圾堆 → 把其他房间的垃圾搬进垃圾室 → 垃圾室满 4 份后运出巢外 → 挖掘（45%）/ 白天在入口警戒（25%）/ 巡视房间 |
-| 觅食蚁 | 进食（仅在储备大于 1 份时）→ 夜间或地表低于 8°C 时休息 → 储备充足时留巢 → 出巢搜索 → 取食 → 返巢释放信息素 → 存入储食室 |
+| 保育蚁 | 进食 → 把蚁后室的卵搬到卵室 → 帮助待羽化的蛹破茧 → 搬运需要换房间的幼体（含蛹在蛹室与向阳育幼室之间搬运）→ 喂蚁后 → 喂饥饿的幼虫（嗉囊不足时先乞食）→ 侍奉蚁后（18%）/ 清洁幼体 |
+| 内务蚁 | 进食 → 搬尸体到巢外垃圾堆 → 把其他房间的垃圾搬进垃圾室 → 垃圾室满 4 份后运出巢外 → 嗉囊满时分发甜液 → 挖掘（有扩建项目 45%，否则 15%）/ 白天在入口警戒（25%）/ 巡视房间 |
+| 觅食蚁 | 进食（储备大于 3 份或自己嗉囊有甜液时）→ 把嗉囊里的甜液分给同伴 → 夜间或地表低于 8°C 时休息 → 储备充足时留巢 → 放牧蚜虫（有固定蚜虫群时）→ 出巢搜索 → 取食或爬上蚜虫植物 → 返巢释放信息素 → 固体存入储食室，液体分给巢内同伴 |
+
+进食顺序：自己的嗉囊 → 向同房间的同伴乞食（60%）→ 储食室的固体 → 在储食室向同伴乞食 → 失败则冷却后继续工作。
 
 ### 物品的位置状态（`Item.place`）
 
@@ -96,9 +118,10 @@ requestAnimationFrame
 
 ### 蚁穴生成（`Nest.generate`）
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm
-- 房间按 `specs` 表挂在分岔点上（类型、所在分岔点、方向角、距离、尺寸）。房间是底部被压平的椭球，门开在地板边缘、朝向分岔点
-- 侧入口接到第二个分岔点；另有 3 条盲端隧道作为挖掘工作面
-- 开局用 Floyd 算法算出所有节点对之间的下一跳（`nextHop`）
+- 房间按 `specs` 表挂在分岔点上（类型、所在分岔点、方向角、距离、尺寸）。房间是底部被压平的椭球，门开在地板边缘、朝向分岔点。最后一行是第一个分岔点旁、大石块下的向阳育幼室
+- 侧入口接到第二个分岔点；另有 3 条盲端隧道作为挖掘工作面（`DigFace`，开局已挖出一段，之后会继续延长）
+- 用 Floyd 算法算出所有节点对之间的下一跳（`nextHop`）；节点增减或移动后重算
+- 生成后，`World` 把距离半径大于 3 的石块 3 cm 以内的房间标记为 `underStone`
 
 ## 渲染层要点
 - **地下透视**：`Terrain.setXray` 让地表变透明；`NestView.setXray` 切换蚁穴与地表洞口的可见性；`AntView`、`ItemView` 的 `xray` 决定是否显示巢内的蚂蚁和物品
@@ -122,6 +145,8 @@ requestAnimationFrame
 1. 在 `ChamberType` 和 `CHAMBER_INFO` 中补充
 2. 在 `Nest.generate` 的 `specs` 里加一行，并在 `nestView.ts` 的 `CHAMBER_TINT` 里设颜色
 3. 注意同一深度的房间方向角至少相差约 90°，否则会重叠
+4. 想让扩建也能生成这种房间：在 `NestExpansion.plan` 的类型选择里加入
+5. 运行中新增的房间要调用 `Colony.ensureChamberSlots`（扩建流程已处理）
 
 **新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充。
 
@@ -133,22 +158,28 @@ requestAnimationFrame
 ```
 npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 ```
-每 1/8 进度输出一次：人口、巢外数量、储备、幼体数、累计统计、信息素总量、平均每步耗时，以及当前最常见的 10 种行为。第一行的每步耗时包含 JIT 预热，偏高属于正常。
+每 1/8 进度输出一次：人口、巢外数量、储食室与社会胃、幼体数、各职别实际/目标人数、蛹的位置、拥挤度、房间数、扩建进度、每个蚜虫群（数量、`*` 表示已被发现、积存蜜露）、两种信息素总量、累计统计、平均每步耗时，以及当前最常见的 12 种行为。第一行的每步耗时包含 JIT 预热，偏高属于正常。
+
+在 PowerShell 里重定向输出会变成 UTF-16 乱码，用 `cmd /c "npx tsx scripts/simtest.ts 6000 > shots\simtest.txt"` 保留 UTF-8。
 
 ### 截图验证
 1. 启动开发服务器：`npm run dev`
 2. 用无头 Chrome（Agent 环境下用 `rea` 工具的 `capture_browser_scenario`）打开页面，配合 URL 参数定位视角，按键用 `press` 动作，截图选 `at_end: ["screenshot"]`
 3. 每次只截一张图，多张截图会超出工具的返回上限
 4. 提取图片：`node scripts/extract-shots.mjs <捕获结果文件> shots/名称`（`shots/` 已加入 .gitignore）
+5. 无头 Chrome 用软件渲染，帧率很低：等 `#loading` 消失后再等 8–10 秒，否则界面面板可能还没刷新。用了 `skip` 时加载本身也要十几秒
 
 常用视角：
 
 | 用途 | URL |
 |---|---|
-| 俯瞰全巢（需按 `X`） | `?cam=60,12,45,0,-38,0` |
+| 俯瞰全巢（扩建中） | `?cam=-50,6,-55,0,-36,0&view=xray&skip=1500` |
 | 蚁后室特写（自动透视） | `?cam=11,-41,-4,1.9,-50,-14` |
+| 向阳育幼室与蛹（中午） | `?select=chamber:10&fly=1&view=xray&hour=15&skip=900` |
+| 蚜虫植物面板 + 统计曲线 | `?select=plant:0&fly=1&view=stats&hour=11&skip=1200` |
+| 爬茎的觅食蚁特写 | `?cam=-7,10,33,-15,6,26&view=roles&hour=11&skip=1300` |
 | 跟随蚁后 | `?select=ant:1&follow=1` |
-| 高空看信息素（需按 `P`） | `?cam=0,75,70,0,0,-5` |
+| 高空看信息素 | `?cam=0,150,95,0,0,-10&view=pheromone&hour=12&skip=1200` |
 | 夜景 | `?hour=21.5` |
 
 房间坐标由固定种子决定。改动生成代码后，可以用下面的命令重新打印：
