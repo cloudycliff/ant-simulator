@@ -270,7 +270,6 @@ export class NestView {
       col.copy(a.c).lerp(b.c, t);
       const grain = this.noise.noise(x * 1.3 + y * 0.7, z * 1.3 - y * 0.5);
       col.multiplyScalar(0.88 + grain * 0.3);
-      if (grain > 0.42) col.lerp(new THREE.Color(0x9a9286), 0.6);
       return col;
     };
 

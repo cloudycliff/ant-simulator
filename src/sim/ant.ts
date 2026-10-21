@@ -99,6 +99,14 @@ export class Ant {
   private edgeFrom = -1;
   private edgeS = 0;
   private lane = rng.range(-0.15, 0.75);
+  /** 隧道里为避开同伴而偏离 lane 的横向距离（隧道半径的倍数） */
+  private side = 0;
+  /** Colony.separate 的临时量：沿边坐标、横向坐标、横向推力 */
+  sepS = 0;
+  sepLat = 0;
+  sepPush = 0;
+  /** 个体步速差异：同时出发的同伴不会一直并排走 */
+  private pace = rng.range(0.88, 1.12);
   private localTarget = new THREE.Vector3();
   private navTarget = new THREE.Vector3();
   private pauseT = 0;
@@ -457,7 +465,7 @@ export class Ant {
   // ---------------- 巢内运动 ----------------
 
   private nestSpeed(w: World): number {
-    return CONFIG.ant.speedNest * this.speedFactor(w);
+    return CONFIG.ant.speedNest * this.pace * this.speedFactor(w);
   }
 
   private stepGoto(dt: number, w: World, target: number): boolean {
@@ -506,7 +514,7 @@ export class Ant {
     this.navTarget
       .copy(_c)
       .addScaledVector(_f, e.radius * 0.66)
-      .addScaledVector(_l, this.lane * e.radius * 0.42);
+      .addScaledVector(_l, this.laneOffset() * e.radius);
     this.fwd.lerp(_t, 0.35).normalize();
     this.up.lerp(_f.negate(), 0.25).normalize();
   }
@@ -526,6 +534,78 @@ export class Ant {
     this.moving = true;
     this.gait += step * 9;
     return false;
+  }
+
+  private laneOffset(): number {
+    return clamp(this.lane * 0.42 + this.side, -0.55, 0.55);
+  }
+
+  /** 在隧道里时写入 sepS（从 edge.a 量起的沿边坐标）和 sepLat（不随行进方向翻转的横向坐标） */
+  measureTunnel(): void {
+    const e = this.edge!;
+    const dir = this.edgeFrom === e.a ? 1 : -1;
+    this.sepS = dir > 0 ? this.edgeS : e.length - this.edgeS;
+    this.sepLat = dir * this.laneOffset() * e.radius;
+    this.sepPush = 0;
+  }
+
+  /** 按 sepPush（横向坐标上的推力）往旁边让；没有推力时慢慢回到自己的 lane */
+  shiftSide(dt: number): void {
+    const e = this.edge!;
+    if (this.sepPush !== 0) {
+      const dir = this.edgeFrom === e.a ? 1 : -1;
+      this.side = clamp(this.side + (dir * this.sepPush * 0.5) / e.radius, -0.8, 0.8);
+    } else this.side -= this.side * Math.min(1, dt * 0.5);
+  }
+
+  /**
+   * 地表和房间里与 near 中的同伴互相推开，dt 是两次调用的间隔。走动中的只轻推，保证能走到目标点。
+   * 隧道里的避让见 Colony.separate。
+   */
+  avoid(w: World, near: Ant[], dt: number): void {
+    if (this.climbing || this.pitT > 0 || (this.domain === 'nest' && this.room < 0)) return;
+    const R = CONFIG.ant.personalSpace;
+    let px = 0;
+    let pz = 0;
+    for (const b of near) {
+      if (b.domain !== this.domain || b.climbing) continue;
+      const queen = b.role === 'queen';
+      const min = R * (queen ? 1 + CONFIG.ant.queenScale : 2);
+      const dx = this.pos.x - b.pos.x;
+      const dy = this.pos.y - b.pos.y;
+      const dz = this.pos.z - b.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= min * min) continue;
+      const k = (min - Math.sqrt(d2)) * (queen ? 1 : 0.5);
+      const dh = Math.hypot(dx, dz);
+      if (dh < 1e-3) {
+        const a = this.id * 2.39996;
+        px += Math.cos(a) * k;
+        pz += Math.sin(a) * k;
+      } else {
+        px += (dx / dh) * k;
+        pz += (dz / dh) * k;
+      }
+    }
+    const len = Math.hypot(px, pz);
+    if (len < 1e-4) return;
+    const cap = (this.moving ? 0.18 : 0.6) * dt;
+    if (len > cap) {
+      px *= cap / len;
+      pz *= cap / len;
+    }
+    const nx = this.pos.x + px;
+    const nz = this.pos.z + pz;
+    if (this.domain === 'surface') {
+      if (w.veg.obstacleAt(nx, nz, 0.3, true) || Math.hypot(nx, nz) > CONFIG.world.forageRadius) return;
+      this.pos.set(nx, w.terrain.heightAt(nx, nz) + w.predators.liftAt(nx, nz), nz);
+    } else {
+      if (!w.nest.insideFloor(w.nest.chambers[this.room], nx, nz, 0.8)) return;
+      this.pos.x = nx;
+      this.pos.z = nz;
+      this.navTarget.x += px;
+      this.navTarget.z += pz;
+    }
   }
 
   private smoothNest(dt: number): void {

@@ -61,6 +61,7 @@ export interface ColonySave {
 
 const ROLE_ORDER: Record<Role, number> = { queen: -1, nurse: 0, maintenance: 1, forager: 2 };
 const HISTORY_MAX = 24 * 60;
+const bySepS = (a: Ant, b: Ant) => a.sepS - b.sepS;
 
 export class Colony {
   ants: Ant[] = [];
@@ -96,7 +97,8 @@ export class Colony {
   history: ColonySample[] = [];
   /** 新出生/死亡等事件，供 UI 做提示 */
   events: { t: string; msg: string }[] = [];
-  readonly spatial = new SpatialHash(2);
+  readonly spatial = new SpatialHash(1);
+  private edgeGroups = new Map<number, Ant[]>();
   expansion: NestExpansion;
 
   private tickN = 0;
@@ -633,6 +635,7 @@ export class Colony {
       liquid += a.crop;
     }
     this.liquidStock = liquid;
+    this.separate(dt);
     this.updateBrood(days);
     this.updateStores(days);
     this.updateSurfaceItems(days);
@@ -655,6 +658,46 @@ export class Colony {
     this.expansion.update(days);
   }
 
+  /**
+   * 让工蚁和身边的同伴保持间距。隧道里按所在的边分组、按沿边位置排序，只比较前后 tunnelGap 以内的同伴，
+   * 挨得太近就各自横向让开（每 3 步一次）；地表和房间里每步轮换检查六分之一的工蚁，用空间哈希找邻居互相推开。
+   */
+  private separate(dt: number): void {
+    const t = this.tickN;
+    if (t % 3 === 0) {
+      for (const g of this.edgeGroups.values()) g.length = 0;
+      for (const a of this.ants) {
+        if (!a.edge || a.domain !== 'nest') continue;
+        a.measureTunnel();
+        let g = this.edgeGroups.get(a.edge.id);
+        if (!g) this.edgeGroups.set(a.edge.id, (g = []));
+        g.push(a);
+      }
+      const gap = CONFIG.ant.tunnelGap;
+      for (const g of this.edgeGroups.values()) {
+        if (g.length > 1) g.sort(bySepS);
+        for (let i = 0; i < g.length; i++) {
+          const a = g[i];
+          for (let j = i + 1; j < g.length && g[j].sepS - a.sepS < gap; j++) {
+            const b = g[j];
+            const d = a.sepLat - b.sepLat;
+            const over = 0.4 - Math.abs(d);
+            if (over <= 0) continue;
+            const s = d > 0.02 ? 1 : d < -0.02 ? -1 : a.id < b.id ? 1 : -1;
+            a.sepPush += s * over;
+            b.sepPush -= s * over;
+          }
+        }
+        for (const a of g) a.shiftSide(dt * 3);
+      }
+    }
+    const phase = t % 6;
+    for (const a of this.ants) {
+      if (a.edge || a.role === 'queen' || (a.id + phase) % 6 !== 0 || a.climbing) continue;
+      if (a.domain === 'nest' && a.room < 0) continue;
+      a.avoid(this.w, this.spatial.near(a.pos.x, a.pos.y, a.pos.z, 0.7, this.near, a), dt * 6);
+    }
+  }
   // ---------------- 触角接触 ----------------
 
   /** 相遇的两只工蚁停下来用触角互相碰触，交换气味信息 */

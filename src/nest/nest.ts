@@ -507,6 +507,17 @@ export class Nest {
     return out.set(c.floor.x + lx * cy - lz * sy, c.floor.y, c.floor.z + lx * sy + lz * cy);
   }
 
+  /** (x, z) 是否在房间地板椭圆的 margin 倍以内 */
+  insideFloor(c: Chamber, x: number, z: number, margin: number): boolean {
+    const dx = x - c.floor.x;
+    const dz = z - c.floor.z;
+    const cy = Math.cos(c.yaw);
+    const sy = Math.sin(c.yaw);
+    const lx = (dx * cy + dz * sy) / c.rx;
+    const lz = (-dx * sy + dz * cy) / c.rz;
+    return lx * lx + lz * lz <= margin * margin;
+  }
+
   /** 判断世界坐标点落在哪个房间内（用于统计与信息面板） */
   chamberAt(p: THREE.Vector3): Chamber | null {
     for (const c of this.chambers) {

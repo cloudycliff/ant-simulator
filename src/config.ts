@@ -84,6 +84,10 @@ export const CONFIG = {
     queenScale: 2.1,
     /** 离相机超过该距离的工蚁改用简化网格且不投影（此时在 720p 画面上约 20 像素长） */
     lodDistance: 35,
+    /** 地表和房间里两只工蚁中心至少相隔 2 倍该值（蚁后按体型放大） */
+    personalSpace: 0.32,
+    /** 隧道里前后相距不到该值、左右不到 0.4 的同伴算挨得太近，各自横向让开 */
+    tunnelGap: 0.9,
     speedSurface: 3.2,
     speedNest: 2.4,
     hungerPerDay: 0.4,

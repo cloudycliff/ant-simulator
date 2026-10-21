@@ -26,6 +26,18 @@ for (const p of parts) {
   };
 }
 
+/** 身体明显重叠（中心距 < 0.45 cm）的蚂蚁对数，按地表 / 巢内分开 */
+function overlaps(): string {
+  const near: typeof w.colony.ants = [];
+  const n = { surface: 0, nest: 0 };
+  for (const a of w.colony.ants) {
+    if (a.climbing) continue;
+    for (const b of w.colony.spatial.near(a.pos.x, a.pos.y, a.pos.z, 0.45, near, a))
+      if (b.id > a.id && b.domain === a.domain && !b.climbing) n[a.domain]++;
+  }
+  return `重叠 地表 ${n.surface} / 巢内 ${n.nest}`;
+}
+
 const step = CONFIG.time.fixedStep;
 const steps = Math.round(secs / step);
 let worst = 0;
@@ -42,7 +54,7 @@ for (let i = 0; i < steps; i++) {
   }
   if (i > 0 && i % Math.round(60 / step) === 0) {
     const el = performance.now() - s0;
-    console.log(`${(i * step).toFixed(0)}s ${w.clock.stamp()} 蚂蚁 ${w.colony.ants.length} 巢外 ${w.colony.outsideCount()} 平均每步 ${(el / i).toFixed(2)} ms`);
+    console.log(`${(i * step).toFixed(0)}s ${w.clock.stamp()} 蚂蚁 ${w.colony.ants.length} 巢外 ${w.colony.outsideCount()} 平均每步 ${(el / i).toFixed(2)} ms ${overlaps()}`);
   }
 }
 const total = performance.now() - s0;

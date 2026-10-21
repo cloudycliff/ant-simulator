@@ -82,10 +82,11 @@ requestAnimationFrame
 1. 重建空间哈希（`spatial.rebuild`）
 2. 蚁后的产卵额度按 `eggsPerDay × 饱食系数` 累积
 3. 逐只蚂蚁：增加日龄和饥饿 → 判断死亡（衰老、饥饿；被捕食由 `PredatorManager` 结算）→ `ant.update` → 每 8 步一次接触检测（`tryContact`）；同时累加社会胃
-4. 幼体发育（`updateBrood`，蛹的速度受房间温度影响）
-5. 储食变质（`updateStores`）
-6. 地表物品分解（`updateSurfaceItems`）
-7. 定时任务：分工评估（每 0.02 天）、蛹的房间选择（每 0.01 天）、统计采样（每游戏小时，最多 1440 个点）、扩建（每 0.05 天）
+4. 保持间距（`separate`，DECISIONS T-032）：隧道里每 3 步按边分组排序、横向让开（`Ant.measureTunnel` / `shiftSide`）；地表和房间里每步轮换六分之一的工蚁，用空间哈希找邻居互相推开（`Ant.avoid`）
+5. 幼体发育（`updateBrood`，蛹的速度受房间温度影响）
+6. 储食变质（`updateStores`）
+7. 地表物品分解（`updateSurfaceItems`）
+8. 定时任务：分工评估（每 0.02 天）、蛹的房间选择（每 0.01 天）、统计采样（每游戏小时，最多 1440 个点）、扩建（每 0.05 天）
 
 ### 分工与社会胃
 - `Colony.reviewRoles` 计算 `targets`，按行为年龄给工蚁设置 `nextRole`；`newRoutine` 在开始下一项任务前应用它（`applyRole`）
