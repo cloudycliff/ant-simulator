@@ -12,7 +12,8 @@ export type Selection =
   | { kind: 'stone' }
   | { kind: 'plant'; id: number }
   | { kind: 'placed'; id: number }
-  | { kind: 'puddle'; id: number };
+  | { kind: 'puddle'; id: number }
+  | { kind: 'predator'; id: number };
 
 const _v = new THREE.Vector3();
 const _o = new THREE.Vector3();

@@ -27,6 +27,7 @@ src/
     vegetation.ts       草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
     food.ts             食物源类型、生成、网格
     aphids.ts           蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
+    predators.ts        天敌：狼蛛（游荡、扑击、进食、离开的状态机）与蚁狮陷阱（松沙区、坑底捕食）；网格与存档
     water.ts            玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
     save.ts             存档：组装各子系统的 toSave / restore，版本与种子检查
     pheromone.ts        信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
@@ -56,10 +57,11 @@ docs/                   本文档目录
 ```
 requestAnimationFrame
  ├─ world.advance(dt)           按倍速累积时间，按固定步长 1/30 秒逐步 tick
- │    └─ tick: clock → colony.update → food.update → aphids.update → water.update → pheromone.update
+ │    └─ tick: clock → colony.update → predators.update → food.update → aphids.update → water.update → pheromone.update
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
  ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
+ ├─ predators.sync              狼蛛位置与腿部动画、蚁狮大颚与猎物
  ├─ antView / itemView.update   把模拟状态写进实例矩阵
  ├─ env.update                  光照随时刻变化，阴影跟随视点
  ├─ 每 0.4 秒刷新信息素热力图（开启时）
@@ -72,7 +74,7 @@ requestAnimationFrame
 ### Colony.update(dt) 的顺序
 1. 重建空间哈希（`spatial.rebuild`）
 2. 蚁后的产卵额度按 `eggsPerDay × 饱食系数` 累积
-3. 逐只蚂蚁：增加日龄和饥饿 → 判断死亡（衰老、饥饿、地表意外）→ `ant.update` → 每 8 步一次接触检测（`tryContact`）；同时累加社会胃
+3. 逐只蚂蚁：增加日龄和饥饿 → 判断死亡（衰老、饥饿；被捕食由 `PredatorManager` 结算）→ `ant.update` → 每 8 步一次接触检测（`tryContact`）；同时累加社会胃
 4. 幼体发育（`updateBrood`，蛹的速度受房间温度影响）
 5. 储食变质（`updateStores`）
 6. 地表物品分解（`updateSurfaceItems`）
@@ -124,15 +126,17 @@ requestAnimationFrame
 
 ### 玩家干预（`World` 的干预方法）
 
-`dropFood`、`placeObstacle`、`removeObstacle`、`removePlacedById`、`pourWater` 都返回 `ToolResult {ok, msg}`，成功时把 `msg` 记进蚁群事件。传 `dry = true` 只做检查不改动世界，界面用它决定预览圈的颜色。合法性检查集中在 `World.checkSpot`：活动范围、离入口的距离、与石块 / 植物 / 水洼 / 食物是否重叠。
+`dropFood`、`placeObstacle`、`removeObstacle`、`removePlacedById`、`pourWater`、`placePredator`、`removePredator`、`removePredatorById` 都返回 `ToolResult {ok, msg}`，成功时把 `msg` 记进蚁群事件。传 `dry = true` 只做检查不改动世界，界面用它决定预览圈的颜色。合法性检查集中在 `World.checkSpot`：活动范围、离入口的距离、与石块 / 植物 / 水洼 / 食物是否重叠。
 
 界面层（`ToolController`）只负责选工具和给出地面点，不直接改世界。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
+
+天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `Ant.surfaceMove` 里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
 
 地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `Ant.surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
 
 ### 存档（`world/save.ts`）
 
-页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
+页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
 
 ### 蚁穴生成（`Nest.generate`）
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm
@@ -168,7 +172,7 @@ requestAnimationFrame
 
 **新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充；想让玩家能投放，再加进 `PLACEABLE_FOOD`。
 
-**新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上（或新增一对方法并在 `world/save.ts` 中调用）；结构不兼容时把 `SAVE_VERSION` 加 1。用 `npx tsx scripts/savetest.ts` 检查读档前后指标一致。
+**新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上（或新增一对方法并在 `world/save.ts` 中调用）；结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时可以像 `predators` 那样设为可选字段，旧存档缺这一项就沿用新世界的初始状态。用 `npx tsx scripts/savetest.ts` 检查读档前后指标一致。
 
 **新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在 `ToolController.apply` / `hover` 里调用。
 

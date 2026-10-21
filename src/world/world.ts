@@ -8,6 +8,7 @@ import { Colony } from '../sim/colony';
 import { AphidManager } from './aphids';
 import { FoodManager, SOURCE_INFO, type FoodSourceType } from './food';
 import { PheromoneField } from './pheromone';
+import { PREDATOR_INFO, PredatorManager, Spider, type Predator, type PredatorKind } from './predators';
 import { Terrain } from './terrain';
 import { OBSTACLE_INFO, Vegetation, type PlaceableObstacle } from './vegetation';
 import { WaterManager } from './water';
@@ -31,6 +32,7 @@ export class World {
   readonly aphids: AphidManager;
   readonly pheromone: PheromoneField;
   readonly water: WaterManager;
+  readonly predators: PredatorManager;
   readonly colony: Colony;
   private acc = 0;
   /** 最近一帧实际执行的模拟步数（性能面板用） */
@@ -53,6 +55,7 @@ export class World {
     this.aphids = new AphidManager(this.veg, this.rng);
     this.pheromone = new PheromoneField(this.terrain);
     this.water = new WaterManager(this.terrain, this.veg, this.pheromone);
+    this.predators = new PredatorManager(this.terrain, this.veg, this.rng);
     this.colony = new Colony(this);
     this.colony.init();
   }
@@ -134,6 +137,50 @@ export class World {
     return { ok: true, msg };
   }
 
+  placePredator(kind: PredatorKind, x: number, z: number, dry = false): ToolResult {
+    const P = CONFIG.predators;
+    const name = PREDATOR_INFO[kind].name;
+    if (kind === 'spider') {
+      if (this.predators.spiders.length >= P.maxSpiders) return { ok: false, msg: '狼蛛已经够多了' };
+      const err = this.checkSpot(x, z, 1, false);
+      if (err) return { ok: false, msg: err };
+      if (this.veg.obstacleAt(x, z, 1, true)) return { ok: false, msg: '这里被石块或植物占着' };
+      if (dry) return { ok: true, msg: '' };
+      this.predators.addSpider(x, z, Math.atan2(-z, -x), true);
+    } else {
+      if (this.predators.antlions.filter((p) => p.placed).length >= P.maxPlacedAntlions) return { ok: false, msg: '放入的蚁狮太多了，先移除一些' };
+      const err = this.checkSpot(x, z, P.pitRadius, true);
+      if (err) return { ok: false, msg: err };
+      if (this.predators.antlions.some((p) => Math.hypot(p.x - x, p.z - z) < P.pitRadius * 2.5)) return { ok: false, msg: '离另一个蚁狮陷阱太近' };
+      if (this.water.at(x, z)) return { ok: false, msg: '蚁狮只在干燥的地面挖坑' };
+      if (dry) return { ok: true, msg: '' };
+      this.predators.addAntlion(x, z, true);
+    }
+    const msg = `你在${this.describePlace(x, z)}放入了一只${name}`;
+    this.colony.pushEvent(msg);
+    return { ok: true, msg };
+  }
+
+  removePredator(x: number, z: number, dry = false): ToolResult {
+    const p = this.predators.near(x, z, CONFIG.predators.pitRadius + 1);
+    if (!p) return { ok: false, msg: '这里没有天敌' };
+    if (dry) return { ok: true, msg: '' };
+    return this.dismissPredator(p);
+  }
+
+  removePredatorById(id: number): ToolResult {
+    const p = this.predators.byId(id);
+    if (!p) return { ok: false, msg: '它已经不在了' };
+    return this.dismissPredator(p);
+  }
+
+  private dismissPredator(p: Predator): ToolResult {
+    this.predators.remove(p);
+    const msg = p instanceof Spider ? '赶走了狼蛛' : '填平了蚁狮的陷阱';
+    this.colony.pushEvent(msg);
+    return { ok: true, msg };
+  }
+
   /** 房间温度：土壤温度随深度变化；石块下方的房间白天额外吸热升温 */
   chamberTemperature(c: Chamber): number {
     const t = this.clock.temperatureAt(c.depth);
@@ -165,6 +212,7 @@ export class World {
   private tick(dt: number): void {
     this.clock.seconds += dt;
     this.colony.update(dt);
+    this.predators.update(dt, this);
     this.food.update(dt);
     this.aphids.update(dt, this.clock.seconds);
     this.water.update(dt, this.clock);

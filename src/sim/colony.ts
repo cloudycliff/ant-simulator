@@ -22,6 +22,8 @@ export interface ColonyStats {
   trophallaxis: number;
   contacts: number;
   roleChanges: number;
+  /** 被天敌捕食 */
+  preyed: number;
 }
 
 /** 每游戏小时记录一次，供统计曲线使用 */
@@ -86,6 +88,7 @@ export class Colony {
     trophallaxis: 0,
     contacts: 0,
     roleChanges: 0,
+    preyed: 0,
   };
   history: ColonySample[] = [];
   /** 新出生/死亡等事件，供 UI 做提示 */
@@ -231,7 +234,7 @@ export class Colony {
     this.eggCredit = s.eggCredit;
     this.queenTender = -1;
     this.targets = s.targets;
-    this.stats = s.stats;
+    this.stats = { ...this.stats, ...s.stats };
     this.history = s.history;
     this.events = s.events;
     this.expansion.restore(s.expansion);
@@ -547,16 +550,19 @@ export class Colony {
     return ant;
   }
 
-  kill(ant: Ant, cause: string): void {
+  /** leaveCorpse 为 false 时尸体由调用方处理（被天敌吃掉，之后才留下空壳） */
+  kill(ant: Ant, cause: string, leaveCorpse = true): void {
     if (!ant.alive || ant.role === 'queen') return;
     ant.alive = false;
     ant.activity = `已死亡（${cause}）`;
     ant.note(this.w, `死亡：${cause}`);
     for (const it of this.items) if (it.claimedBy === ant.id && it.carriedBy !== ant.id) it.claimedBy = -1;
     const carried = this.release(ant);
-    const corpse = new Item('corpse');
-    corpse.yaw = Math.atan2(ant.fwd.z, ant.fwd.x);
-    this.placeAtAnt(ant, corpse);
+    if (leaveCorpse) {
+      const corpse = new Item('corpse');
+      corpse.yaw = Math.atan2(ant.fwd.z, ant.fwd.x);
+      this.placeAtAnt(ant, corpse);
+    }
     if (carried) {
       if (carried.place === 'carried' && carried.type !== 'food') this.placeAtAnt(ant, carried);
       else this.destroy(carried);
@@ -603,10 +609,6 @@ export class Colony {
         }
         if (a.health <= 0) {
           this.kill(a, '饥饿');
-          continue;
-        }
-        if (a.domain === 'surface' && rng.chance(days * 0.03)) {
-          this.kill(a, '在野外意外死亡');
           continue;
         }
         // 错开检查，每只蚂蚁约每 8 步检查一次接触

@@ -55,6 +55,14 @@
 | `intervention.waterDays` | 0.25 | 水洼在约 20°C 时完全蒸发所需的游戏日；越冷越慢（见下表） |
 | `intervention.washTrail / washHome` | 0.05 / 0.3 | 浇水时浇到的地方信息素保留的比例（路径 / 足迹） |
 | `save.autosaveSec` | 60 | 自动保存间隔（现实秒数）；切到后台和关闭页面时也会保存 |
+| `predators.spiderPerDay / maxNaturalSpiders` | 1.2 / 2 | 平均每天游荡进来的狼蛛数、同时存在的自然狼蛛上限 |
+| `predators.spiderStayDays / spiderMeals` | 0.4–0.8 / 3 | 狼蛛停留的游戏日；吃够 3 只提前离开（玩家放入的不限时，吃够也会离开） |
+| `predators.spiderSense / spiderTrailTurn` | 7 / 1.5 | 发现蚂蚁的距离（cm）；游荡时朝足迹浓的一侧转向的角速度（rad/s） |
+| `predators.spiderWalk / spiderRush` | 2.2 / 6 | 游荡、扑击速度（cm/s，乘温度系数） |
+| `predators.spiderCatch / spiderRushTime / spiderFeedSec` | 0.6 / 3.5 / 90 | 扑到身边时的捕获概率；扑击超时（秒）；进食时长（秒） |
+| `predators.antlions / pitRadius` | 3 / 2.6 | 开局的蚁狮陷阱数（距巢 18–75 cm、草少的地面）；陷阱半径（cm） |
+| `predators.pitPull / antlionFeedSec` | 2.2 / 240 | 坑壁把蚂蚁往中心拉的速度（cm/s）；蚁狮进食时长（秒） |
+| `predators.maxSpiders / maxPlacedAntlions` | 4 / 8 | 狼蛛总数上限、玩家放入的蚁狮上限 |
 
 ### 写在代码里的数值
 
@@ -62,7 +70,6 @@
 |---|---|---|
 | `colony.ts` `update` | 饥饿系数：蚁后 1.4、觅食蚁 1.15、其他 0.85 | |
 | `colony.ts` `update` | 饥饿到 1 后健康每天下降 0.35；吃饱时每天恢复 0.4 | 饥饿到死约需 3 天 |
-| `colony.ts` `update` | 地表意外死亡率每天 3% | 第三阶段由天敌取代 |
 | `colony.ts` `update` | 产卵额度上限 4；蚁后饥饿度 ≥ 0.8 时产卵速度降为 30% | |
 | `colony.ts` `developBrood` | 幼虫饥饿每天增长 1.3；饥饿 ≥ 1 时发育减慢；饥饿大于 3.5 时死亡 | |
 | `colony.ts` `developBrood` | 蛹发育完成 0.5 天后若无保育蚁帮助则自行羽化 | |
@@ -97,6 +104,9 @@
 | `ant.ts` `skirt` | 沿障碍物边缘绕行，选定的方向保持 1.5 秒；连续 3 秒没有走出 3 cm 就换另一边 | 防止在凹角里来回摆动 |
 | `vegetation.ts` `OBSTACLE_INFO` | 小石子半径 1.6、大石块 4；树枝路障长 18、由间距 0.9 的半径 0.5 圆串成 | |
 | `clock.ts` | 地表平均温度 19°C，日较差 ±9°C，阻尼深度 12 cm | |
+| `predators.ts` 狼蛛 | 游荡中每秒 6% 概率停下 4–12 秒；游荡目标点距巢 12–70 cm，朝目标转向 0.6 rad/s；扑空后停 2–5 秒；离开时速度 ×1.6，90 秒内没走出去就直接消失 | 停得太多时狼蛛到不了蚂蚁密集的内圈 |
+| `predators.ts` 蚁狮 | 蚂蚁离坑中心 0.77 cm 内被抓；进食期间坑壁拉力 ×0.35；空壳甩到坑外 0.8 cm | |
+| `ant.ts` `surfaceMove` | 在陷阱里速度 ×0.4；拉力 = `pitPull × (0.4 + 0.6 × (1 − r / 半径))`；进坑 0.6 秒后转身往外爬 | 平常温度下约 70% 半径以内就爬不出来 |
 
 ## 调参历史
 

@@ -128,6 +128,8 @@ export class Ant {
   holdT = 0;
   /** 被水洼挡住的累计时间，超过阈值后蹚水通过 */
   wadeT = 0;
+  /** 在蚁狮陷阱里的时间 */
+  pitT = 0;
   private avoidSign = 1;
   private avoidT = 0;
   private blockedT = 0;
@@ -533,9 +535,25 @@ export class Ant {
       this.heading += clamp(d, -turnRate * dt, turnRate * dt);
     }
     const wetHere = w.water.at(this.pos.x, this.pos.z);
-    const step = CONFIG.ant.speedSurface * this.speedFactor(w) * speedMul * (wetHere ? 0.35 : 1) * dt;
-    let nx = this.pos.x + Math.cos(this.heading) * step;
-    let nz = this.pos.z + Math.sin(this.heading) * step;
+    const pit = w.predators.pitAt(this.pos.x, this.pos.z);
+    let pdx = 0;
+    let pdz = 0;
+    let pull = 0;
+    if (pit) {
+      // 坑壁的松沙让蚂蚁往中心滑，越靠中心越陡；发觉打滑后拼命往坑外爬。蚁狮进食时不再扬沙，坑壁滑得慢
+      const P = CONFIG.predators;
+      pdx = this.pos.x - pit.x;
+      pdz = this.pos.z - pit.z;
+      const r = Math.hypot(pdx, pdz) || 0.01;
+      pdx /= r;
+      pdz /= r;
+      pull = P.pitPull * (pit.feedT > 0 ? 0.35 : 1) * (0.4 + 0.6 * (1 - r / P.pitRadius)) * dt;
+      this.pitT += dt;
+      if (this.pitT > 0.6) this.heading = Math.atan2(pdz, pdx) + (((this.id * 0.618) % 1) - 0.5) * 0.8;
+    } else this.pitT = 0;
+    const step = CONFIG.ant.speedSurface * this.speedFactor(w) * speedMul * (wetHere ? 0.35 : 1) * (pit ? 0.4 : 1) * dt;
+    let nx = this.pos.x + Math.cos(this.heading) * step - pdx * pull;
+    let nz = this.pos.z + Math.sin(this.heading) * step - pdz * pull;
     // 水洼是软障碍：先沿边缘绕行，被挡住几秒（目标在水里、或水洼盖住入口）就蹚水过去
     this.trackBlocked(dt);
     this.avoidT -= dt;
@@ -566,7 +584,7 @@ export class Ant {
       this.heading = Math.atan2(-this.pos.z, -this.pos.x) + rng.range(-0.6, 0.6);
       return;
     }
-    this.pos.set(nx, w.terrain.heightAt(nx, nz), nz);
+    this.pos.set(nx, w.terrain.heightAt(nx, nz) + w.predators.liftAt(nx, nz), nz);
     w.pheromone.depositHome(nx, nz, CONFIG.pheromone.depositHome * dt);
     w.terrain.normalAt(nx, nz, _n);
     this.up.lerp(_n, 0.2).normalize();

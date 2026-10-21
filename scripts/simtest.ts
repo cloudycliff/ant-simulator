@@ -43,6 +43,7 @@ while (simT < total) {
         `pupae@${world.nest.chambers[c.pupaChamber].name}  occupancy=${(ex.occupancy() * 100).toFixed(0)}% chambers=${world.nest.chambers.length} ` +
         `project=${p ? `${p.type} tunnel ${p.face.len.toFixed(1)}/${p.face.full.length.toFixed(1)} soil ${p.soil}/${p.soilNeeded}` : '-'}\n` +
         `  aphids ${aph}  sources=${world.food.sources.length} pher=${pher.toFixed(0)} home=${home.toFixed(0)}\n` +
+        `  spiders=${world.predators.spiders.map((s) => `${s.state}/${s.caught}`).join(' ') || '-'} antlions=${world.predators.antlions.map((p) => p.caught).join(' ')}\n` +
         `  stats=${JSON.stringify({ ...c.stats, honeydew: Math.round(c.stats.honeydew) })}`,
     );
     for (const [k, v] of top) console.log(`   ${v.toString().padStart(4)}  ${k}`);

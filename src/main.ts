@@ -54,7 +54,7 @@ async function boot(): Promise<void> {
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);
   for (let t = 0; t < skip; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
-  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group);
+  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group, world.predators.group);
 
   const nestView = new NestView(world.nest, world.terrain);
   nestView.build();
@@ -78,7 +78,7 @@ async function boot(): Promise<void> {
 
   const picker = new Picker(world, camera, renderer.domElement, antView, {
     chambers: nestView.chamberMeshes,
-    surface: [world.food.group, nestView.surfaceGroup, world.veg.placedGroup, world.water.group, ...world.veg.group.children.filter((o) => o.userData.pick)],
+    surface: [world.food.group, nestView.surfaceGroup, world.veg.placedGroup, world.water.group, world.predators.group, ...world.veg.group.children.filter((o) => o.userData.pick)],
     terrain: world.terrain.mesh,
   });
   const hud = new Hud(world);
@@ -133,6 +133,10 @@ async function boot(): Promise<void> {
         const p = world.veg.plants[sel.id];
         const ac = world.aphids.byPlant(sel.id);
         return p ? new THREE.Vector3(p.x, ac ? ac.bandLo : p.baseY + 4, p.z) : null;
+      }
+      case 'predator': {
+        const p = world.predators.byId(sel.id);
+        return p ? new THREE.Vector3(p.x, world.terrain.heightAt(p.x, p.z) + 1, p.z) : null;
       }
       default:
         return null;
@@ -256,6 +260,12 @@ async function boot(): Promise<void> {
         if (r.ok) select(null);
         break;
       }
+      case 'removePredator': {
+        const r = world.removePredatorById(v ?? -1);
+        hud.toast(r.msg);
+        if (r.ok) select(null);
+        break;
+      }
       case 'savePanel':
         hud.saveOpen = !hud.saveOpen;
         hud.saveMeta = readMeta();
@@ -332,6 +342,8 @@ async function boot(): Promise<void> {
         return action('tool', 1);
       case 'Digit8':
         return action('tool', 2);
+      case 'Digit9':
+        return action('tool', 3);
       case 'KeyR':
         tools.rotate();
         return;
@@ -421,6 +433,7 @@ async function boot(): Promise<void> {
     if (tools.active >= 0) tools.hover(mouse ? picker.groundPoint(mouse.x, mouse.y, groundPt) : null);
     world.veg.update(time);
     world.aphids.sync();
+    world.predators.sync(time);
     nestView.sync();
     antView.update(time);
     itemView.update();

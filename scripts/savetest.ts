@@ -30,6 +30,7 @@ function metrics(w: World): Record<string, string | number> {
     pheromone: Math.round(pher),
     placed: w.veg.placed.length,
     puddles: w.water.puddles.length,
+    predators: `${w.predators.spiders.map((s) => s.state).join(',')} / ${w.predators.antlions.map((p) => `${p.caught}${p.feedT > 0 ? '*' : ''}`).join(',')}`,
     stats: JSON.stringify(c.stats),
   };
 }

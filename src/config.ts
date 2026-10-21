@@ -116,6 +116,35 @@ export const CONFIG = {
     washHome: 0.3,
   },
 
+  /** 天敌 */
+  predators: {
+    /** 平均每个游戏日游荡进活动范围的狼蛛数；同时最多 maxNaturalSpiders 只 */
+    spiderPerDay: 1.2,
+    maxNaturalSpiders: 2,
+    /** 狼蛛停留的游戏日（吃够 spiderMeals 只也会离开） */
+    spiderStayDays: [0.4, 0.8] as [number, number],
+    spiderMeals: 3,
+    /** 发现蚂蚁的距离（cm） */
+    spiderSense: 7,
+    /** 游荡时朝蚂蚁来往多的一侧转向的角速度（rad/s） */
+    spiderTrailTurn: 1.5,
+    /** 游荡 / 扑击速度（cm/s，随温度变化） */
+    spiderWalk: 2.2,
+    spiderRush: 6,
+    /** 扑到蚂蚁身边时的捕获概率；扑击超过 rushTime 秒就放弃 */
+    spiderCatch: 0.6,
+    spiderRushTime: 3.5,
+    spiderFeedSec: 90,
+    /** 开局的蚁狮陷阱数 */
+    antlions: 3,
+    pitRadius: 2.6,
+    /** 坑壁把蚂蚁往中心拉的速度（cm/s），越靠中心越陡 */
+    pitPull: 2.2,
+    antlionFeedSec: 240,
+    maxSpiders: 4,
+    maxPlacedAntlions: 8,
+  },
+
   save: {
     /** 自动保存间隔（现实秒数） */
     autosaveSec: 60,

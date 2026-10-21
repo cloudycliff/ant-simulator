@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { PLACEABLE_FOOD, SOURCE_INFO } from '../world/food';
+import { PREDATOR_INFO, type PredatorKind } from '../world/predators';
 import { OBSTACLE_INFO, type PlaceableObstacle } from '../world/vegetation';
 import type { ToolResult, World } from '../world/world';
 
-export type ToolKind = 'food' | 'obstacle' | 'water';
+export type ToolKind = 'food' | 'obstacle' | 'water' | 'predator';
 
 export interface ToolOption {
   label: string;
@@ -22,6 +23,7 @@ export interface ToolDef {
 }
 
 const OBSTACLES: (PlaceableObstacle | 'remove')[] = ['pebble', 'rock', 'twig', 'remove'];
+const PREDATORS: (PredatorKind | 'remove')[] = ['spider', 'antlion', 'remove'];
 
 export const TOOLS: ToolDef[] = [
   {
@@ -47,12 +49,21 @@ export const TOOLS: ToolDef[] = [
     hint: '单击地面浇水。水会冲掉信息素，形成的水洼会慢慢蒸发',
     options: CONFIG.intervention.waterRadius.map((r, i) => ({ label: i === 0 ? '一点水' : '一大杯水', radius: r })),
   },
+  {
+    kind: 'predator',
+    name: '天敌',
+    key: '9',
+    hint: '单击地面放入。狼蛛在地表游猎，蚁狮挖坑等蚂蚁滑进去；也可以赶走它们',
+    options: PREDATORS.map((k) =>
+      k === 'remove' ? { label: '赶走', radius: CONFIG.predators.pitRadius + 1 } : { label: PREDATOR_INFO[k].name, radius: k === 'spider' ? 1.5 : CONFIG.predators.pitRadius },
+    ),
+  },
 ];
 
 /** 玩家工具：当前选择、地面预览、执行。实际改动全部通过 World 的干预方法完成 */
 export class ToolController {
   active = -1;
-  option = [0, 0, 0];
+  option = TOOLS.map(() => 0);
   yaw = 0;
   readonly preview = new THREE.Group();
   private ring: THREE.Mesh;
@@ -130,6 +141,10 @@ export class ToolController {
     const i = this.option[this.active];
     if (d.kind === 'food') return w.dropFood(PLACEABLE_FOOD[i], p.x, p.z, dry);
     if (d.kind === 'water') return w.pourWater(p.x, p.z, i === 1, dry);
+    if (d.kind === 'predator') {
+      const k = PREDATORS[i];
+      return k === 'remove' ? w.removePredator(p.x, p.z, dry) : w.placePredator(k, p.x, p.z, dry);
+    }
     const k = OBSTACLES[i];
     return k === 'remove' ? w.removeObstacle(p.x, p.z, dry) : w.placeObstacle(k, p.x, p.z, this.yaw, dry);
   }

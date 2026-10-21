@@ -1,6 +1,7 @@
-import { ROLE_COLORS, ROLE_NAMES, type Role } from '../config';
+import { CONFIG, ROLE_COLORS, ROLE_NAMES, type Role } from '../config';
 import { CHAMBER_INFO } from '../nest/nest';
 import { FOOD_KIND_NAMES } from '../world/food';
+import { PREDATOR_INFO, Spider, type SpiderState } from '../world/predators';
 import { ITEM_NAMES } from '../sim/items';
 import type { ColonySample } from '../sim/colony';
 import { OBSTACLE_INFO } from '../world/vegetation';
@@ -32,12 +33,21 @@ export type HudAction =
   | 'toolopt'
   | 'toolexit'
   | 'removePlaced'
+  | 'removePredator'
   | 'savePanel'
   | 'saveNow'
   | 'loadSave'
   | 'newGame';
 
 const SPEEDS = [1, 2, 5, 10, 20];
+
+const SPIDER_STATE: Record<SpiderState, string> = {
+  wander: '四处游荡，寻找猎物',
+  pause: '伏地不动，感知振动',
+  chase: '正在扑向一只蚂蚁',
+  feed: '正在进食',
+  leave: '吃饱了，正在离开',
+};
 
 function bar(v: number, color: string): string {
   const p = Math.round(Math.max(0, Math.min(1, v)) * 100);
@@ -202,7 +212,7 @@ export class Hud {
       <div>左键单击 选择蚂蚁/房间/食物/植物　双击 飞到目标</div>
       <div><kbd>F</kbd> 跟随选中的蚂蚁　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续</div>
       <div><kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线</div>
-      <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水（重复按切换选项，<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）</div>`;
+      <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水　<kbd>9</kbd> 天敌（重复按切换选项，<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）</div>`;
     this.statsEl.innerHTML = `
       <canvas id="chart-pop"></canvas>
       <canvas id="chart-food"></canvas>`;
@@ -397,6 +407,7 @@ export class Hud {
         <span>采集蜜露</span><b>${st.honeydew.toFixed(0)}</b><span>交哺</span><b>${st.trophallaxis}</b>
         <span>运出垃圾</span><b>${st.wasteRemoved}</b><span>挖出土粒</span><b>${st.soilExcavated}</b>
         <span>分工转换</span><b>${st.roleChanges}</b><span>触角接触</span><b>${st.contacts >= 10000 ? (st.contacts / 1000).toFixed(0) + 'k' : st.contacts}</b>
+        <span>被天敌捕食</span><b>${st.preyed}</b>
       </div>`;
   }
 
@@ -448,8 +459,28 @@ export class Hud {
           : '<h2>水洼</h2><p class="desc">已经蒸发、渗进土里了。</p>';
         break;
       }
+      case 'predator':
+        html = this.predatorInfo(sel.id);
+        break;
     }
     this.infoEl.innerHTML = html + `<div class="actions"><button data-a="deselect">取消选择 <kbd>Esc</kbd></button></div>`;
+  }
+
+  private predatorInfo(id: number): string {
+    const p = this.world.predators.byId(id);
+    if (!p) return '<h2>天敌</h2><p class="desc">它已经离开了。</p>';
+    const info = PREDATOR_INFO[p.kind];
+    const tag = p.placed ? '<span class="tag next">你放入的</span>' : '';
+    let state: string;
+    let extra = '';
+    if (p instanceof Spider) {
+      state = SPIDER_STATE[p.state];
+      extra = `<span>还能再吃</span><b>${Math.max(0, CONFIG.predators.spiderMeals - p.meals)} 只</b>`;
+    } else state = p.feedT > 0 ? `正在进食（还要 ${Math.ceil(p.feedT)} 秒）` : '埋在坑底等待';
+    return `<h2>${info.name}${tag}</h2>
+      <p class="desc">${info.desc}</p>
+      <div class="kv"><span>状态</span><b>${state}</b><span>已捕食</span><b>${p.caught} 只</b>${extra}</div>
+      <div class="actions"><button data-a="removePredator" data-v="${p.id}">${p instanceof Spider ? '赶走' : '填平陷阱'}</button></div>`;
   }
 
   private antInfo(id: number): string {
