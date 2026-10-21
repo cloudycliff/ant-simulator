@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import { clamp } from '../util/math';
+import { clamp, smoothstep } from '../util/math';
 import type { Rng } from '../util/random';
 import type { World } from './world';
 
@@ -49,6 +49,13 @@ export class WeatherSystem {
     return this.phase !== 'clear' || this.wetness > CONFIG.weather.reopenWet;
   }
 
+  /** 雨后地面还湿的程度 0..1：入口已重开、但非侦察的觅食蚁按这个比例留巢 */
+  get damp(): number {
+    const W = CONFIG.weather;
+    if (this.phase !== 'clear') return 1;
+    return clamp((this.wetness - W.dryWet) / (W.reopenWet - W.dryWet), 0, 1);
+  }
+
   get label(): string {
     if (this.phase === 'rain') return this.strength > 0.75 ? '大雨' : '小雨';
     if (this.phase === 'overcast') return '转阴';
@@ -57,7 +64,7 @@ export class WeatherSystem {
 
   startRain(w: World): void {
     if (this.phase === 'clear') this.setPhase('overcast', w);
-    this.phaseT = Math.min(this.phaseT, 8);
+    this.phaseT = Math.min(this.phaseT, CONFIG.weather.calledOvercastSec);
   }
 
   update(dt: number, w: World): void {
@@ -134,11 +141,12 @@ export class WeatherSystem {
     const W = CONFIG.weather;
     const ents = w.nest.entrances;
     const open = ents.reduce((s, e) => s + (1 - e.plug), 0) / Math.max(1, ents.length);
+    const runoff = smoothstep(W.runoffWet[0], W.runoffWet[1], this.wetness);
     for (const c of w.nest.chambers) {
       if (!c.ready) continue;
       const before = c.wet;
       const depthK = Math.max(0, 1 - c.depth / W.floodDepth);
-      c.wet = clamp(c.wet + (this.rain * open * W.floodRate * depthK - W.drainRate) * dt, 0, 1);
+      c.wet = clamp(c.wet + (this.rain * runoff * open * W.floodRate * depthK - W.drainRate) * dt, 0, 1);
       if (before < W.floodedAt && c.wet >= W.floodedAt) {
         w.colony.pushEvent(`雨水从入口灌进来，${c.name}进水了`);
         w.colony.updateClimate();

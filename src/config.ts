@@ -204,8 +204,9 @@ export const CONFIG = {
     rainPerDay: 0.6,
     /** 第一个游戏日不自然下雨，先让玩家看清晴天的蚁群 */
     firstRainDay: 1,
-    /** 下雨前转阴的秒数；一场雨的游戏日长度；雨势范围 */
+    /** 下雨前转阴的秒数（玩家招来的雨用 calledOvercastSec）；一场雨的游戏日长度；雨势范围 */
     overcastSec: 25,
+    calledOvercastSec: 20,
     rainDays: [0.1, 0.25] as [number, number],
     rainStrength: [0.45, 1] as [number, number],
     /** 下雨时地表降温（°C，乘云量） */
@@ -218,14 +219,17 @@ export const CONFIG = {
     puddleRadius: [2.5, 5] as [number, number],
     /** 大雨下地面湿透需要的秒数；放晴后约 20°C 时晾干需要的秒数 */
     soakSec: 40,
-    drySec: 240,
+    drySec: 180,
     /** 雨中地表移动减速比例 */
     rainSlow: 0.4,
-    /** 雨停后地面湿润度低于该值才清开入口、恢复出巢 */
-    reopenWet: 0.45,
+    /** 雨停后地面湿润度低于 reopenWet 才清开入口、恢复出巢；低于 dryWet 前非侦察觅食蚁按比例留巢 */
+    reopenWet: 0.7,
+    dryWet: 0.4,
     /** 每次封堵 / 清开改变的封堵程度；同时在一个入口干活的内务蚁上限 */
-    plugPerLoad: 0.2,
-    maxPluggers: 4,
+    plugPerLoad: 0.25,
+    maxPluggers: 6,
+    /** 地面湿润度在此区间内，地表径流从无到满，雨水才会从入口灌进来 */
+    runoffWet: [0.2, 0.6] as [number, number],
     /** 入口未封堵时雨水灌入浅层房间：深度小于 floodDepth（cm）的房间，每秒进水量，每秒渗干量 */
     floodDepth: 14,
     floodRate: 0.09,

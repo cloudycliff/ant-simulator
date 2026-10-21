@@ -437,10 +437,12 @@ function* plugEntrance(a: Ant, w: World, job: PlugJob): Routine {
   a.activity = job.open ? `雨停了，前往${e.name}清开封土` : `要下雨了，前往${e.name}封堵入口`;
   yield { k: 'goto', node: e.node };
   a.activity = job.open ? `把堵在${e.name}的土粒搬开` : `用土粒一层层堵住${e.name}`;
-  yield { k: 'wait', time: rng.range(3, 5) };
+  do {
+    yield { k: 'wait', time: rng.range(3, 5) };
+    w.weather.workPlug(job, w);
+    a.note(w, job.open ? `清开了${e.name}的一部分封土` : `往${e.name}填了一层土`);
+  } while (job.open === (w.weather.phase === 'clear') && (job.open ? e.plug > 0 : e.plug < 1));
   a.plugging = -1;
-  w.weather.workPlug(job, w);
-  a.note(w, job.open ? `清开了${e.name}的一部分封土` : `往${e.name}填了一层土`);
 }
 
 /** 蚂蚁所在的巢内节点；在地表时取最近的入口 */
@@ -488,7 +490,15 @@ function* carryOut(a: Ant, w: World, it: Item, label: string): Routine {
   }
   col.pickUp(a, it);
   a.activity = label;
-  if (a.domain === 'nest') yield { k: 'exit' };
+  if (a.domain === 'nest' && (yield { k: 'exit', giveUp: true }) === 'blocked') {
+    const wc = chamber(w, 'waste');
+    a.activity = `入口封住了，先把${ITEM_NAMES[it.type]}放回${wc.name}`;
+    yield { k: 'room', chamber: wc.id, time: 1 };
+    const d = col.release(a);
+    if (d) col.addToChamber(d, wc);
+    a.note(w, `入口封住了，把${ITEM_NAMES[it.type]}暂放在${wc.name}`);
+    return;
+  }
   const m = col.midden;
   yield { k: 'walk', x: m.x + rng.range(-1.5, 1.5), z: m.z + rng.range(-1.5, 1.5), r: 1.2 };
   const d = col.release(a);
@@ -530,7 +540,14 @@ function* dig(a: Ant, w: World): Routine {
   col.pickUp(a, soil);
   col.stats.soilExcavated++;
   a.activity = '把土粒运出巢外';
-  yield { k: 'exit' };
+  if ((yield { k: 'exit', giveUp: true }) === 'blocked') {
+    a.activity = '入口封住了，把土粒压实在隧道壁上';
+    yield { k: 'wait', time: rng.range(2, 3) };
+    const d = col.release(a);
+    if (d) col.destroy(d);
+    a.note(w, '入口封住了，把土粒压在隧道壁上');
+    return;
+  }
   const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
   const ang = rng.range(0, TAU);
   yield { k: 'walk', x: ent.x + Math.cos(ang) * 3, z: ent.z + Math.sin(ang) * 3, r: 0.8 };
@@ -625,7 +642,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   if (a.domain === 'nest' && rng.chance(satiation)) {
     if (a.crop > 0.6 && rng.chance(0.4)) return yield* distributeCrop(a, w);
     const L = CONFIG.loiter;
-    const calm = !w.clock.isNight && !w.weather.keepIn && w.predators.threatEntrance < 0 && surfaceT >= L.minTemp;
+    const calm = !w.clock.isNight && w.weather.damp === 0 && w.predators.threatEntrance < 0 && surfaceT >= L.minTemp;
     if (calm && rng.chance(L.chance)) return yield* loiter(a, w);
     return yield* rest(a, w, '食物储备充足，留在巢内待命');
   }
@@ -634,6 +651,8 @@ function* foragerRoutine(a: Ant, w: World): Routine {
     const P = w.weather.phase;
     return yield* rest(a, w, P === 'rain' ? '外面在下雨，留在巢内' : P === 'overcast' ? '天色阴沉，留在巢内' : '地面还湿，等晾干再出巢');
   }
+  // 雨后入口刚清开：侦察蚁先出去，其余觅食蚁随地面变干陆续出巢
+  if (a.domain === 'nest' && !a.scout && rng.chance(w.weather.damp)) return yield* rest(a, w, '地面还有点湿，等侦察蚁先出去看看');
 
   if (a.domain === 'nest' && w.predators.threatEntrance >= 0 && rng.chance(CONFIG.defense.holdBackProb)) {
     return yield* rest(a, w, '巢口附近有狼蛛，暂时留在巢内');

@@ -10,7 +10,8 @@ import type { Item } from './items';
 export type Command =
   | { k: 'goto'; node: number }
   | { k: 'room'; chamber: number; time: number; point?: THREE.Vector3 }
-  | { k: 'exit' }
+  /** giveUp：所有入口都被封住时不再等待，指令以结果 'blocked' 结束 */
+  | { k: 'exit'; giveUp?: boolean }
   | { k: 'enter' }
   | { k: 'search'; time: number }
   | { k: 'walk'; x: number; z: number; r: number }
@@ -444,7 +445,7 @@ export class Ant {
       case 'room':
         return this.stepRoom(dt, w, cmd, first);
       case 'exit':
-        return this.stepExit(dt, w, first);
+        return this.stepExit(dt, w, first, cmd.giveUp === true);
       case 'enter':
         return this.stepEnter(dt, w, first);
       case 'search':
@@ -642,7 +643,7 @@ export class Ant {
     return this.timer <= 0 && !cmd.point;
   }
 
-  private stepExit(dt: number, w: World, first: boolean): boolean {
+  private stepExit(dt: number, w: World, first: boolean, giveUp: boolean): boolean {
     if (this.domain === 'surface') return true;
     if (first) {
       const from = this.currentNode(w);
@@ -663,7 +664,10 @@ export class Ant {
     if (ent.plug >= 1) {
       const other = w.nest.entrances.findIndex((e) => e.plug < 1);
       if (other >= 0) this.entranceTarget = other;
-      else if (!this.exitBlocked) {
+      else if (giveUp) {
+        this.result = 'blocked';
+        return true;
+      } else if (!this.exitBlocked) {
         this.exitBlocked = true;
         this.taskActivity = this.activity;
         this.activity = `${ent.name}已被土粒封住，在里面等待雨停`;
