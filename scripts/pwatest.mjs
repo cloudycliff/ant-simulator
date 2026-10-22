@@ -46,8 +46,17 @@ try {
   check('电脑上不显示“添加到主屏幕”', await g.ev(`document.getElementById('btn-install').classList.contains('hidden')`));
   await g.ev(`hud.toast('x'); localStorage.setItem('pwatest', '1')`);
   await sleep(1500);
-  const cached = await g.ev(`caches.open('cyber-ant-v1').then((c) => c.keys()).then((k) => k.map((r) => new URL(r.url).pathname))`);
+  const cached = await g.ev(`caches.open('cyber-ant-v2').then((c) => c.keys()).then((k) => k.map((r) => new URL(r.url).pathname))`);
   check('页面和图标已存进缓存', cached.includes('/') && cached.includes('/icon-512.png'), cached);
+
+  const aq = await browser.page();
+  await aq.viewport(1280, 800, false);
+  await aq.open(`${BASE}aquarium.html?new=1&lang=zh`);
+  const aqState = await aq.ev(`({ fish: window.world?.fish?.length ?? 0, controlled: !!navigator.serviceWorker.controller })`);
+  await sleep(500);
+  const rootIsAnt = await aq.ev(`caches.open('cyber-ant-v2').then((c) => c.match('/')).then((r) => r.text()).then((t) => t.includes('manifest.webmanifest'))`);
+  check('同一网址下的鱼缸页照常打开，不会顶掉蚂蚁游戏的离线缓存', aqState.fish > 0 && rootIsAnt, { ...aqState, rootIsAnt });
+  aq.close();
 
   const m = await browser.page();
   await m.send('Emulation.setUserAgentOverride', { userAgent: IPHONE });
