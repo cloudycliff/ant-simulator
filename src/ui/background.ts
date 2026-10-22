@@ -2,6 +2,9 @@ import { CONFIG } from '../config';
 
 const KEY = 'cyber-ant-background';
 
+/** 手机和平板的浏览器切到后台会冻结整个页面（Worker 也停），后台运行在这些设备上不起作用。iPadOS 的 Safari 自称 Mac */
+export const BACKGROUND_LIMITED = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 /**
  * 页面隐藏（最小化、切到其他标签页）时浏览器不再调用 requestAnimationFrame，由这里接手推进模拟。
  * 节拍来自 Worker：后台页面里的 setInterval 会被浏览器降到每秒一次、几分钟后每分钟一次，

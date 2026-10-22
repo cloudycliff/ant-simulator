@@ -370,6 +370,8 @@ export const zh = {
   'toast.bgOn': '后台运行已开启：离开页面后蚁群继续生活',
   'toast.bgOff': '后台运行已关闭：离开页面时暂停',
   'toast.bgResumed': '你不在的时候，蚁群从 {from} 生活到了 {to}',
+  'toast.bgLimited': '手机和平板的浏览器切到后台会冻结页面，离开时蚁群会暂停，回来后接着生活；想让它一直过日子，就让页面停在前台',
+  'toast.bgFrozen': '页面在后台被浏览器冻结了约 {n} 分钟，这段时间蚁群暂停了',
 
   // ---------------- 顶栏、帮助、图例 ----------------
   'ui.shortcut': '快捷键 {key}',
@@ -385,6 +387,7 @@ export const zh = {
   'ui.groupSpeed': '速度',
   'ui.background': '后台运行',
   'ui.backgroundTitle': '开启时，最小化浏览器或切到其他标签页后蚁群继续生活；关闭时离开页面就暂停',
+  'ui.backgroundLimitedTitle': '手机和平板的浏览器切到后台会冻结页面，离开时蚁群会暂停',
   'ui.groupView': '视图',
   'ui.groupTools': '工具',
   'ui.langTitle': '切换语言 / Switch language',

@@ -375,6 +375,8 @@ export const en: Record<MsgKey, Entry> = {
   'toast.bgOn': 'Background running on: the colony keeps living when you leave the page',
   'toast.bgOff': 'Background running off: the game pauses when you leave the page',
   'toast.bgResumed': 'While you were away the colony lived on from {from} to {to}',
+  'toast.bgLimited': 'Phone and tablet browsers freeze pages in the background, so the colony pauses while you are away and carries on when you return. Keep the page open to let it live',
+  'toast.bgFrozen': 'The browser froze the page for about {n} min; the colony was paused meanwhile',
 
   // ---------------- Top bar, help, legend ----------------
   'ui.shortcut': 'Shortcut: {key}',
@@ -390,6 +392,7 @@ export const en: Record<MsgKey, Entry> = {
   'ui.groupSpeed': 'Speed',
   'ui.background': 'Run in background',
   'ui.backgroundTitle': 'When on, the colony keeps living while the browser is minimized or another tab is open; when off, the game pauses as you leave the page',
+  'ui.backgroundLimitedTitle': 'Phone and tablet browsers freeze pages in the background, so the colony pauses while you are away',
   'ui.groupView': 'View',
   'ui.groupTools': 'Tools',
   'ui.langTitle': '切换语言 / Switch language',

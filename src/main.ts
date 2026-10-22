@@ -14,7 +14,7 @@ import { Hud, type HudAction } from './ui/hud';
 import { ToolController } from './ui/tools';
 import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
 import { chooseLang, initLang } from './ui/lang';
-import { BackgroundRunner } from './ui/background';
+import { BACKGROUND_LIMITED, BackgroundRunner } from './ui/background';
 import { stampAt } from './sim/clock';
 import { loadWorld, saveProblem, saveWorld } from './world/save';
 
@@ -310,6 +310,10 @@ async function boot(): Promise<void> {
         reloadClean();
         break;
       case 'background':
+        if (BACKGROUND_LIMITED) {
+          hud.toast(t('toast.bgLimited'));
+          break;
+        }
         background.setEnabled(!background.enabled);
         hud.state.background = background.enabled;
         hud.toast(t(background.enabled ? 'toast.bgOn' : 'toast.bgOff'));
@@ -489,9 +493,15 @@ async function boot(): Promise<void> {
     autosave(dt);
   });
   hud.state.background = background.enabled;
+  let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden || awayFrom < 0) return;
-    if (world.clock.seconds - awayFrom > 30) hud.toast(t('toast.bgResumed', { from: stampAt(awayFrom), to: world.clock.stamp() }));
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      return;
+    }
+    const awayMin = (Date.now() - hiddenAt) / 60000;
+    if (awayFrom >= 0 && world.clock.seconds - awayFrom > 30) hud.toast(t('toast.bgResumed', { from: stampAt(awayFrom), to: world.clock.stamp() }));
+    else if (BACKGROUND_LIMITED && !world.clock.paused && awayMin >= 1) hud.toast(t('toast.bgFrozen', { n: Math.round(awayMin) }));
     awayFrom = -1;
     hud.refresh(selection, fps);
   });

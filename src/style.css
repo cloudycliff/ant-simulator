@@ -133,6 +133,11 @@ button.on kbd {
   margin-left: 6px;
 }
 
+#btn-background.limited {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
 /* 放不下时只截断性能数字，保证存档、语言和 GitHub 停在最右侧 */
 #topbar .perf {
   flex: 1 1 0;

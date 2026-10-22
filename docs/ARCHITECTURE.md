@@ -160,7 +160,7 @@ requestAnimationFrame
 
 ### 主循环与后台运行
 
-页面可见时 `requestAnimationFrame` 每帧调用 `world.advance(dt, frameBudgetMs)`，然后同步视图、渲染。页面隐藏时浏览器不再调用 `requestAnimationFrame`，开启了后台运行的话由 `BackgroundRunner` 接手：Worker 每 100 ms 发一次消息，主线程只推进模拟和自动保存，不同步视图也不渲染；视图都是对照当前状态同步的，回到页面后第一帧就能跟上。设计取舍见 DECISIONS T-042。
+页面可见时 `requestAnimationFrame` 每帧调用 `world.advance(dt, frameBudgetMs)`，然后同步视图、渲染。页面隐藏时浏览器不再调用 `requestAnimationFrame`，开启了后台运行的话由 `BackgroundRunner` 接手：Worker 每 100 ms 发一次消息，主线程只推进模拟和自动保存，不同步视图也不渲染；视图都是对照当前状态同步的，回到页面后第一帧就能跟上。设计取舍见 DECISIONS T-042。手机和平板的浏览器会冻结后台页面（`BACKGROUND_LIMITED`），那里开关只给说明（T-046）。
 
 ### 界面布局：桌面与手机
 

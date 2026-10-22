@@ -11,6 +11,7 @@ import type { World } from '../world/world';
 import type { Selection } from './picking';
 import { TOOLS, type ToolController } from './tools';
 import type { SaveMeta } from './saveSlot';
+import { BACKGROUND_LIMITED } from './background';
 
 export type HudAction =
   | 'pause'
@@ -340,7 +341,7 @@ export class Hud {
     const clock = `<div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>`;
     const repo = `<a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">${GITHUB} GitHub</a>`;
     const speeds = SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('');
-    const bgBtn = `<button data-a="background" id="btn-background" class="bg" title="${t('ui.backgroundTitle')}">${t('ui.background')}</button>`;
+    const bgBtn = `<button data-a="background" id="btn-background" class="bg${BACKGROUND_LIMITED ? ' limited' : ''}" title="${t(BACKGROUND_LIMITED ? 'ui.backgroundLimitedTitle' : 'ui.backgroundTitle')}">${t('ui.background')}</button>`;
     const views = ['pheromone', 'roleColors', 'grass', 'stats'] as const;
     const viewKeys = { pheromone: 'P', roleColors: 'C', grass: 'G', stats: 'T' };
     if (this.compact) {
@@ -480,7 +481,7 @@ export class Hud {
   toast(msg: string): void {
     this.toastEl.textContent = msg;
     this.toastEl.classList.add('show');
-    this.toastTimer = 2.2;
+    this.toastTimer = Math.max(2.2, Math.min(6, msg.length * 0.09));
   }
 
   tick(dt: number): void {
@@ -512,7 +513,7 @@ export class Hud {
     const sm = document.getElementById('btn-speedmenu');
     if (sm) sm.textContent = `${c.speed}×`;
     document.body.classList.toggle('show-info', !!sel);
-    document.getElementById('btn-background')!.classList.toggle('on', this.state.background);
+    document.getElementById('btn-background')!.classList.toggle('on', this.state.background && !BACKGROUND_LIMITED);
     const s = this.state;
     document.getElementById('btn-xray')!.classList.toggle('on', s.xray || s.forcedXray);
     document.getElementById('btn-pheromone')!.classList.toggle('on', s.pheromone);

@@ -168,6 +168,34 @@ try {
   await sleep(800);
   check('转回竖屏', !(await g.ev(`document.body.classList.contains('land')`)));
   g.close();
+
+  // 手机浏览器：后台运行开关只给说明，回来时提示页面被冻结了多久
+  const m = await browser.page();
+  await m.send('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+  await m.viewport(W, H, true);
+  await m.open(`${process.argv[2] ?? BASE}?new=1&seed=20261021&hour=12&lang=zh`);
+  await m.ev(`hud.setSheet(null)`);
+  const bg = () => m.ev(`(() => { const b = document.getElementById('btn-background'); return { limited: b.classList.contains('limited'), on: b.classList.contains('on'), enabled: hud.state.background }; })()`);
+  const bg0 = await bg();
+  await m.ev(`document.querySelector('[data-a="menu"][data-v="0"]').click()`);
+  await sleep(200);
+  await m.ev(`document.getElementById('btn-background').click()`);
+  await sleep(200);
+  const bg1 = await bg();
+  const toast = await m.ev(`document.getElementById('toast').textContent`);
+  check('手机浏览器：后台运行按钮标为受限，点按只弹说明、不切换', bg0.limited && !bg0.on && !bg1.on && bg1.enabled === bg0.enabled && toast.includes('冻结'), { bg0, bg1, toast });
+  const frozen = await m.ev(`(() => {
+    const now = Date.now;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Date.now = () => now() + 3 * 60000;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Date.now = now;
+    return document.getElementById('toast').textContent;
+  })()`);
+  check('手机浏览器：离开 3 分钟回来，提示页面被冻结', frozen.includes('3 分钟'), frozen);
+  m.close();
 } finally {
   browser.close();
 }
