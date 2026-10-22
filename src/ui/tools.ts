@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { L, type Text } from '../i18n';
 import { PLACEABLE_FOOD, SOURCE_INFO } from '../world/food';
 import { PREDATOR_INFO, type PredatorKind } from '../world/predators';
 import { OBSTACLE_INFO, type PlaceableObstacle } from '../world/vegetation';
@@ -8,7 +9,7 @@ import type { ToolResult, World } from '../world/world';
 export type ToolKind = 'food' | 'obstacle' | 'water' | 'predator';
 
 export interface ToolOption {
-  label: string;
+  label: Text;
   radius: number;
   /** 线状预览的长度（树枝） */
   len?: number;
@@ -16,9 +17,9 @@ export interface ToolOption {
 
 export interface ToolDef {
   kind: ToolKind;
-  name: string;
+  name: Text;
   key: string;
-  hint: string;
+  hint: Text;
   options: ToolOption[];
 }
 
@@ -28,34 +29,34 @@ const PREDATORS: (PredatorKind | 'remove')[] = ['spider', 'antlion', 'remove'];
 export const TOOLS: ToolDef[] = [
   {
     kind: 'food',
-    name: '投食',
+    name: L('tool.food'),
     key: '6',
-    hint: '单击地面投放。糖水会被吸进嗉囊，猎物喂幼虫，种子的油质体也是食物',
+    hint: L('tool.foodHint'),
     options: PLACEABLE_FOOD.map((t) => ({ label: SOURCE_INFO[t].name, radius: SOURCE_INFO[t].radius })),
   },
   {
     kind: 'obstacle',
-    name: '障碍',
+    name: L('tool.obstacle'),
     key: '7',
-    hint: '单击地面放置，R 旋转树枝。挡在信息素路径上，看蚂蚁怎样绕路',
+    hint: L('tool.obstacleHint'),
     options: OBSTACLES.map((k) =>
-      k === 'remove' ? { label: '移除', radius: 2.5 } : { label: OBSTACLE_INFO[k].name, radius: OBSTACLE_INFO[k].r, len: OBSTACLE_INFO[k].len },
+      k === 'remove' ? { label: L('tool.remove'), radius: 2.5 } : { label: OBSTACLE_INFO[k].name, radius: OBSTACLE_INFO[k].r, len: OBSTACLE_INFO[k].len },
     ),
   },
   {
     kind: 'water',
-    name: '浇水',
+    name: L('tool.water'),
     key: '8',
-    hint: '单击地面浇水。水会冲掉信息素，形成的水洼会慢慢蒸发；选“下一场雨”后单击任意处招来雨云',
-    options: [...CONFIG.intervention.waterRadius.map((r, i) => ({ label: i === 0 ? '一点水' : '一大杯水', radius: r })), { label: '下一场雨', radius: 5 }],
+    hint: L('tool.waterHint'),
+    options: [...CONFIG.intervention.waterRadius.map((r, i) => ({ label: L(i === 0 ? 'tool.waterSmall' : 'tool.waterBig'), radius: r })), { label: L('tool.rain'), radius: 5 }],
   },
   {
     kind: 'predator',
-    name: '天敌',
+    name: L('tool.predator'),
     key: '9',
-    hint: '单击地面放入。狼蛛在地表游猎，蚁狮挖坑等蚂蚁滑进去；也可以赶走它们',
+    hint: L('tool.predatorHint'),
     options: PREDATORS.map((k) =>
-      k === 'remove' ? { label: '赶走', radius: CONFIG.predators.pitRadius + 1 } : { label: PREDATOR_INFO[k].name, radius: k === 'spider' ? 1.5 : CONFIG.predators.pitRadius },
+      k === 'remove' ? { label: L('tool.dismiss'), radius: CONFIG.predators.pitRadius + 1 } : { label: PREDATOR_INFO[k].name, radius: k === 'spider' ? 1.5 : CONFIG.predators.pitRadius },
     ),
   },
 ];
@@ -136,7 +137,7 @@ export class ToolController {
   private run(dry: boolean): ToolResult {
     const d = this.def;
     const p = this.ground;
-    if (!d || !p) return { ok: false, msg: '请点击地面' };
+    if (!d || !p) return { ok: false, msg: L('tool.clickGround') };
     const w = this.world;
     const i = this.option[this.active];
     if (d.kind === 'food') return w.dropFood(PLACEABLE_FOOD[i], p.x, p.z, dry);

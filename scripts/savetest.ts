@@ -1,5 +1,6 @@
 // 存档往返测试：运行一段时间后存档，读进新世界，对比关键指标，再各自继续运行
 // 用法：npx tsx scripts/savetest.ts [存档前模拟秒数，默认 1900] [tunnel|chamber：继续运行到扩建处于该阶段再存档]
+import { tr } from '../src/i18n';
 import { World } from '../src/world/world';
 import { loadWorld, saveWorld, type SaveData } from '../src/world/save';
 
@@ -15,7 +16,7 @@ function metrics(w: World): Record<string, string | number> {
   let pher = 0;
   for (const v of w.pheromone.trail) pher += v;
   return {
-    time: w.clock.stamp(),
+    time: tr(w.clock.stamp()),
     ants: c.ants.length,
     outside: c.outsideCount(),
     brood: `${b.egg}/${b.larva}/${b.pupa}`,

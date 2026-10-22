@@ -220,7 +220,7 @@ export class NestView {
     mesh.userData.pick = { kind: 'chamber', id: c.id };
     mesh.userData.bx = c.rx;
     mesh.userData.bz = c.rz;
-    mesh.name = c.name;
+    mesh.name = `chamber-${c.id}`;
     return mesh;
   }
 

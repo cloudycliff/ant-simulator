@@ -1,7 +1,9 @@
 import { CONFIG, ROLE_COLORS, ROLE_NAMES, type Role } from '../config';
+import { t, tr } from '../i18n';
 import { CHAMBER_INFO } from '../nest/nest';
 import { FOOD_KIND_NAMES } from '../world/food';
-import { PREDATOR_INFO, Spider, type SpiderState } from '../world/predators';
+import { PREDATOR_INFO, Spider } from '../world/predators';
+import { stampAt } from '../sim/clock';
 import { ITEM_NAMES } from '../sim/items';
 import type { ColonyEvent, ColonySample } from '../sim/colony';
 import { OBSTACLE_INFO } from '../world/vegetation';
@@ -9,13 +11,6 @@ import type { World } from '../world/world';
 import type { Selection } from './picking';
 import { TOOLS, type ToolController } from './tools';
 import type { SaveMeta } from './saveSlot';
-
-const ROLE_DESC: Record<Role, string> = {
-  queen: '蚁群唯一的繁殖者。婚飞交配后脱落翅膀、独自建巢，此后终生产卵；交配时储存的精子可使用十余年。',
-  nurse: '多为羽化不久的年轻工蚁，留在巢内照料卵、幼虫和蛹，喂养幼虫与蚁后，帮助新蚁破茧。随年龄增长会逐渐转向巢外工作。',
-  maintenance: '中年工蚁，负责挖掘扩建隧道、把垃圾和同伴尸体运出巢外、在巢口警戒巡逻。',
-  forager: '年长工蚁，承担风险最高的巢外工作：搜索并搬运食物、放牧蚜虫，返巢时沿途释放路径信息素招募同伴。侦察蚁更倾向于探索未知区域。',
-};
 
 export type HudAction =
   | 'pause'
@@ -37,18 +32,12 @@ export type HudAction =
   | 'savePanel'
   | 'saveNow'
   | 'loadSave'
-  | 'newGame';
+  | 'newGame'
+  | 'lang';
 
 const SPEEDS = [1, 2, 5, 10, 20];
 const REPO_URL = 'https://github.com/cloudycliff/ant-simulator';
-
-const SPIDER_STATE: Record<SpiderState, string> = {
-  wander: '四处游荡，寻找猎物',
-  pause: '伏地不动，感知振动',
-  chase: '正在扑向一只蚂蚁',
-  feed: '正在进食',
-  leave: '吃饱了，正在离开',
-};
+const HELP_LINES = ['help.move', 'help.mouse', 'help.click', 'help.events', 'help.follow', 'help.views', 'help.tools'] as const;
 
 function bar(v: number, color: string): string {
   const p = Math.round(Math.max(0, Math.min(1, v)) * 100);
@@ -59,13 +48,23 @@ function hex(n: number): string {
   return '#' + n.toString(16).padStart(6, '0');
 }
 
+/** 英文词典里的名词是小写的，放在标题、行首时大写首字母 */
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** 事件和日志的时刻：新记录是模拟秒数，旧存档里是拼好的中文 */
+function when(x: number | string): string {
+  return typeof x === 'number' ? tr(stampAt(x)) : x;
+}
+
 function agoText(ms: number): string {
   const s = Math.max(0, ms / 1000);
-  if (s < 10) return '刚刚';
-  if (s < 60) return `${Math.floor(s / 10) * 10} 秒前`;
-  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
-  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
-  return `${Math.floor(s / 86400)} 天前`;
+  if (s < 10) return t('ago.now');
+  if (s < 60) return t('ago.sec', { n: Math.floor(s / 10) * 10 });
+  if (s < 3600) return t('ago.min', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('ago.hour', { n: Math.floor(s / 3600) });
+  return t('ago.day', { n: Math.floor(s / 86400) });
 }
 
 function esc(s: string): string {
@@ -98,7 +97,7 @@ function drawChart(cv: HTMLCanvasElement, title: string, days: number[], series:
   const g = cv.getContext('2d')!;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
-  const L = 38;
+  const X0 = 38;
   const R = 8;
   const T = 30;
   const B = 18;
@@ -115,7 +114,7 @@ function drawChart(cv: HTMLCanvasElement, title: string, days: number[], series:
   }
   if (days.length < 2) {
     g.fillStyle = '#8f877a';
-    g.fillText('数据积累中…', L + 10, T + 30);
+    g.fillText(t('chart.wait'), X0 + 10, T + 30);
     return;
   }
   let max = 0;
@@ -123,7 +122,7 @@ function drawChart(cv: HTMLCanvasElement, title: string, days: number[], series:
   const ymax = niceMax(max * 1.05);
   const d0 = days[0];
   const d1 = days[days.length - 1];
-  const px = (d: number) => L + ((d - d0) / Math.max(1e-6, d1 - d0)) * (W - L - R);
+  const px = (d: number) => X0 + ((d - d0) / Math.max(1e-6, d1 - d0)) * (W - X0 - R);
   const py = (v: number) => H - B - (v / ymax) * (H - T - B);
   g.strokeStyle = 'rgba(255,255,255,0.08)';
   g.fillStyle = '#8f877a';
@@ -133,16 +132,16 @@ function drawChart(cv: HTMLCanvasElement, title: string, days: number[], series:
     const v = (ymax * i) / 4;
     const y = Math.round(py(v)) + 0.5;
     g.beginPath();
-    g.moveTo(L, y);
+    g.moveTo(X0, y);
     g.lineTo(W - R, y);
     g.stroke();
-    g.fillText(v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0), L - 4, y + 4);
+    g.fillText(v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0), X0 - 4, y + 4);
   }
   g.textAlign = 'center';
   const span = d1 - d0;
   const stepD = span > 12 ? 4 : span > 5 ? 2 : span > 1.5 ? 1 : 0.25;
   for (let d = Math.ceil(d0 / stepD) * stepD; d <= d1; d += stepD) {
-    const label = stepD < 1 ? `${Math.round((d % 1) * 24)}时` : `第${Math.floor(d) + 1}天`;
+    const label = stepD < 1 ? t('chart.hour', { h: Math.round((d % 1) * 24) }) : t('chart.day', { d: Math.floor(d) + 1 });
     g.fillText(label, px(d), H - 4);
   }
   g.textAlign = 'left';
@@ -187,48 +186,10 @@ export class Hud {
   state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false };
 
   constructor(private world: World) {
-    this.top.innerHTML = `
-      <div class="title">赛博养蚂蚁 <em>黑毛蚁 Lasius niger</em></div>
-      <div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>
-      <div class="group" id="speeds">
-        <button data-a="pause" id="btn-pause" title="快捷键 空格">⏸</button>
-        ${SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('')}
-      </div>
-      <div class="group">
-        <button data-a="xray" id="btn-xray" title="快捷键 X">地下透视 <kbd>X</kbd></button>
-        <button data-a="pheromone" id="btn-pheromone" title="快捷键 P">信息素 <kbd>P</kbd></button>
-        <button data-a="roleColors" id="btn-roleColors" title="快捷键 C">分工着色 <kbd>C</kbd></button>
-        <button data-a="grass" id="btn-grass" title="快捷键 G">草丛 <kbd>G</kbd></button>
-        <button data-a="stats" id="btn-stats" title="快捷键 T">统计 <kbd>T</kbd></button>
-        <button data-a="help" title="快捷键 H">帮助 <kbd>H</kbd></button>
-      </div>
-      <div class="group" id="tools">
-        ${TOOLS.map((t, i) => `<button data-a="tool" data-v="${i}" title="快捷键 ${t.key}，重复按切换选项">${t.name} <kbd>${t.key}</kbd></button>`).join('')}
-      </div>
-      <div class="group">
-        <button data-a="savePanel" id="btn-save" title="保存、读取存档或重新开始">存档</button>
-      </div>
-      <div class="perf" id="perf"></div>
-      <a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="在 GitHub 上查看源码">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub
-      </a>`;
-    this.helpEl.innerHTML = `
-      <b>操作</b>
-      <div><kbd>W A S D</kbd> 移动　<kbd>Q</kbd>/<kbd>E</kbd> 下降/上升　<kbd>Shift</kbd> 加速</div>
-      <div>左键拖拽 转视角　右键拖拽 平移　滚轮 推进/拉远</div>
-      <div>左键单击 选择蚂蚁/房间/食物/植物　双击 飞到目标</div>
-      <div>点击左下角的事件 飞到事件发生的地方</div>
-      <div><kbd>F</kbd> 跟随选中的蚂蚁　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续</div>
-      <div><kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线</div>
-      <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水　<kbd>9</kbd> 天敌（重复按切换选项，<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）</div>`;
+    this.renderStatic();
     this.statsEl.innerHTML = `
       <canvas id="chart-pop"></canvas>
       <canvas id="chart-food"></canvas>`;
-    this.legendEl.innerHTML = `
-      <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>路径信息素：携带食物返巢的工蚁释放，约 1.5 分钟减半</div>
-      <div><i style="background:#3c96ff"></i>领地足迹：所有工蚁在地表留下的碳氢化合物，挥发很慢</div>
-      <div><i style="background:transparent;border:2px solid #ff4a3a;height:4px"></i>警报信息素：受到攻击时释放，几秒内散去，附近的工蚁会赶来围攻</div>`;
     const handler = (e: Event) => {
       const b = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
       if (!b) return;
@@ -253,6 +214,53 @@ export class Hud {
     });
   }
 
+  /** 顶栏、帮助和图例：只在创建和切换语言时重写，按钮的开关状态由 refresh 每帧补上 */
+  private renderStatic(): void {
+    const sc = (key: string) => t('ui.shortcut', { key });
+    const toggle = (a: string, label: string, key: string) => `<button data-a="${a}" id="btn-${a}" title="${sc(key)}">${label} <kbd>${key}</kbd></button>`;
+    this.top.innerHTML = `
+      <div class="title">${t('app.title')} <em>${t('app.subtitle')}</em></div>
+      <div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>
+      <div class="group" id="speeds">
+        <button data-a="pause" id="btn-pause" title="${sc(t('ui.space'))}">⏸</button>
+        ${SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('')}
+      </div>
+      <div class="group">
+        ${toggle('xray', t('ui.xray'), 'X')}
+        ${toggle('pheromone', t('ui.pheromone'), 'P')}
+        ${toggle('roleColors', t('ui.roleColors'), 'C')}
+        ${toggle('grass', t('ui.grass'), 'G')}
+        ${toggle('stats', t('ui.stats'), 'T')}
+        <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
+      </div>
+      <div class="group" id="tools">
+        ${TOOLS.map((d, i) => `<button data-a="tool" data-v="${i}" title="${t('ui.toolTitle', { key: d.key })}">${tr(d.name)} <kbd>${d.key}</kbd></button>`).join('')}
+      </div>
+      <div class="group">
+        <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
+        <button data-a="lang" id="btn-lang" title="${t('ui.langTitle')}">${t('ui.langSwitch')}</button>
+      </div>
+      <div class="perf" id="perf"></div>
+      <a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>`;
+    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + HELP_LINES.map((k) => `<div>${t(k)}</div>`).join('');
+    this.legendEl.innerHTML = `
+      <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>${t('legend.trail')}</div>
+      <div><i style="background:#3c96ff"></i>${t('legend.home')}</div>
+      <div><i style="background:transparent;border:2px solid #ff4a3a;height:4px"></i>${t('legend.alarm')}</div>`;
+  }
+
+  /** 切换语言后重写所有界面文字，包括已经产生的事件和日志 */
+  relocalize(): void {
+    this.renderStatic();
+    this.toolKey = '';
+    this.saveKey = '';
+    this.eventsKey = '';
+    this.statsDrawn = -1;
+  }
+
   /** 存档面板：按钮只在有无存档变化时重写，“多久之前”单独更新文字 */
   renderSave(): void {
     document.getElementById('btn-save')!.classList.toggle('on', this.saveOpen);
@@ -263,16 +271,18 @@ export class Hud {
     if (key !== this.saveKey) {
       this.saveKey = key;
       this.saveEl.innerHTML = `
-        <div class="head"><b>存档</b>保存在本浏览器里；每分钟和关闭页面时自动保存</div>
+        <div class="head"><b>${t('save.title')}</b>${t('save.where')}</div>
         <div class="row" id="save-status"></div>
-        <div class="row">地图编号 ${this.world.seed} <small>（重新开始会随机换一张地图，网址加 ?new=1&amp;seed=编号 可以用这张地图重新开局）</small></div>
+        <div class="row">${t('save.seed', { seed: this.world.seed })} <small>${t('save.seedHint')}</small></div>
         <div class="opts">
-          <button data-a="saveNow">立即保存 <kbd>Ctrl S</kbd></button>
-          <button data-a="loadSave" ${m ? '' : 'disabled'}>读取上次存档</button>
-          <button data-a="newGame" class="danger">重新开始</button>
+          <button data-a="saveNow">${t('save.now')} <kbd>Ctrl S</kbd></button>
+          <button data-a="loadSave" ${m ? '' : 'disabled'}>${t('save.load')}</button>
+          <button data-a="newGame" class="danger">${t('save.new')}</button>
         </div>`;
     }
-    document.getElementById('save-status')!.textContent = m ? `上次保存：${m.stamp}，${m.ants} 只蚂蚁（${agoText(Date.now() - m.savedAt)}）` : '还没有存档';
+    document.getElementById('save-status')!.textContent = m
+      ? t('save.status', { stamp: m.seconds !== undefined ? tr(stampAt(m.seconds)) : (m.stamp ?? ''), n: m.ants, ago: agoText(Date.now() - m.savedAt) })
+      : t('save.none');
   }
 
   toggleHelp(): void {
@@ -295,15 +305,18 @@ export class Hud {
   refresh(sel: Selection | null, fps: number, perf?: { sim: number; views: number; render: number }): void {
     const w = this.world;
     const c = w.clock;
-    document.getElementById('clock')!.textContent = c.stamp();
+    document.getElementById('clock')!.textContent = tr(c.stamp());
     const wp = w.weather.phase;
     document.getElementById('dayicon')!.textContent = wp === 'rain' ? '🌧️' : wp === 'overcast' ? '☁️' : c.isNight ? '🌙' : c.daylight < 0.6 ? '🌅' : '☀️';
-    document.getElementById('temp')!.textContent = `${w.weather.label} · 地表 ${c.temperatureAt(0).toFixed(1)}°C · 湿度 ${Math.round(c.humidityAt(0))}%`;
+    document.getElementById('temp')!.textContent = t('ui.temp', { weather: w.weather.label, t: c.temperatureAt(0).toFixed(1), h: Math.round(c.humidityAt(0)) });
     const pe = document.getElementById('perf')!;
     const lagging = !c.paused && w.effectiveSpeed < c.speed * 0.9;
-    pe.textContent = `${Math.round(fps)} FPS · ${w.colony.ants.length} 只${perf ? ` · 模拟 ${perf.sim.toFixed(1)} / 画面 ${(perf.views + perf.render).toFixed(1)} ms` : ''}${lagging ? ` · 实际 ${w.effectiveSpeed.toFixed(1)}×` : ''}`;
+    pe.textContent =
+      t('ui.perf', { fps: Math.round(fps), n: w.colony.ants.length }) +
+      (perf ? t('ui.perfTimes', { sim: perf.sim.toFixed(1), view: (perf.views + perf.render).toFixed(1) }) : '') +
+      (lagging ? t('ui.perfLag', { x: w.effectiveSpeed.toFixed(1) }) : '');
     pe.classList.toggle('lag', lagging);
-    if (perf) pe.title = `每帧主线程耗时：模拟 ${perf.sim.toFixed(2)} ms，视图同步 ${perf.views.toFixed(2)} ms，提交渲染 ${perf.render.toFixed(2)} ms`;
+    if (perf) pe.title = t('ui.perfTitle', { sim: perf.sim.toFixed(2), views: perf.views.toFixed(2), render: perf.render.toFixed(2) });
     this.top.querySelectorAll<HTMLButtonElement>('[data-a="speed"]').forEach((b) => {
       b.classList.toggle('on', !c.paused && Number(b.dataset.v) === c.speed);
     });
@@ -323,35 +336,35 @@ export class Hud {
     this.renderColony();
     this.renderInfo(sel);
     const events = w.colony.events;
-    const key = events.map((e) => e.t + e.msg).join('|');
+    const texts = events.map((e) => `<span>${when(e.t)}</span>${esc(tr(e.msg))}`);
+    const key = texts.join('|');
     if (key !== this.eventsKey) {
       this.eventsKey = key;
       this.shownEvents = events.slice();
-      this.eventsEl.innerHTML = events
-        .map((e, i) => (e.at ? `<div class="go" data-ev="${i}" title="点击跳到事件发生的位置"><span>${e.t}</span>${esc(e.msg)}</div>` : `<div><span>${e.t}</span>${esc(e.msg)}</div>`))
-        .join('');
+      const title = t('ui.eventTitle');
+      this.eventsEl.innerHTML = events.map((e, i) => (e.at ? `<div class="go" data-ev="${i}" title="${title}">${texts[i]}</div>` : `<div>${texts[i]}</div>`)).join('');
     }
     this.layout();
   }
 
   /** 工具选项面板：只在工具或选项变化时重写 DOM，避免点击时按钮被替换 */
   renderTool(): void {
-    const t = this.tools;
-    const active = t?.active ?? -1;
+    const tc = this.tools;
+    const active = tc?.active ?? -1;
     this.top.querySelectorAll<HTMLButtonElement>('[data-a="tool"]').forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === active));
     document.body.classList.toggle('tooling', active >= 0);
-    const key = t && active >= 0 ? `${active}:${t.option[active]}` : '';
+    const key = tc && active >= 0 ? `${active}:${tc.option[active]}` : '';
     if (key === this.toolKey) return;
     this.toolKey = key;
     this.toolEl.classList.toggle('hidden', !key);
-    if (!t || !key) return;
+    if (!tc || !key) return;
     const d = TOOLS[active];
-    const cur = t.option[active];
+    const cur = tc.option[active];
     this.toolEl.innerHTML = `
-      <div class="head"><b>${d.name}</b><span>${d.hint}</span></div>
+      <div class="head"><b>${tr(d.name)}</b><span>${tr(d.hint)}</span></div>
       <div class="opts">
-        ${d.options.map((o, i) => `<button data-a="toolopt" data-v="${i}" class="${i === cur ? 'on' : ''}">${o.label}</button>`).join('')}
-        <button data-a="toolexit" class="exit">退出 <kbd>Esc</kbd></button>
+        ${d.options.map((o, i) => `<button data-a="toolopt" data-v="${i}" class="${i === cur ? 'on' : ''}">${cap(tr(o.label))}</button>`).join('')}
+        <button data-a="toolexit" class="exit">${t('tool.exit')} <kbd>Esc</kbd></button>
       </div>`;
   }
 
@@ -370,17 +383,18 @@ export class Hud {
     this.statsDrawn = h.length;
     const days = h.map((x) => x.day);
     const pick = (k: keyof ColonySample) => h.map((x) => x[k]);
-    drawChart(document.getElementById('chart-pop') as HTMLCanvasElement, '人口', days, [
-      { label: '保育蚁', color: hex(ROLE_COLORS.nurse), values: pick('nurse') },
-      { label: '内务蚁', color: hex(ROLE_COLORS.maintenance), values: pick('maintenance') },
-      { label: '觅食蚁', color: hex(ROLE_COLORS.forager), values: pick('forager') },
-      { label: '幼体', color: '#f3ead0', values: pick('brood'), dash: true },
-      { label: '巢外', color: '#9d9484', values: pick('outside'), dash: true },
+    const role = (r: Role) => cap(tr(ROLE_NAMES[r]));
+    drawChart(document.getElementById('chart-pop') as HTMLCanvasElement, t('chart.pop'), days, [
+      { label: role('nurse'), color: hex(ROLE_COLORS.nurse), values: pick('nurse') },
+      { label: role('maintenance'), color: hex(ROLE_COLORS.maintenance), values: pick('maintenance') },
+      { label: role('forager'), color: hex(ROLE_COLORS.forager), values: pick('forager') },
+      { label: t('chart.brood'), color: '#f3ead0', values: pick('brood'), dash: true },
+      { label: t('chart.outside'), color: '#9d9484', values: pick('outside'), dash: true },
     ]);
-    drawChart(document.getElementById('chart-food') as HTMLCanvasElement, '食物储备（份）', days, [
-      { label: '储食室', color: '#c0703a', values: pick('food') },
-      { label: '社会胃', color: '#f2c25a', values: pick('liquid') },
-      { label: '合计', color: '#e9e4da', values: h.map((x) => x.food + x.liquid), dash: true },
+    drawChart(document.getElementById('chart-food') as HTMLCanvasElement, t('chart.food'), days, [
+      { label: cap(t('chamber.food')), color: '#c0703a', values: pick('food') },
+      { label: t('chart.social'), color: '#f2c25a', values: pick('liquid') },
+      { label: t('chart.total'), color: '#e9e4da', values: h.map((x) => x.food + x.liquid), dash: true },
     ]);
   }
 
@@ -399,54 +413,56 @@ export class Hud {
     for (const a of col.ants) if (a.scout) scouts++;
     const st = col.stats;
     const roleRow = (r: Role) => {
-      const t = r === 'queen' ? '' : ` <small>/ ${tg[r]}</small>`;
-      return `<div class="row"><span class="dot" style="background:${hex(ROLE_COLORS[r])}"></span>${ROLE_NAMES[r]}<b>${rc[r]}${t}</b></div>`;
+      const target = r === 'queen' ? '' : ` <small>/ ${tg[r]}</small>`;
+      return `<div class="row"><span class="dot" style="background:${hex(ROLE_COLORS[r])}"></span>${cap(tr(ROLE_NAMES[r]))}<b>${rc[r]}${target}</b></div>`;
     };
     const aph = w.aphids.colonies;
     const known = aph.filter((a) => a.discovered).length;
     const ex = col.expansion;
     const p = ex.project;
-    let build = '<div class="row sub">扩建<b>无</b></div>';
+    let build = `<div class="row sub">${t('col.build')}<b>${cap(t('unit.none'))}</b></div>`;
     if (p) {
       const prog = p.chamber ? p.soil / p.soilNeeded : p.face.len / p.face.full.length;
-      build = `<div class="row sub">${p.enlarge ? '扩大' : '扩建'}<b>${p.enlarge ? p.chamber!.name : CHAMBER_INFO[p.type].name}</b></div>
-      <div class="row sub">${p.enlarge ? '挖边缘' : p.chamber ? '挖房间' : '挖隧道'} ${bar(prog, '#d9a066')}</div>`;
+      build = `<div class="row sub">${t(p.enlarge ? 'col.enlarge' : 'col.build')}<b>${cap(tr(p.enlarge ? p.chamber!.label : CHAMBER_INFO[p.type].name))}</b></div>
+      <div class="row sub">${t(p.enlarge ? 'col.digEdge' : p.chamber ? 'col.digRoom' : 'col.digTunnel')} ${bar(prog, '#d9a066')}</div>`;
     }
+    const pupaRoom = w.nest.chambers[col.pupaChamber];
+    const stat = (k: Parameters<typeof t>[0], v: string | number) => `<span>${t(k)}</span><b>${v}</b>`;
     this.colonyEl.innerHTML = `
-      <h3>蚁群概况</h3>
-      <div class="row big">成虫总数<b>${col.ants.length}</b></div>
+      <h3>${t('col.title')}</h3>
+      <div class="row big">${t('col.adults')}<b>${col.ants.length}</b></div>
       ${roleRow('queen')}${roleRow('nurse')}${roleRow('maintenance')}${roleRow('forager')}
-      <div class="row sub">其中侦察蚁<b>${scouts}</b></div>
-      <div class="row sub">斜线后为按需分工的目标</div>
-      <div class="row">正在巢外活动<b>${col.outsideCount()}</b></div>
-      <h3>幼体</h3>
-      <div class="row">卵 / 幼虫 / 蛹<b>${bc.egg} / ${bc.larva} / ${bc.pupa}</b></div>
-      <div class="row sub">蛹集中在<b>${w.nest.chambers[col.pupaChamber]?.name ?? '-'}</b></div>
-      <h3>资源</h3>
-      <div class="row">储食室<b>${col.foodStock.toFixed(0)} 份</b></div>
-      <div class="row">社会胃（嗉囊甜液）<b>${col.liquidStock.toFixed(0)} 份</b></div>
-      <div class="row">蚁后饱食度 ${bar(1 - col.queen.hunger, '#ffb13b')}</div>
-      <div class="row">地表食物源<b>${w.food.sources.length}</b></div>
-      <div class="row">已发现的蚜虫群<b>${known} / ${aph.length}</b></div>
-      <h3>蚁穴</h3>
-      <div class="row">房间<b>${w.nest.chambers.filter((c) => c.ready).length}${ex.enlarged ? ` <small>· 扩大过 ${ex.enlarged} 次</small>` : ''}</b></div>
-      <div class="row">拥挤程度 ${bar(ex.occupancy(), ex.occupancy() > 0.88 ? '#e0803a' : '#7ec06a')}</div>
+      <div class="row sub">${t('col.scouts')}<b>${scouts}</b></div>
+      <div class="row sub">${t('col.targetsNote')}</div>
+      <div class="row">${t('col.outside')}<b>${col.outsideCount()}</b></div>
+      <h3>${t('col.brood')}</h3>
+      <div class="row">${t('col.broodCounts')}<b>${bc.egg} / ${bc.larva} / ${bc.pupa}</b></div>
+      <div class="row sub">${t('col.pupaeAt')}<b>${pupaRoom ? cap(tr(pupaRoom.label)) : '-'}</b></div>
+      <h3>${t('col.resources')}</h3>
+      <div class="row">${cap(t('chamber.food'))}<b>${t('unit.portions', { n: col.foodStock.toFixed(0) })}</b></div>
+      <div class="row">${t('col.social')}<b>${t('unit.portions', { n: col.liquidStock.toFixed(0) })}</b></div>
+      <div class="row">${t('col.queenFed')} ${bar(1 - col.queen.hunger, '#ffb13b')}</div>
+      <div class="row">${t('col.foodSources')}<b>${w.food.sources.length}</b></div>
+      <div class="row">${t('col.aphids')}<b>${known} / ${aph.length}</b></div>
+      <h3>${t('col.nest')}</h3>
+      <div class="row">${t('col.rooms')}<b>${w.nest.chambers.filter((c) => c.ready).length}${ex.enlarged ? ` <small>${t('col.enlargedTimes', { n: ex.enlarged })}</small>` : ''}</b></div>
+      <div class="row">${t('col.crowding')} ${bar(ex.occupancy(), ex.occupancy() > 0.88 ? '#e0803a' : '#7ec06a')}</div>
       ${build}
-      <h3>累计</h3>
+      <h3>${t('col.totals')}</h3>
       <div class="grid">
-        <span>产卵</span><b>${st.eggsLaid}</b><span>羽化</span><b>${st.emerged}</b>
-        <span>死亡</span><b>${st.deaths}</b><span>带回食物</span><b>${st.foodCollected}</b>
-        <span>采集蜜露</span><b>${st.honeydew.toFixed(0)}</b><span>交哺</span><b>${st.trophallaxis}</b>
-        <span>运出垃圾</span><b>${st.wasteRemoved}</b><span>挖出土粒</span><b>${st.soilExcavated}</b>
-        <span>分工转换</span><b>${st.roleChanges}</b><span>触角接触</span><b>${st.contacts >= 10000 ? (st.contacts / 1000).toFixed(0) + 'k' : st.contacts}</b>
-        <span>被天敌捕食</span><b>${st.preyed}</b><span>赶走狼蛛</span><b>${st.repelled}</b>
+        ${stat('stat.eggs', st.eggsLaid)}${stat('stat.emerged', st.emerged)}
+        ${stat('stat.deaths', st.deaths)}${stat('stat.food', st.foodCollected)}
+        ${stat('stat.honeydew', st.honeydew.toFixed(0))}${stat('stat.troph', st.trophallaxis)}
+        ${stat('stat.waste', st.wasteRemoved)}${stat('stat.soil', st.soilExcavated)}
+        ${stat('stat.roles', st.roleChanges)}${stat('stat.contacts', st.contacts >= 10000 ? (st.contacts / 1000).toFixed(0) + 'k' : st.contacts)}
+        ${stat('stat.preyed', st.preyed)}${stat('stat.repelled', st.repelled)}
       </div>`;
   }
 
   private renderInfo(sel: Selection | null): void {
     if (!sel) {
       this.infoEl.classList.add('empty');
-      this.infoEl.innerHTML = `<div class="hint">点击蚂蚁、蚁穴房间（地下透视模式）、食物或植物查看详情</div>`;
+      this.infoEl.innerHTML = `<div class="hint">${t('info.hint')}</div>`;
       return;
     }
     this.infoEl.classList.remove('empty');
@@ -468,7 +484,7 @@ export class Hud {
         html = this.middenInfo();
         break;
       case 'stone':
-        html = `<h2>石块</h2><p class="desc">石块白天吸热、夜间缓慢放热，下方土壤温暖且不易干燥。黑毛蚁常把蚁巢建在石块下方，利用这种微环境育幼。</p>`;
+        html = `<h2>${t('info.stone')}</h2><p class="desc">${t('info.stoneDesc')}</p>`;
         break;
       case 'plant':
         html = this.plantInfo(sel.id);
@@ -476,85 +492,85 @@ export class Hud {
       case 'placed': {
         const p = this.world.veg.placedById(sel.id);
         html = p
-          ? `<h2>${OBSTACLE_INFO[p.kind].name}<span class="tag next">你放置的</span></h2>
-             <p class="desc">${p.kind === 'twig' ? '横在地上的树枝会截断蚂蚁的路线。被挡住的蚂蚁会沿着树枝走到尽头再绕过去，信息素路径也会随之改道。' : '蚂蚁不会爬上石块，而是贴着边缘绕行。大石块会让路过的蚂蚁明显绕路。'}</p>
-             <div class="actions"><button data-a="removePlaced" data-v="${p.id}">移除</button></div>`
-          : '<h2>障碍物</h2><p class="desc">已被移除。</p>';
+          ? `<h2>${cap(tr(OBSTACLE_INFO[p.kind].name))}<span class="tag next">${t('info.placedTag')}</span></h2>
+             <p class="desc">${t(p.kind === 'twig' ? 'info.twigDesc' : 'info.rockDesc')}</p>
+             <div class="actions"><button data-a="removePlaced" data-v="${p.id}">${t('tool.remove')}</button></div>`
+          : `<h2>${t('info.obstacle')}</h2><p class="desc">${t('info.obstacleGone')}</p>`;
         break;
       }
       case 'puddle': {
         const p = this.world.water.byId(sel.id);
         html = p
-          ? `<h2>水洼</h2>
-             <p class="desc">蚂蚁会绕开积水。水会冲掉地面上的路径信息素和足迹，原本沿路径往返的觅食蚁要重新搜索。气温越高蒸发得越快。</p>
-             <div class="kv"><span>半径</span><b>${p.r.toFixed(1)} cm</b><span>剩余水量</span><b>${bar(p.water, '#5f9ccc')}</b></div>`
-          : '<h2>水洼</h2><p class="desc">已经蒸发、渗进土里了。</p>';
+          ? `<h2>${t('info.puddle')}</h2>
+             <p class="desc">${t('info.puddleDesc')}</p>
+             <div class="kv"><span>${t('info.radius')}</span><b>${p.r.toFixed(1)} cm</b><span>${t('info.waterLeft')}</span><b>${bar(p.water, '#5f9ccc')}</b></div>`
+          : `<h2>${t('info.puddle')}</h2><p class="desc">${t('info.puddleGone')}</p>`;
         break;
       }
       case 'predator':
         html = this.predatorInfo(sel.id);
         break;
     }
-    this.infoEl.innerHTML = html + `<div class="actions"><button data-a="deselect">取消选择 <kbd>Esc</kbd></button></div>`;
+    this.infoEl.innerHTML = html + `<div class="actions"><button data-a="deselect">${t('info.deselect')} <kbd>Esc</kbd></button></div>`;
   }
 
   private predatorInfo(id: number): string {
     const p = this.world.predators.byId(id);
-    if (!p) return '<h2>天敌</h2><p class="desc">它已经离开了。</p>';
+    if (!p) return `<h2>${t('info.predator')}</h2><p class="desc">${t('info.predatorGone')}</p>`;
     const info = PREDATOR_INFO[p.kind];
-    const tag = p.placed ? '<span class="tag next">你放入的</span>' : '';
+    const tag = p.placed ? `<span class="tag next">${t('info.putTag')}</span>` : '';
     let state: string;
     let extra = '';
     if (p instanceof Spider) {
-      state = p.mob > 0 ? `正被 ${p.mob} 只工蚁围攻` : p.state === 'leave' && p.fled ? '被工蚁赶走，正在逃离' : SPIDER_STATE[p.state];
+      state = p.mob > 0 ? t('info.mobbed', { n: p.mob }) : p.state === 'leave' && p.fled ? t('info.fleeing') : t(`spiderState.${p.state}`);
       const D = CONFIG.defense;
-      extra = `<span>还能再吃</span><b>${Math.max(0, CONFIG.predators.spiderMeals - p.meals)} 只</b><span>被咬程度</span><b>${bar(p.harass / D.harassLimit, '#e0604a')}</b>`;
-    } else state = p.feedT > 0 ? `正在进食（还要 ${Math.ceil(p.feedT)} 秒）` : '埋在坑底等待';
-    return `<h2>${info.name}${tag}</h2>
-      <p class="desc">${info.desc}</p>
-      <div class="kv"><span>状态</span><b>${state}</b><span>已捕食</span><b>${p.caught} 只</b>${extra}</div>
-      <div class="actions"><button data-a="removePredator" data-v="${p.id}">${p instanceof Spider ? '赶走' : '填平陷阱'}</button></div>`;
+      extra = `<span>${t('info.canEat')}</span><b>${t('unit.ants', { n: Math.max(0, CONFIG.predators.spiderMeals - p.meals) })}</b><span>${t('info.harass')}</span><b>${bar(p.harass / D.harassLimit, '#e0604a')}</b>`;
+    } else state = p.feedT > 0 ? t('info.antlionFeeding', { n: Math.ceil(p.feedT) }) : t('info.antlionWaiting');
+    return `<h2>${cap(tr(info.name))}${tag}</h2>
+      <p class="desc">${tr(info.desc)}</p>
+      <div class="kv"><span>${t('info.state')}</span><b>${state}</b><span>${t('info.caught')}</span><b>${t('unit.ants', { n: p.caught })}</b>${extra}</div>
+      <div class="actions"><button data-a="removePredator" data-v="${p.id}">${t(p instanceof Spider ? 'tool.dismiss' : 'info.fillPit')}</button></div>`;
   }
 
   private antInfo(id: number): string {
     const w = this.world;
     const a = w.colony.antById(id);
-    if (!a) return `<h2>工蚁 #${id}</h2><p class="desc">这只蚂蚁已经死亡，尸体会被内务蚁搬到巢外垃圾堆。</p>`;
+    if (!a) return `<h2>${cap(t('role.worker'))} #${id}</h2><p class="desc">${t('info.antDead')}</p>`;
     const isQ = a.role === 'queen';
-    const tags = [`<span class="tag" style="background:${hex(ROLE_COLORS[a.role])}">${ROLE_NAMES[a.role]}</span>`];
-    if (a.scout) tags.push('<span class="tag scout">侦察蚁</span>');
-    if (a.nextRole) tags.push(`<span class="tag next">即将转为${ROLE_NAMES[a.nextRole]}</span>`);
-    let carry = '无';
+    const tags = [`<span class="tag" style="background:${hex(ROLE_COLORS[a.role])}">${cap(tr(ROLE_NAMES[a.role]))}</span>`];
+    if (a.scout) tags.push(`<span class="tag scout">${cap(t('role.scout'))}</span>`);
+    if (a.nextRole) tags.push(`<span class="tag next">${t('info.willBecome', { role: ROLE_NAMES[a.nextRole] })}</span>`);
+    let carry = t('unit.none');
     if (a.carrying) {
       const it = a.carrying;
-      carry = it.type === 'food' ? FOOD_KIND_NAMES[it.foodKind] : ITEM_NAMES[it.type];
+      carry = tr(it.type === 'food' ? FOOD_KIND_NAMES[it.foodKind] : ITEM_NAMES[it.type]);
     }
-    const depth = a.domain === 'nest' ? `（深 ${a.depth(w).toFixed(0)} cm）` : a.climbing ? '（植物茎上）' : '';
-    const logs = a.log.map((l) => `<li><span>${l.t}</span>${esc(l.msg)}</li>`).join('') || '<li>暂无记录</li>';
+    const depth = a.domain === 'nest' ? t('info.depth', { n: a.depth(w).toFixed(0) }) : a.climbing ? t('info.onStem') : '';
+    const logs = a.log.map((l) => `<li><span>${when(l.t)}</span>${esc(tr(l.msg))}</li>`).join('') || `<li>${t('info.noLog')}</li>`;
     const following = this.state.following;
     const herd = a.herd >= 0 ? w.aphids.byId(a.herd) : undefined;
     return `
-      <h2>${isQ ? '蚁后' : '工蚁'} #${a.id} ${tags.join('')}</h2>
+      <h2>${cap(t(isQ ? 'role.queen' : 'role.worker'))} #${a.id} ${tags.join('')}</h2>
       <div class="kv">
-        <span>当前行为</span><b class="act">${esc(a.activity)}</b>
-        <span>位置</span><b>${a.locationLabel(w)}${depth}</b>
-        <span>环境温度</span><b>${w.antTemperature(a).toFixed(1)}°C</b>
-        <span>日龄</span><b>${isQ ? '约 3 年' : `${a.ageDays.toFixed(1)} 天 / 预期寿命 ${a.lifespan.toFixed(0)} 天`}</b>
-        <span>体长</span><b>${(a.size * (isQ ? 9 : 4)).toFixed(1)} mm</b>
-        <span>携带</span><b>${carry}</b>
-        <span>嗉囊</span><b>${bar(a.crop, '#f2c25a')} ${Math.round(a.crop * 100)}%</b>
-        <span>饱食度</span><b>${bar(1 - a.hunger, '#7ee06a')}</b>
-        <span>健康</span><b>${bar(a.health, '#5fb8ff')}</b>
-        ${isQ ? '' : `<span>社交</span><b>触角接触 ${a.contacts} 次 · 交哺 ${a.shares} 次</b>`}
-        ${a.role === 'forager' ? `<span>运回食物</span><b>${a.delivered} 次</b>` : ''}
-        ${herd ? `<span>放牧</span><b>照料一群约 ${Math.round(herd.count)} 只的蚜虫</b>` : ''}
+        <span>${t('info.activity')}</span><b class="act">${esc(tr(a.activity))}</b>
+        <span>${t('info.location')}</span><b>${cap(tr(a.locationLabel(w)))}${depth}</b>
+        <span>${t('info.antTemp')}</span><b>${w.antTemperature(a).toFixed(1)}°C</b>
+        <span>${t('info.age')}</span><b>${isQ ? t('info.queenAge') : t('info.antAge', { age: a.ageDays.toFixed(1), life: a.lifespan.toFixed(0) })}</b>
+        <span>${t('info.length')}</span><b>${(a.size * (isQ ? 9 : 4)).toFixed(1)} mm</b>
+        <span>${t('info.carry')}</span><b>${carry}</b>
+        <span>${t('info.crop')}</span><b>${bar(a.crop, '#f2c25a')} ${Math.round(a.crop * 100)}%</b>
+        <span>${t('info.fed')}</span><b>${bar(1 - a.hunger, '#7ee06a')}</b>
+        <span>${t('info.health')}</span><b>${bar(a.health, '#5fb8ff')}</b>
+        ${isQ ? '' : `<span>${t('info.social')}</span><b>${t('info.socialVal', { c: a.contacts, s: a.shares })}</b>`}
+        ${a.role === 'forager' ? `<span>${t('info.delivered')}</span><b>${t('unit.times', { n: a.delivered })}</b>` : ''}
+        ${herd ? `<span>${t('info.herd')}</span><b>${t('info.herdVal', { n: Math.round(herd.count) })}</b>` : ''}
       </div>
-      <p class="desc">${ROLE_DESC[a.role]}</p>
-      <h3>近期行为</h3>
+      <p class="desc">${t(`roleDesc.${a.role}`)}</p>
+      <h3>${t('info.recent')}</h3>
       <ul class="log">${logs}</ul>
       <div class="actions">
-        <button data-a="follow" class="${following ? 'on' : ''}">${following ? '停止跟随' : '跟随观察'} <kbd>F</kbd></button>
-        <button data-a="flyto">飞到附近</button>
+        <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
+        <button data-a="flyto">${t('info.flyNear')}</button>
       </div>`;
   }
 
@@ -562,8 +578,8 @@ export class Hud {
     const w = this.world;
     const c = w.nest.chambers[id];
     const col = w.colony;
-    const t = w.chamberTemperature(c);
-    const stoneBonus = t - w.clock.temperatureAt(c.depth);
+    const temp = w.chamberTemperature(c);
+    const stoneBonus = temp - w.clock.temperatureAt(c.depth);
     const h = w.clock.humidityAt(c.depth);
     const counts: Record<Role, number> = { queen: 0, nurse: 0, maintenance: 0, forager: 0 };
     for (const a of col.ants) if (a.room === id) counts[a.role]++;
@@ -589,50 +605,50 @@ export class Hud {
       else if (it.type === 'corpse') corpse++;
     }
     const rows: string[] = [];
-    if (egg) rows.push(`<span>卵</span><b>${egg}</b>`);
-    if (larva) rows.push(`<span>幼虫</span><b>${larva}（饥饿 ${hungry}）</b>`);
-    if (pupa) rows.push(`<span>蛹</span><b>${pupa}（待羽化 ${ready}）</b>`);
-    if (food) rows.push(`<span>食物</span><b>${food.toFixed(0)} 份</b>`);
-    if (waste) rows.push(`<span>垃圾</span><b>${waste}</b>`);
-    if (corpse) rows.push(`<span>尸体</span><b>${corpse}</b>`);
-    if (!rows.length) rows.push('<span>内容物</span><b>空</b>');
+    if (egg) rows.push(`<span>${t('info.eggs')}</span><b>${egg}</b>`);
+    if (larva) rows.push(`<span>${t('info.larvae')}</span><b>${t('info.larvaeVal', { n: larva, h: hungry })}</b>`);
+    if (pupa) rows.push(`<span>${t('info.pupae')}</span><b>${t('info.pupaeVal', { n: pupa, r: ready })}</b>`);
+    if (food) rows.push(`<span>${t('info.food')}</span><b>${t('unit.portions', { n: food.toFixed(0) })}</b>`);
+    if (waste) rows.push(`<span>${t('info.waste')}</span><b>${waste}</b>`);
+    if (corpse) rows.push(`<span>${t('info.corpses')}</span><b>${corpse}</b>`);
+    if (!rows.length) rows.push(`<span>${t('info.contents')}</span><b>${t('info.empty')}</b>`);
     const antRows = (Object.keys(counts) as Role[])
       .filter((r) => counts[r] > 0)
-      .map((r) => `<span><i class="dot" style="background:${hex(ROLE_COLORS[r])}"></i>${ROLE_NAMES[r]}</span><b>${counts[r]}</b>`)
+      .map((r) => `<span><i class="dot" style="background:${hex(ROLE_COLORS[r])}"></i>${cap(tr(ROLE_NAMES[r]))}</span><b>${counts[r]}</b>`)
       .join('');
     const pupaNote =
       c.type === 'pupa' || c.type === 'solar'
-        ? `<span>蛹的去向</span><b>${col.pupaChamber === id ? '保育蚁正把蛹集中到这里' : '目前蛹被安置在另一处'}</b>`
+        ? `<span>${t('info.pupaTarget')}</span><b>${t(col.pupaChamber === id ? 'info.pupaHere' : 'info.pupaElsewhere')}</b>`
         : '';
     const ep = col.expansion.enlarging() === c ? col.expansion.project! : null;
     const eprog = ep ? Math.min(1, ep.soil / ep.soilNeeded) : 0;
     const building = !c.ready
-      ? `<span>挖掘进度</span><b>${bar(c.grow, '#d9a066')} ${Math.round(c.grow * 100)}%</b>`
+      ? `<span>${t('info.digProgress')}</span><b>${bar(c.grow, '#d9a066')} ${Math.round(c.grow * 100)}%</b>`
       : ep
-        ? `<span>扩大进度</span><b>${bar(eprog, '#d9a066')} ${Math.round(eprog * 100)}%</b>`
+        ? `<span>${t('info.enlargeProgress')}</span><b>${bar(eprog, '#d9a066')} ${Math.round(eprog * 100)}%</b>`
         : '';
     return `
-      <h2>${c.name}${!c.ready ? '<span class="tag next">扩建中</span>' : ep ? '<span class="tag next">扩大中</span>' : ''}</h2>
-      <p class="desc">${CHAMBER_INFO[c.type].desc}${c.underStone ? ' 这间房间正位于大石块下方。' : ''}</p>
+      <h2>${cap(tr(c.label))}${!c.ready ? `<span class="tag next">${t('info.building')}</span>` : ep ? `<span class="tag next">${t('info.enlarging')}</span>` : ''}</h2>
+      <p class="desc">${tr(CHAMBER_INFO[c.type].desc)}${c.underStone ? t('info.underStone') : ''}</p>
       <div class="kv">
         ${building}
-        <span>深度</span><b>${c.depth.toFixed(0)} cm</b>
-        <span>尺寸</span><b>${(c.rx * 2 * 0.71).toFixed(0)} × ${(c.rz * 2 * 0.71).toFixed(0)} × ${(c.ry * 1.7).toFixed(0)} cm${c.enlarged ? `（扩大过 ${c.enlarged} 次）` : ''}</b>
-        <span>温度</span><b>${t.toFixed(1)}°C${stoneBonus > 0.05 ? `（石块 +${stoneBonus.toFixed(1)}°C）` : ''}</b>
-        <span>相对湿度</span><b>${Math.round(h)}%</b>
-        ${c.wet > 0.02 ? `<span>积水</span><b>${Math.round(c.wet * 100)}%${c.wet >= CONFIG.weather.floodedAt ? '（进水，蛹会被搬走、储食加快变质）' : ''}</b>` : ''}
+        <span>${t('info.depthLabel')}</span><b>${c.depth.toFixed(0)} cm</b>
+        <span>${t('info.size')}</span><b>${(c.rx * 2 * 0.71).toFixed(0)} × ${(c.rz * 2 * 0.71).toFixed(0)} × ${(c.ry * 1.7).toFixed(0)} cm${c.enlarged ? t('info.enlargedTimes', { n: c.enlarged }) : ''}</b>
+        <span>${t('info.temp')}</span><b>${temp.toFixed(1)}°C${stoneBonus > 0.05 ? t('info.stoneBonus', { t: stoneBonus.toFixed(1) }) : ''}</b>
+        <span>${t('info.humidity')}</span><b>${Math.round(h)}%</b>
+        ${c.wet > 0.02 ? `<span>${t('info.wet')}</span><b>${Math.round(c.wet * 100)}%${c.wet >= CONFIG.weather.floodedAt ? t('info.floodedNote') : ''}</b>` : ''}
         ${pupaNote}
       </div>
-      <h3>内容物</h3><div class="kv">${rows.join('')}</div>
-      <h3>房间内的蚂蚁</h3><div class="kv">${antRows || '<span>无</span><b></b>'}</div>
-      <div class="actions"><button data-a="flyto">飞到房间</button></div>`;
+      <h3>${t('info.contents')}</h3><div class="kv">${rows.join('')}</div>
+      <h3>${t('info.antsInRoom')}</h3><div class="kv">${antRows || `<span>${cap(t('unit.none'))}</span><b></b>`}</div>
+      <div class="actions"><button data-a="flyto">${t('info.flyRoom')}</button></div>`;
   }
 
   private plantInfo(id: number): string {
     const w = this.world;
     const ac = w.aphids.byPlant(id);
     if (!ac) {
-      return `<h2>草本植物</h2><p class="desc">蚂蚁会攀爬植物茎叶寻找小型猎物和花外蜜腺。黑毛蚁尤其喜欢照料聚集在嫩茎上的蚜虫，以获取它们分泌的蜜露。</p>`;
+      return `<h2>${t('info.plant')}</h2><p class="desc">${t('info.plantDesc')}</p>`;
     }
     const now = w.clock.seconds;
     let onPlant = 0;
@@ -642,39 +658,39 @@ export class Hud {
       if (a.climbing && Math.hypot(a.pos.x - ac.x, a.pos.z - ac.z) < 1) onPlant++;
     }
     return `
-      <h2>蚜虫群<span class="tag" style="background:#9bd04a">寄主植物</span></h2>
-      <p class="desc">蚜虫吸食植物汁液，把多余的糖分以蜜露排出。黑毛蚁用触角拍打蚜虫“挤奶”，并驱赶瓢虫、草蛉等天敌作为回报——被照料的蚜虫群繁殖更快。蜜露是黑毛蚁最主要的糖类来源。</p>
+      <h2>${t('info.aphids')}<span class="tag" style="background:#9bd04a">${t('info.hostPlant')}</span></h2>
+      <p class="desc">${t('info.aphidDesc')}</p>
       <div class="kv">
-        <span>蚜虫数量</span><b>约 ${Math.round(ac.count)} 只</b>
-        <span>积存蜜露</span><b>${bar(ac.honeydew / 6, '#f2c25a')} ${ac.honeydew.toFixed(1)} 份</b>
-        <span>状态</span><b>${!ac.discovered ? '尚未被蚂蚁发现' : ac.tended(now) ? '正在被照料' : '暂时无人照料'}</b>
-        <span>茎上的蚂蚁</span><b>${onPlant}</b>
-        <span>固定照料者</span><b>${herders} 只</b>
-        <span>累计被采集</span><b>${ac.collected.toFixed(1)} 份</b>
-        <span>距蚁穴</span><b>${Math.hypot(ac.x, ac.z).toFixed(0)} cm</b>
+        <span>${t('info.aphidCount')}</span><b>${t('info.aboutN', { n: Math.round(ac.count) })}</b>
+        <span>${t('info.honeydew')}</span><b>${bar(ac.honeydew / 6, '#f2c25a')} ${t('unit.portions', { n: ac.honeydew.toFixed(1) })}</b>
+        <span>${t('info.state')}</span><b>${t(!ac.discovered ? 'info.undiscovered' : ac.tended(now) ? 'info.tended' : 'info.untended')}</b>
+        <span>${t('info.onPlant')}</span><b>${onPlant}</b>
+        <span>${t('info.herders')}</span><b>${t('unit.ants', { n: herders })}</b>
+        <span>${t('info.collected')}</span><b>${t('unit.portions', { n: ac.collected.toFixed(1) })}</b>
+        <span>${t('info.distance')}</span><b>${Math.hypot(ac.x, ac.z).toFixed(0)} cm</b>
       </div>
-      <div class="actions"><button data-a="flyto">飞到附近</button></div>`;
+      <div class="actions"><button data-a="flyto">${t('info.flyNear')}</button></div>`;
   }
 
   private foodInfo(id: number): string {
     const w = this.world;
     const f = w.food.byId(id);
-    if (!f) return `<h2>食物源</h2><p class="desc">这个食物源已经被搬空了。</p>`;
+    if (!f) return `<h2>${t('info.foodSource')}</h2><p class="desc">${t('info.foodGone')}</p>`;
     let near = 0;
     for (const a of w.colony.ants) if (a.domain === 'surface' && Math.hypot(a.pos.x - f.x, a.pos.z - f.z) < f.radius + 3) near++;
     const dist = Math.hypot(f.x, f.z);
     return `
-      <h2>${f.info.name}${f.placed ? '<span class="tag next">你投放的</span>' : ''}</h2>
-      <p class="desc">${f.info.desc}</p>
+      <h2>${cap(tr(f.info.name))}${f.placed ? `<span class="tag next">${t('info.droppedTag')}</span>` : ''}</h2>
+      <p class="desc">${tr(f.info.desc)}</p>
       <div class="kv">
-        <span>食物类型</span><b>${FOOD_KIND_NAMES[f.kind]}</b>
-        <span>剩余</span><b>${f.amount.toFixed(0)} / ${f.initial} 份 ${bar(f.fraction, '#e0a030')}</b>
-        <span>距蚁穴</span><b>${dist.toFixed(0)} cm</b>
-        <span>状态</span><b>${f.discovered ? '已被发现' : '尚未被发现'}</b>
-        <span>周围的蚂蚁</span><b>${near}</b>
-        <span>已搬走</span><b>${f.takenTotal} 份</b>
+        <span>${t('info.foodType')}</span><b>${cap(tr(FOOD_KIND_NAMES[f.kind]))}</b>
+        <span>${t('info.left')}</span><b>${t('info.leftVal', { a: f.amount.toFixed(0), b: f.initial })} ${bar(f.fraction, '#e0a030')}</b>
+        <span>${t('info.distance')}</span><b>${dist.toFixed(0)} cm</b>
+        <span>${t('info.state')}</span><b>${t(f.discovered ? 'info.discovered' : 'info.notDiscovered')}</b>
+        <span>${t('info.nearAnts')}</span><b>${near}</b>
+        <span>${t('info.taken')}</span><b>${t('unit.portions', { n: f.takenTotal })}</b>
       </div>
-      <div class="actions"><button data-a="flyto">飞到附近</button></div>`;
+      <div class="actions"><button data-a="flyto">${t('info.flyNear')}</button></div>`;
   }
 
   private entranceInfo(id: number): string {
@@ -685,15 +701,15 @@ export class Hud {
     let soil = 0;
     for (const it of w.colony.surfaceItems) if (it.place === 'mound') soil++;
     return `
-      <h2>${e.name}与蚁丘</h2>
-      <p class="desc">黑毛蚁把挖掘出的土粒堆在巢口周围，形成火山口状的小土丘。土丘能挡雨、吸收阳光为浅层育幼室加温。蚁穴通常有多个入口，便于通风和疏散。下雨前内务蚁会从里面用土粒把入口堵上，防止雨水灌进浅层房间，雨后地面晾干再清开。</p>
+      <h2>${t('info.entranceTitle', { ent: e.label })}</h2>
+      <p class="desc">${t('info.entranceDesc')}</p>
       <div class="kv">
-        <span>状态</span><b>${e.plug >= 1 ? '已用土粒封住' : e.plug > 0 ? `封堵中 ${Math.round(e.plug * 100)}%` : '敞开'}</b>
-        <span>入口附近的蚂蚁</span><b>${near}</b>
-        <span>土丘上的土粒</span><b>${soil}</b>
-        <span>累计挖出土粒</span><b>${w.colony.stats.soilExcavated}</b>
+        <span>${t('info.state')}</span><b>${e.plug >= 1 ? t('info.sealed') : e.plug > 0 ? t('info.sealing', { n: Math.round(e.plug * 100) }) : t('info.open')}</b>
+        <span>${t('info.nearEntrance')}</span><b>${near}</b>
+        <span>${t('info.moundSoil')}</span><b>${soil}</b>
+        <span>${t('info.soilTotal')}</span><b>${w.colony.stats.soilExcavated}</b>
       </div>
-      <div class="actions"><button data-a="flyto">飞到入口</button></div>`;
+      <div class="actions"><button data-a="flyto">${t('info.flyEntrance')}</button></div>`;
   }
 
   private middenInfo(): string {
@@ -706,13 +722,13 @@ export class Hud {
         else waste++;
       }
     return `
-      <h2>巢外垃圾堆</h2>
-      <p class="desc">工蚁把食物残渣、茧壳和同伴尸体集中堆放在巢外固定地点，远离育幼区，以降低病原体传播风险。负责搬运垃圾的工蚁通常不再回到育幼室工作。</p>
+      <h2>${t('info.midden')}</h2>
+      <p class="desc">${t('info.middenDesc')}</p>
       <div class="kv">
-        <span>垃圾</span><b>${waste}</b>
-        <span>尸体</span><b>${corpse}</b>
-        <span>累计运出</span><b>${w.colony.stats.wasteRemoved}</b>
+        <span>${t('info.waste')}</span><b>${waste}</b>
+        <span>${t('info.corpses')}</span><b>${corpse}</b>
+        <span>${t('info.removedTotal')}</span><b>${w.colony.stats.wasteRemoved}</b>
       </div>
-      <div class="actions"><button data-a="flyto">飞到附近</button></div>`;
+      <div class="actions"><button data-a="flyto">${t('info.flyNear')}</button></div>`;
   }
 }

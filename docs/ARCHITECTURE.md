@@ -9,6 +9,10 @@ vite.config.ts          构建配置；singleFile 插件把产物内联成单个
 src/
   main.ts               入口：创建渲染器、场景、各视图，处理按键与选择，驱动主循环
   config.ts             全局配置与常量（职别名称、颜色）；调参优先改这里
+  i18n/
+    index.ts            Text（延迟翻译的文字）、L / t / tr、当前语言
+    zh.ts               中文词典，也是所有键的来源
+    en.ts               英文词典（单复数等写成函数）
   style.css             界面样式
   util/
     random.ts           Rng（可设种子的随机数）、Noise2D（梯度噪声、分形噪声）；`rng` 为运行时共享实例
@@ -46,6 +50,7 @@ src/
     picking.ts          点选（蚂蚁屏幕空间 + 物体射线）；groundPoint 用解析高度场求鼠标下的地面点
     tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法
     saveSlot.ts         存档在 localStorage 中的读写（完整存档 + 一份小摘要）
+    lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
     hud.ts              顶栏、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板
 scripts/
   simtest.ts            无界面模拟测试
@@ -54,6 +59,7 @@ scripts/
   defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
   weathertest.ts        天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
   perftest.ts           性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
+  i18ncheck.ts          界面文字检查：中英文占位符一致，英文模拟中没有漏翻的文字
   extract-shots.mjs     从浏览器捕获结果中提取截图
 docs/                   本文档目录
 ```
@@ -151,6 +157,10 @@ requestAnimationFrame
 
 页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
 
+### 界面文字（`src/i18n`）
+
+模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。切换语言时 `main.ts` 调用 `toggleLang` 和 `Hud.relocalize`。设计取舍见 DECISIONS T-040。
+
 ### 蚁穴生成（`Nest.generate`）
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm
 - 房间按 `specs` 表挂在分岔点上（类型、所在分岔点、方向角、距离、尺寸）。房间是底部被压平的椭球，门开在地板边缘、朝向分岔点。最后一行是第一个分岔点旁、大石块下的向阳育幼室
@@ -171,15 +181,15 @@ requestAnimationFrame
 1. 在 `routines.ts` 写一个 `function*`，用 `yield` 下达指令
 2. 在对应职别的协程里按优先级调用它
 3. 取物品前先设置 `claimedBy`，到达后用 `stillMine` 确认；放弃任务时释放认领
-4. 设置 `a.activity`（信息面板显示）；关键事件用 `a.note(w, ...)` 记进个体日志
+4. 设置 `a.activity = L('act.键', 参数)`（信息面板显示）；关键事件用 `a.note(w, L('note.键'))` 记进个体日志。新键在 `zh.ts` 和 `en.ts` 里都要加
 
 **新增一个职别**
 1. 在 `config.ts` 的 `Role`、`ROLE_NAMES`、`ROLE_COLORS` 里补充
-2. 在 `routineFor` 加分支，并在 `hud.ts` 的 `ROLE_DESC` 加说明
+2. 在 `routineFor` 加分支，并在两个词典里加 `role.职别` 和 `roleDesc.职别`
 3. 在 `Colony.init` 的分配比例里加入
 
 **新增一种房间**
-1. 在 `ChamberType` 和 `CHAMBER_INFO` 中补充
+1. 在 `ChamberType` 和 `CHAMBER_INFO` 中补充，并在两个词典里加 `chamber.类型` 和 `chamberDesc.类型`
 2. 在 `Nest.generate` 的 `specs` 里加一行，并在 `nestView.ts` 的 `CHAMBER_TINT` 里设颜色
 3. 注意同一深度的房间方向角至少相差约 90°，否则会重叠
 4. 想让扩建也能生成这种房间：在 `NestExpansion.plan` 的类型选择里加入
@@ -192,6 +202,8 @@ requestAnimationFrame
 **新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在 `ToolController.apply` / `hover` 里调用。
 
 **新增一种物品**：在 `items.ts` 的 `ItemType`、`ITEM_NAMES` 和 `itemView.ts` 的图层中补充。
+
+**新增界面文字**：先在 `zh.ts` 加键，再在 `en.ts` 加英文（不加会编译报错）。英文名词小写，需要单复数时写成函数；然后跑 `npx tsx scripts/i18ncheck.ts`。
 
 ## 验证工具
 
@@ -207,8 +219,9 @@ npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 1. 启动开发服务器：`npm run dev`
 2. 用无头 Chrome（Agent 环境下用 `rea` 工具的 `capture_browser_scenario`）打开页面，配合 URL 参数定位视角，按键用 `press` 动作，截图选 `at_end: ["screenshot"]`
 3. 每次只截一张图，多张截图会超出工具的返回上限
-4. 提取图片：`node scripts/extract-shots.mjs <捕获结果文件> shots/名称`（`shots/` 已加入 .gitignore）
-5. 无头 Chrome 用软件渲染，帧率很低：等 `#loading` 消失后再等 8–10 秒，否则界面面板可能还没刷新。用了 `skip` 时加载本身也要十几秒
+4. 无头 Chrome 的默认语言是 en-US，页面会显示英文；要看中文界面加 `?lang=zh`，或在 `environment.locale` 里指定 `zh-CN`
+5. 提取图片：`node scripts/extract-shots.mjs <捕获结果文件> shots/名称`（`shots/` 已加入 .gitignore）
+6. 无头 Chrome 用软件渲染，帧率很低：等 `#loading` 消失后再等 8–10 秒，否则界面面板可能还没刷新。用了 `skip` 时加载本身也要十几秒
 
 常用视角（坐标按默认地图测得；新开局会随机换地图，截图时加 `seed=20261021`）：
 

@@ -1,57 +1,28 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { L, type Text } from '../i18n';
 import type { Rng } from '../util/random';
 import type { Terrain } from './terrain';
 import type { Vegetation } from './vegetation';
 
 export type FoodKind = 'prey' | 'seed' | 'sugar';
 
-export const FOOD_KIND_NAMES: Record<FoodKind, string> = {
-  prey: '猎物碎块',
-  seed: '种子',
-  sugar: '甜液',
+export const FOOD_KIND_NAMES: Record<FoodKind, Text> = {
+  prey: L('foodKind.prey'),
+  seed: L('foodKind.seed'),
+  sugar: L('foodKind.sugar'),
 };
 
 export type FoodSourceType = 'beetle' | 'caterpillar' | 'seeds' | 'fruit' | 'syrup';
 
 export const PLACEABLE_FOOD: FoodSourceType[] = ['syrup', 'beetle', 'caterpillar', 'seeds', 'fruit'];
 
-export const SOURCE_INFO: Record<FoodSourceType, { name: string; kind: FoodKind; amount: [number, number]; radius: number; desc: string }> = {
-  beetle: {
-    name: '甲虫尸体',
-    kind: 'prey',
-    amount: [30, 50],
-    radius: 2.2,
-    desc: '富含蛋白质的猎物。觅食蚁把它肢解成小块搬回巢，主要用于喂养幼虫。',
-  },
-  caterpillar: {
-    name: '毛虫尸体',
-    kind: 'prey',
-    amount: [40, 70],
-    radius: 2.8,
-    desc: '较大的软体猎物，往往需要很多觅食蚁轮流切割搬运，会形成明显的信息素路径。',
-  },
-  seeds: {
-    name: '带油质体的种子',
-    kind: 'seed',
-    amount: [14, 26],
-    radius: 1.6,
-    desc: '堇菜等植物的种子附有富含脂肪的油质体，专门“雇佣”蚂蚁传播种子。蚂蚁吃掉油质体后会把种子丢弃到巢外。',
-  },
-  fruit: {
-    name: '落果甜汁',
-    kind: 'sugar',
-    amount: [40, 60],
-    radius: 2.0,
-    desc: '富含糖分的液体食物。觅食蚁把甜汁吸入嗉囊带回巢，再通过交哺分给同伴。',
-  },
-  syrup: {
-    name: '糖水',
-    kind: 'sugar',
-    amount: [50, 70],
-    radius: 1.8,
-    desc: '玩家滴下的一滴糖水。和蜜露、花蜜一样被吸进嗉囊带回巢，是饲养蚂蚁最常用的“零食”。',
-  },
+export const SOURCE_INFO: Record<FoodSourceType, { name: Text; kind: FoodKind; amount: [number, number]; radius: number; desc: Text }> = {
+  beetle: { name: L('food.beetle'), kind: 'prey', amount: [30, 50], radius: 2.2, desc: L('foodDesc.beetle') },
+  caterpillar: { name: L('food.caterpillar'), kind: 'prey', amount: [40, 70], radius: 2.8, desc: L('foodDesc.caterpillar') },
+  seeds: { name: L('food.seeds'), kind: 'seed', amount: [14, 26], radius: 1.6, desc: L('foodDesc.seeds') },
+  fruit: { name: L('food.fruit'), kind: 'sugar', amount: [40, 60], radius: 2.0, desc: L('foodDesc.fruit') },
+  syrup: { name: L('food.syrup'), kind: 'sugar', amount: [50, 70], radius: 1.8, desc: L('foodDesc.syrup') },
 };
 
 let nextFoodId = 1;

@@ -2,6 +2,7 @@
  * 天气测试：热身后招来一场雨，观察觅食蚁返巢、入口封堵、信息素冲刷、浅层房间进水和雨后重开。
  * npx tsx scripts/weathertest.ts [热身秒数，默认 300] [观察秒数，默认 600]
  */
+import { tr } from '../src/i18n';
 import { CONFIG } from '../src/config';
 import { World } from '../src/world/world';
 
@@ -13,9 +14,9 @@ CONFIG.weather.rainPerDay = 0;
 for (let t = 0; t < warm; t += step) w.advance(step);
 const log: string[] = [];
 const push = w.colony.pushEvent.bind(w.colony);
-w.colony.pushEvent = (msg: string) => {
-  log.push(`${w.clock.stamp()} ${msg}`);
-  push(msg);
+w.colony.pushEvent = (...args) => {
+  log.push(`${tr(w.clock.stamp())} ${tr(args[0])}`);
+  push(...args);
 };
 
 const sum = (a: Float32Array) => a.reduce((s, v) => s + v, 0);
@@ -23,7 +24,7 @@ const shallow = w.nest.chambers.filter((c) => c.depth < CONFIG.weather.floodDept
 const trail0 = sum(w.pheromone.trail);
 const out0 = w.colony.outsideCount();
 console.log(`热身 ${warm} 秒（${w.clock.hour.toFixed(1)} 时），巢外 ${out0} 只，路径信息素 ${trail0.toFixed(0)}`);
-console.log(w.callRain().msg);
+console.log(tr(w.callRain().msg!));
 
 const W = w.weather;
 let minOut = out0;
@@ -37,13 +38,13 @@ for (let t = 0; t < secs; t += step) {
   w.advance(step);
   const out = w.colony.outsideCount();
   minOut = Math.min(minOut, out);
-  const blockedAnts = w.colony.ants.filter((a) => a.activity.includes('已被土粒封住'));
+  const blockedAnts = w.colony.ants.filter((a) => a.activity.k === 'act.waitSealed');
   const blocked = blockedAnts.length;
   if (blocked > maxBlocked) {
     maxBlocked = blocked;
     const why = new Map<string, number>();
     for (const a of blockedAnts) {
-      const k = `${a.role}:${a.taskActivity}${a.carrying ? '(搬着东西)' : ''}`;
+      const k = `${a.role}:${tr(a['taskActivity'])}${a.carrying ? '(搬着东西)' : ''}`;
       why.set(k, (why.get(k) ?? 0) + 1);
     }
     blockedWhy = [...why.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}×${k}`).join('，');
@@ -54,11 +55,11 @@ for (let t = 0; t < secs; t += step) {
   if (sealedAt >= 0 && reopenAt < 0 && w.nest.entrances.every((e) => e.plug === 0)) reopenAt = t;
   if (Math.round(t / step) % Math.round(15 / step) === 0) {
     const plugs = w.nest.entrances.map((e) => e.plug.toFixed(1)).join('/');
-    const wet = shallow.map((c) => `${c.name}${c.wet.toFixed(2)}`).join(' ');
+    const wet = shallow.map((c) => `${tr(c.label)}${c.wet.toFixed(2)}`).join(' ');
     const pluggers = w.colony.ants.filter((a) => a.plugging >= 0).length;
     console.log(
-      `t=${t.toFixed(0).padStart(3)}s ${W.label.padEnd(2)} 雨${W.rain.toFixed(2)} 云${W.cloud.toFixed(2)} 湿${W.wetness.toFixed(2)} ${w.clock.temperatureAt(0).toFixed(1)}°C` +
-        ` 巢外=${out} 封堵=${plugs} 封堵中=${pluggers} 等在入口=${blocked} 水洼=${w.water.puddles.length} 信息素=${sum(w.pheromone.trail).toFixed(0)} | ${wet} 蛹室=${w.nest.chambers[w.colony.pupaChamber].name}`,
+      `t=${t.toFixed(0).padStart(3)}s ${tr(W.label).padEnd(2)} 雨${W.rain.toFixed(2)} 云${W.cloud.toFixed(2)} 湿${W.wetness.toFixed(2)} ${w.clock.temperatureAt(0).toFixed(1)}°C` +
+        ` 巢外=${out} 封堵=${plugs} 封堵中=${pluggers} 等在入口=${blocked} 水洼=${w.water.puddles.length} 信息素=${sum(w.pheromone.trail).toFixed(0)} | ${wet} 蛹室=${tr(w.nest.chambers[w.colony.pupaChamber].label)}`,
     );
   }
 }

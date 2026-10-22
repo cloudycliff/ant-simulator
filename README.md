@@ -14,6 +14,7 @@
 - 会下雨：雨水冲淡信息素、积成水洼，觅食蚁回巢躲雨，内务蚁在雨前用土粒封住入口、雨后清开；入口没封好时浅层房间会进水，蛹被搬到深处
 - 玩家可以投放食物、放置石块和树枝路障、浇水或招来一场雨、放入或赶走天敌，观察蚁群如何应对
 - 自动存档，下次打开接着养
+- 中英文界面：第一次打开按浏览器语言自动选择，顶栏右侧的语言按钮随时切换（English UI is available: it is picked automatically for non-Chinese browsers, and the top-bar button switches language at any time）
 
 当前进度：**第三阶段进行中**（干预工具、存档、天敌、警报与防御、天气已完成）。详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
@@ -28,11 +29,12 @@ npx tsx scripts/savetest.ts       # 存档往返测试
 npx tsx scripts/defensetest.ts    # 放入狼蛛，观察警报、围攻与入口警戒
 npx tsx scripts/weathertest.ts    # 招来一场雨，观察躲雨、封堵入口与进水
 npx tsx scripts/perftest.ts 3000  # 3000 只工蚁的模拟耗时
+npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查
 ```
 
 ### 不用服务器直接打开
 
-双击根目录下的 **`赛博养蚂蚁.html`**，用 Chrome / Edge / Firefox 打开即可运行。它内联了全部脚本和样式（约 700 KB），没有其他依赖文件，可以复制到任意位置单独分享。
+双击根目录下的 **`赛博养蚂蚁.html`**，用 Chrome / Edge / Firefox 打开即可运行。它内联了全部脚本和样式（约 760 KB），没有其他依赖文件，可以复制到任意位置单独分享。
 
 - 这个文件由 `npm run build` 生成（内容与 `dist/index.html` 相同），改了代码后要重新构建才会更新
 - 根目录的 `index.html` 是给 Vite 用的源码模板，引用的是 TypeScript 源码，不能直接双击运行
@@ -55,6 +57,7 @@ Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：�
 | 投食 / 放障碍 / 浇水或下雨 / 天敌（再按一次切换选项） | `6` / `7` / `8` / `9` |
 | 旋转树枝路障 / 退出工具 | `R` / `Esc` |
 | 保存（每分钟和关闭页面时也会自动保存） | `Ctrl` + `S`；读取存档、重新开始在顶栏“存档”里 |
+| 切换中文 / 英文 | 顶栏右侧的语言按钮（中文界面显示“English”，会记住选择） |
 
 存档保存在浏览器本地（`localStorage`），换浏览器或清除网站数据后会丢失。直接双击 HTML 文件打开时，同一浏览器里所有本地 HTML 文件共用一份存储。
 
@@ -71,6 +74,7 @@ Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：�
 | `?new=1&seed=20261021` | 用指定编号的地图新开局；地图编号显示在存档面板里 |
 | `?view=xray,pheromone,roles,stats` | 开局打开地下透视 / 信息素 / 分工着色 / 统计曲线 |
 | `?rain=60` | 开局招来一场雨，并在后台快进指定秒数（上限 2000），用来直接观察雨中的蚁穴 |
+| `?lang=en` / `?lang=zh` | 本次用指定语言显示（不会被记住；不加时按上次的选择或浏览器语言） |
 | `?ants=3000` | 用指定数量的工蚁开局（上限 5000，人口上限随之提高），用来测性能；和 `new=1` 一样不读存档，之后的自动保存会覆盖原存档 |
 
 ## 文档

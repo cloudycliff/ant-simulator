@@ -1,6 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import { CONFIG } from './config';
+import { t, tr } from './i18n';
 import { World } from './world/world';
 import { NestView } from './nest/nestView';
 import { RainView } from './render/rain';
@@ -12,11 +13,16 @@ import { Picker, type Selection } from './ui/picking';
 import { Hud, type HudAction } from './ui/hud';
 import { ToolController } from './ui/tools';
 import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
+import { initLang, toggleLang } from './ui/lang';
 import { loadWorld, saveProblem, saveWorld } from './world/save';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
 
 async function boot(): Promise<void> {
+  // ?lang=zh 或 ?lang=en 指定界面语言（截图用），不会被记住
+  initLang(new URLSearchParams(location.search).get('lang'));
+  const loading = document.getElementById('loading');
+  if (loading) loading.textContent = t('app.loading');
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -51,16 +57,16 @@ async function boot(): Promise<void> {
     try {
       world = new World(saved.seed);
       loadWorld(world, saved);
-      loadMsg = `已读取存档：${saved.stamp}`;
+      loadMsg = t('toast.loaded', { stamp: tr(world.clock.stamp()) });
       savedCamera = saved.camera;
     } catch (e) {
       console.error(e);
       world = new World(newSeed);
-      loadMsg = '存档无法读取，已开始新的蚁群';
+      loadMsg = t('toast.loadFailed');
     }
   } else {
     world = new World(newSeed);
-    if (problem) loadMsg = `${problem}，已开始新的蚁群`;
+    if (problem) loadMsg = t('toast.problem', { problem });
   }
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);
@@ -177,12 +183,12 @@ async function boot(): Promise<void> {
       return;
     }
     if (selection?.kind !== 'ant') {
-      hud.toast('先单击选中一只蚂蚁');
+      hud.toast(t('toast.selectAntFirst'));
       return;
     }
     const id = selection.id;
     controller.follow(() => world.colony.antById(id)?.pos ?? null);
-    hud.toast('跟随中：左键拖拽环绕，滚轮缩放，WASD 退出');
+    hud.toast(t('toast.following'));
   };
 
   // 读档和重新开始都通过重新载入页面完成；载入前不再自动保存，以免覆盖
@@ -197,10 +203,10 @@ async function boot(): Promise<void> {
     d.camera = [...camera.position.toArray(), ...target.toArray()].map((n) => Math.round(n * 100) / 100);
     const err = writeSave(d);
     hud.saveMeta = readMeta();
-    if (manual) hud.toast(err ? `保存失败：${err}` : `已保存（${d.stamp}）`);
+    if (manual) hud.toast(err ? t('toast.saveFailed', { err }) : t('toast.saved', { stamp: tr(world.clock.stamp()) }));
     else if (err && !autosaveWarned) {
       autosaveWarned = true;
-      hud.toast(`自动保存失败：${err}`);
+      hud.toast(t('toast.autosaveFailed', { err }));
     }
   };
   const reloadClean = () => {
@@ -224,7 +230,7 @@ async function boot(): Promise<void> {
         break;
       case 'xray':
         hud.state.xray = !hud.state.xray;
-        if (!hud.state.xray && hud.state.forcedXray) hud.toast('相机位于地下，保持透视');
+        if (!hud.state.xray && hud.state.forcedXray) hud.toast(t('toast.underground'));
         break;
       case 'pheromone':
         hud.state.pheromone = !hud.state.pheromone;
@@ -270,13 +276,13 @@ async function boot(): Promise<void> {
         break;
       case 'removePlaced': {
         const r = world.removePlacedById(v ?? -1);
-        hud.toast(r.msg);
+        if (r.msg) hud.toast(tr(r.msg));
         if (r.ok) select(null);
         break;
       }
       case 'removePredator': {
         const r = world.removePredatorById(v ?? -1);
-        hud.toast(r.msg);
+        if (r.msg) hud.toast(tr(r.msg));
         if (r.ok) select(null);
         break;
       }
@@ -291,9 +297,15 @@ async function boot(): Promise<void> {
         if (readMeta()) reloadClean();
         break;
       case 'newGame':
-        if (!confirm('重新开始会删除当前存档，用一个新的蚁群从头开始。确定吗？')) break;
+        if (!confirm(t('toast.confirmNew'))) break;
         clearSave();
         reloadClean();
+        break;
+      case 'lang':
+        toggleLang();
+        hud.relocalize();
+        hud.refresh(selection, fps);
+        hud.toast(t('toast.lang'));
         break;
     }
     hud.renderTool();
@@ -309,7 +321,7 @@ async function boot(): Promise<void> {
     } else if (e.at) {
       select(null);
       controller.flyTo(new THREE.Vector3(...e.at), 14);
-      if (sel) hud.toast('它已经不在了，跳到事件发生的位置');
+      if (sel) hud.toast(t('toast.eventGone'));
     }
     hud.refresh(selection, fps);
   };
@@ -317,7 +329,7 @@ async function boot(): Promise<void> {
   const useTool = (x: number, y: number) => {
     tools.hover(picker.groundPoint(x, y, groundPt));
     const r = tools.apply();
-    if (r.msg) hud.toast(r.msg);
+    if (r.msg) hud.toast(tr(r.msg));
     if (r.ok) {
       hud.refresh(selection, fps);
       if (hud.state.pheromone) world.pheromone.refreshTexture();

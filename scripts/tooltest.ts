@@ -1,5 +1,6 @@
 /** 干预工具的无界面回归测试：npx tsx scripts/tooltest.ts */
-import { World } from '../src/world/world';
+import { tr } from '../src/i18n';
+import { World, type ToolResult } from '../src/world/world';
 
 const w = new World();
 const step = 1 / 30;
@@ -7,7 +8,7 @@ const run = (sec: number) => {
   for (let t = 0; t < sec; t += step) w.advance(step);
 };
 
-const log = (r: { ok: boolean; msg: string }) => console.log(r.ok ? 'OK ' : 'ERR', r.msg);
+const log = (r: ToolResult) => console.log(r.ok ? 'OK ' : 'ERR', r.msg ? tr(r.msg) : '');
 
 run(60);
 // 蚁穴东侧 25 cm 处投放糖水，在它和入口之间横一根树枝、放一块大石，再浇一大杯水
@@ -36,7 +37,7 @@ for (let k = 0; k < 12; k++) {
     const moved = p ? Math.hypot(a.pos.x - p[0], a.pos.z - p[1]) : 99;
     if (p && moved < 0.3 && a.moving) {
       stuck++;
-      const k = `${a.activity.replace(/#\d+/g, '#')}@${a.pos.x.toFixed(0)},${a.pos.z.toFixed(0)}`;
+      const k = `${tr(a.activity).replace(/#\d+/g, '#')}@${a.pos.x.toFixed(0)},${a.pos.z.toFixed(0)}`;
       kinds.set(k, (kinds.get(k) ?? 0) + 1);
     }
     last.set(a.id, [a.pos.x, a.pos.z, 0]);
@@ -45,7 +46,7 @@ for (let k = 0; k < 12; k++) {
   stuckMax = Math.max(stuckMax, stuck);
   const pd = w.water.puddles[0];
   console.log(
-    `t=${(60 + (k + 1) * 50).toString().padStart(4)}s 糖水剩余 ${syrup.amount}/${start}  巢外 ${w.colony.outsideCount()}  原地打转 ${stuck}  水洼 ${pd ? pd.r.toFixed(1) + 'cm' : '已干'}  事件: ${w.colony.events[0]?.msg}`,
+    `t=${(60 + (k + 1) * 50).toString().padStart(4)}s 糖水剩余 ${syrup.amount}/${start}  巢外 ${w.colony.outsideCount()}  原地打转 ${stuck}  水洼 ${pd ? pd.r.toFixed(1) + 'cm' : '已干'}  事件: ${w.colony.events[0] ? tr(w.colony.events[0].msg) : ''}`,
   );
 }
 console.log('最多同时原地打转的蚂蚁', stuckMax);

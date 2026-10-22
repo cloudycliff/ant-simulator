@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { L, type Text } from '../i18n';
 import { clamp, TAU, wrapAngle } from '../util/math';
 import { rng, type Rng } from '../util/random';
 import type { Ant } from '../sim/ant';
@@ -10,15 +11,9 @@ import type { World } from './world';
 
 export type PredatorKind = 'spider' | 'antlion';
 
-export const PREDATOR_INFO: Record<PredatorKind, { name: string; desc: string }> = {
-  spider: {
-    name: '狼蛛',
-    desc: '狼蛛科（Lycosidae）的游猎型蜘蛛，不结网，靠视觉和地面振动发现猎物，突然冲刺扑击。地表的觅食蚁是它常见的猎物。抓到后注入毒液、吸食体液，留下空壳。',
-  },
-  antlion: {
-    name: '蚁狮',
-    desc: '蚁蛉（Myrmeleontidae）的幼虫。它在干燥松软的地面倒退着挖出漏斗形的坑，自己埋在坑底只露出大颚。蚂蚁踩到坑壁会顺着松沙滑下去，越往下越难爬出来；被抓住后体液被吸干，空壳会被蚁狮甩出坑外。',
-  },
+export const PREDATOR_INFO: Record<PredatorKind, { name: Text; desc: Text }> = {
+  spider: { name: L('predator.spider'), desc: L('predatorDesc.spider') },
+  antlion: { name: L('predator.antlion'), desc: L('predatorDesc.antlion') },
 };
 
 /** 坑口外沿堆起的松沙到 PIT_EDGE 倍半径处落回地面 */
@@ -253,7 +248,7 @@ export class PredatorManager {
         const z = Math.sin(a) * R;
         if (this.veg.obstacleAt(x, z, 2, true)) continue;
         const s = this.addSpider(x, z, a + Math.PI + rng.range(-0.5, 0.5), false);
-        w.colony.pushEvent('一只狼蛛游荡进了蚂蚁的觅食范围', { kind: 'predator', id: s.id });
+        w.colony.pushEvent(L('ev.spiderArrived'), { kind: 'predator', id: s.id });
         break;
       }
     }
@@ -293,7 +288,7 @@ export class PredatorManager {
         // 被石块、植物困住太久就当作已经从缝隙里钻走了
         if (Math.hypot(s.x, s.z) > CONFIG.world.forageRadius + 2 || s.timer <= 0) {
           this.remove(s);
-          w.colony.pushEvent(s.meals > 0 ? `狼蛛吃了 ${s.meals} 只蚂蚁后离开了` : '狼蛛离开了觅食范围', undefined, { x: s.x, y: this.terrain.heightAt(s.x, s.z), z: s.z });
+          w.colony.pushEvent(s.meals > 0 ? L('ev.spiderLeftAte', { n: s.meals }) : L('ev.spiderLeft'), undefined, { x: s.x, y: this.terrain.heightAt(s.x, s.z), z: s.z });
         }
         return;
       case 'chase': {
@@ -315,10 +310,10 @@ export class PredatorManager {
             s.caught++;
             s.heading = Math.atan2(dz, dx);
             w.colony.stats.preyed++;
-            w.colony.pushEvent(`觅食蚁 #${a.id} 被狼蛛捕食`, { kind: 'predator', id: s.id });
-            w.colony.kill(a, '被狼蛛捕食', false);
+            w.colony.pushEvent(L('ev.spiderAte', { id: a.id }), { kind: 'predator', id: s.id });
+            w.colony.kill(a, L('cause.spider'), false);
           } else {
-            a.note(w, '被狼蛛扑击，侥幸逃脱');
+            a.note(w, L('note.escapedSpider'));
             s.state = 'pause';
             s.timer = rng.range(2, 5);
           }
@@ -363,7 +358,7 @@ export class PredatorManager {
     for (const a of this.surface) {
       if (a.mobTarget !== s.id || !a.alive || !rng.chance(D.mobKillPerSec * dt)) continue;
       w.colony.stats.preyed++;
-      w.colony.kill(a, '围攻狼蛛时被咬死');
+      w.colony.kill(a, L('cause.mobbed'));
       break;
     }
     if (s.harass < D.harassLimit) return mob >= 2;
@@ -373,7 +368,7 @@ export class PredatorManager {
     s.fled = true;
     s.mob = 0;
     w.colony.stats.repelled++;
-    w.colony.pushEvent(`${mob} 只工蚁围攻狼蛛，把它赶走了`, { kind: 'predator', id: s.id });
+    w.colony.pushEvent(L('ev.spiderRepelled', { n: mob }), { kind: 'predator', id: s.id });
     return true;
   }
 
@@ -427,8 +422,8 @@ export class PredatorManager {
       p.feedT = CONFIG.predators.antlionFeedSec;
       p.caught++;
       w.colony.stats.preyed++;
-      w.colony.pushEvent(`觅食蚁 #${a.id} 滑进蚁狮的陷阱被抓住了`, { kind: 'predator', id: p.id });
-      w.colony.kill(a, '落入蚁狮陷阱', false);
+      w.colony.pushEvent(L('ev.antlionAte', { id: a.id }), { kind: 'predator', id: p.id });
+      w.colony.kill(a, L('cause.antlion'), false);
       return;
     }
   }

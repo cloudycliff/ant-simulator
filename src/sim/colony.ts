@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG, ROLE_NAMES, type Role } from '../config';
+import { asText, L, t, type Text } from '../i18n';
 import { clamp, lerp, smoothstep } from '../util/math';
 import { rng } from '../util/random';
 import type { Chamber, ChamberType } from '../nest/nest';
@@ -14,9 +15,10 @@ import { SpatialHash } from './spatial';
 /** 事件涉及的对象：界面上点击事件时选中它并飞过去 */
 export type EventRef = { kind: 'ant' | 'chamber' | 'entrance' | 'food' | 'plant' | 'predator' | 'placed'; id: number };
 
+/** t 是模拟秒数；较早的存档里 t 和 msg 都是拼好的中文 */
 export interface ColonyEvent {
-  t: string;
-  msg: string;
+  t: number | string;
+  msg: Text;
   ref?: EventRef;
   /** 事件发生的位置；对象已经不在时跳到这里 */
   at?: [number, number, number];
@@ -69,7 +71,7 @@ export interface ColonySave {
   targets: RoleTargets;
   stats: ColonyStats;
   history: ColonySample[];
-  events: ColonyEvent[];
+  events: (Omit<ColonyEvent, 'msg'> & { msg: Text | string })[];
   expansion: ExpansionSave;
 }
 
@@ -225,7 +227,7 @@ export class Colony {
   restore(s: ColonySave): void {
     this.ants = s.ants.map((as) => Ant.fromSave(as, this.w));
     const queen = this.ants.find((a) => a.role === 'queen');
-    if (!queen) throw new Error('存档里没有蚁后');
+    if (!queen) throw new Error(t('save.noQueen'));
     this.queen = queen;
     this.items.clear();
     this.byChamber = [];
@@ -255,7 +257,7 @@ export class Colony {
     this.targets = s.targets;
     this.stats = { ...this.stats, ...s.stats };
     this.history = s.history;
-    this.events = s.events;
+    this.events = s.events.map((e) => ({ ...e, msg: asText(e.msg) }));
     this.expansion.restore(s.expansion);
     this.refreshFoodStock();
     this.liquidStock = this.ants.reduce((sum, a) => sum + a.crop, 0);
@@ -290,7 +292,7 @@ export class Colony {
     a.scout = a.role === 'forager' && rng.chance(CONFIG.colony.scoutRatio);
     a.memory = null;
     a.herd = -1;
-    a.note(this.w, `由${ROLE_NAMES[from]}转为${ROLE_NAMES[a.role]}${a.scout ? '（侦察蚁）' : ''}，日龄 ${a.ageDays.toFixed(1)} 天`);
+    a.note(this.w, L(a.scout ? 'note.roleChangeScout' : 'note.roleChange', { from: ROLE_NAMES[from], to: ROLE_NAMES[a.role], age: a.ageDays.toFixed(1) }));
     this.stats.roleChanges++;
   }
 
@@ -583,7 +585,7 @@ export class Colony {
     ant.placeInRoom(this.w, c.id);
     ant.pos.copy(pupa.pos).setY(c.floor.y);
     ant.hunger = 0.3;
-    ant.note(this.w, helper ? `在保育蚁 #${helper.id} 的帮助下破茧羽化` : '自行破茧羽化');
+    ant.note(this.w, helper ? L('note.eclosedHelped', { id: helper.id }) : L('note.eclosed'));
     this.ants.push(ant);
     const shell = pupa;
     shell.type = 'waste';
@@ -591,16 +593,16 @@ export class Colony {
     shell.claimedBy = -1;
     shell.wantsMove = false;
     this.stats.emerged++;
-    this.pushEvent(`新工蚁 #${ant.id} 羽化`, { kind: 'ant', id: ant.id });
+    this.pushEvent(L('ev.eclosed', { id: ant.id }), { kind: 'ant', id: ant.id });
     return ant;
   }
 
   /** leaveCorpse 为 false 时尸体由调用方处理（被天敌吃掉，之后才留下空壳） */
-  kill(ant: Ant, cause: string, leaveCorpse = true): void {
+  kill(ant: Ant, cause: Text, leaveCorpse = true): void {
     if (!ant.alive || ant.role === 'queen') return;
     ant.alive = false;
-    ant.activity = `已死亡（${cause}）`;
-    ant.note(this.w, `死亡：${cause}`);
+    ant.activity = L('act.dead', { cause });
+    ant.note(this.w, L('note.died', { cause }));
     for (const it of this.items) if (it.claimedBy === ant.id && it.carriedBy !== ant.id) it.claimedBy = -1;
     const carried = this.release(ant);
     if (leaveCorpse) {
@@ -625,9 +627,9 @@ export class Colony {
   }
 
   /** at 省略时取 ref 现在的位置 */
-  pushEvent(msg: string, ref?: EventRef, at?: { x: number; y: number; z: number }): void {
+  pushEvent(msg: Text, ref?: EventRef, at?: { x: number; y: number; z: number }): void {
     const p = at ?? (ref ? this.refPos(ref) : null);
-    this.events.unshift({ t: this.w.clock.stamp(), msg, ref, at: p ? [p.x, p.y, p.z] : undefined });
+    this.events.unshift({ t: Math.round(this.w.clock.seconds), msg, ref, at: p ? [p.x, p.y, p.z] : undefined });
     if (this.events.length > 8) this.events.pop();
   }
 
@@ -683,11 +685,11 @@ export class Colony {
       } else a.health = Math.min(1, a.health + days * 0.4);
       if (a.role !== 'queen') {
         if (a.ageDays > a.lifespan) {
-          this.kill(a, '衰老');
+          this.kill(a, L('cause.age'));
           continue;
         }
         if (a.health <= 0) {
-          this.kill(a, '饥饿');
+          this.kill(a, L('cause.starve'));
           continue;
         }
         // 错开检查，每只蚂蚁约每 8 步检查一次接触
@@ -790,7 +792,7 @@ export class Colony {
   private exchange(from: Ant, to: Ant, now: number): void {
     if (from.layTrail <= 0 || to.role !== 'forager' || to.excitedUntil > now) return;
     to.excitedUntil = now + 90;
-    to.note(this.w, `与满载归来的 #${from.id} 触角接触，被激发准备出巢`);
+    to.note(this.w, L('note.excited', { id: from.id }));
   }
 
   // ---------------- 分工调整 ----------------
@@ -840,7 +842,7 @@ export class Colony {
     const day = Math.floor(this.w.clock.totalDays);
     if (early >= 5 && day !== this.lastShortageDay) {
       this.lastShortageDay = day;
-      this.pushEvent('觅食蚁不足，较年轻的工蚁提前转为觅食蚁');
+      this.pushEvent(L('ev.foragerShortage'));
     }
   }
 
@@ -872,8 +874,8 @@ export class Colony {
     for (const arr of this.byChamber) for (const it of arr) if (it.type === 'pupa') it.wantsMove = it.chamber !== best.id;
     const t = this.w.chamberTemperature(best).toFixed(1);
     const ref = { kind: 'chamber', id: best.id } as const;
-    if (flooded) this.pushEvent(`${cur.name}进水，保育蚁把蛹搬到${best.name}`, ref);
-    else this.pushEvent(best.type === 'solar' ? `${best.name}升温到 ${t}°C，保育蚁开始把蛹搬上来` : `浅层降温，保育蚁把蛹搬回${best.name}（${t}°C）`, ref);
+    if (flooded) this.pushEvent(L('ev.pupaeFlood', { from: cur.label, to: best.label }), ref);
+    else this.pushEvent(L(best.type === 'solar' ? 'ev.pupaeUp' : 'ev.pupaeDown', { room: best.label, t }), ref);
   }
 
   // ---------------- 储食与幼体 ----------------
@@ -928,7 +930,7 @@ export class Colony {
       } else if (it.hunger > 3.5 && it.place === 'chamber') {
         it.type = 'waste';
         it.wantsMove = false;
-        this.pushEvent('一只幼虫因缺乏喂养死亡', { kind: 'chamber', id: it.chamber }, it.pos);
+        this.pushEvent(L('ev.larvaStarved'), { kind: 'chamber', id: it.chamber }, it.pos);
       }
     } else if (it.type === 'pupa') {
       // 温暖处发育更快

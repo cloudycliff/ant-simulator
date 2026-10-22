@@ -6,7 +6,8 @@
 3. 涉及架构或数值时，读 `docs/ARCHITECTURE.md` 和 `docs/BALANCE.md`；不要推翻 `docs/DECISIONS.md` 中已采纳的决策，除非需求方同意
 
 ## 约定
-- 界面文字、代码注释用中文；标识符用英文
+- 代码注释用中文；标识符用英文
+- 界面文字不直接写在代码里：中文写进 `src/i18n/zh.ts`（键以它为准），英文写进 `src/i18n/en.ts`，两边都要有。界面用 `t(键, 参数)` 取文字；模拟层用 `L(键, 参数)` 记下延迟翻译的 `Text`，显示时再 `tr()`（DECISIONS T-040）。改了词典跑 `npx tsx scripts/i18ncheck.ts`
 - 注释只写代码本身表达不了的约束，不写“下一行做什么”
 - 模拟层（`src/sim`、`src/world`、`src/nest/nest.ts`）不能依赖 WebGL 或 DOM，要能在 Node 中运行 `scripts/simtest.ts`
 - 物品位置变化必须通过 `Colony` 的方法，不要直接改 `Item.place`

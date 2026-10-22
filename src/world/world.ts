@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { L, type MsgKey, type Text } from '../i18n';
 import { TAU } from '../util/math';
 import { Rng } from '../util/random';
 import { Nest, type Chamber } from '../nest/nest';
@@ -15,13 +16,14 @@ import { OBSTACLE_INFO, Vegetation, type PlaceableObstacle } from './vegetation'
 import { WaterManager } from './water';
 import { WeatherSystem } from './weather';
 
-/** 干预操作的结果，msg 用于提示玩家 */
+/** 干预操作的结果，msg 用于提示玩家；只做检查（dry）时成功没有 msg */
 export interface ToolResult {
   ok: boolean;
-  msg: string;
+  msg?: Text;
 }
 
-const COMPASS = ['东', '东南', '南', '西南', '西', '西北', '北', '东北'];
+const fail = (k: MsgKey): ToolResult => ({ ok: false, msg: L(k) });
+const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 'dir.7'] as const;
 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
 export class World {
@@ -47,7 +49,7 @@ export class World {
   constructor(readonly seed: number = CONFIG.seed) {
     this.rng = new Rng(seed);
     this.terrain = new Terrain(seed);
-    for (const e of Nest.entranceLayout()) this.terrain.addMound(e.x, e.z, e.name === '主入口' ? 4.2 : 3.2, e.name === '主入口' ? 1.3 : 0.9);
+    for (const e of Nest.entranceLayout()) this.terrain.addMound(e.x, e.z, e.main ? 4.2 : 3.2, e.main ? 1.3 : 0.9);
     this.terrain.build();
     this.nest = new Nest(this.terrain);
     this.nest.generate(seed + 1);
@@ -71,19 +73,19 @@ export class World {
   // ---------------- 玩家干预 ----------------
 
   /** “蚁穴东北 32 cm 处”。+x 为东，+z 为南 */
-  describePlace(x: number, z: number): string {
+  describePlace(x: number, z: number): Text {
     const d = Math.hypot(x, z);
-    if (d < 6) return '蚁穴入口旁';
+    if (d < 6) return L('place.nearEntrance');
     const sector = Math.round(Math.atan2(z, x) / (Math.PI / 4));
-    return `蚁穴${COMPASS[(sector + 8) % 8]} ${d.toFixed(0)} cm 处`;
+    return L('place.dir', { dir: L(COMPASS[(sector + 8) % 8]), d: d.toFixed(0) });
   }
 
-  private checkSpot(x: number, z: number, r: number, blocking: boolean): string | null {
-    if (Math.hypot(x, z) > CONFIG.world.forageRadius - r - 1) return '超出了蚂蚁的活动范围';
+  private checkSpot(x: number, z: number, r: number, blocking: boolean): ToolResult | null {
+    if (Math.hypot(x, z) > CONFIG.world.forageRadius - r - 1) return fail('tool.outOfRange');
     if (!blocking) return null;
-    for (const e of this.nest.entrances) if (Math.hypot(e.x - x, e.z - z) < r + 4) return '离蚁穴入口太近，会把入口堵住';
-    if (this.veg.obstacleAt(x, z, r)) return '这里已经有石块、植物或水洼了';
-    for (const s of this.food.sources) if (Math.hypot(s.x - x, s.z - z) < r + s.radius) return '这里已经有食物了';
+    for (const e of this.nest.entrances) if (Math.hypot(e.x - x, e.z - z) < r + 4) return fail('tool.nearEntrance');
+    if (this.veg.obstacleAt(x, z, r)) return fail('tool.occupied');
+    for (const s of this.food.sources) if (Math.hypot(s.x - x, s.z - z) < r + s.radius) return fail('tool.hasFood');
     return null;
   }
 
@@ -91,56 +93,56 @@ export class World {
 
   dropFood(type: FoodSourceType, x: number, z: number, dry = false): ToolResult {
     const info = SOURCE_INFO[type];
-    if (this.food.placedCount() >= CONFIG.intervention.maxPlacedFood) return { ok: false, msg: '投放的食物太多了，等蚂蚁搬完一些再投' };
+    if (this.food.placedCount() >= CONFIG.intervention.maxPlacedFood) return fail('tool.tooMuchFood');
     const err = this.checkSpot(x, z, info.radius, false);
-    if (err) return { ok: false, msg: err };
-    if (this.veg.obstacleAt(x, z, info.radius * 0.5)) return { ok: false, msg: '这里被石块、植物或水洼占着' };
-    if (dry) return { ok: true, msg: '' };
+    if (err) return err;
+    if (this.veg.obstacleAt(x, z, info.radius * 0.5)) return fail('tool.blockedFood');
+    if (dry) return { ok: true };
     const src = this.food.spawn(0, type, { x, z });
-    if (!src) return { ok: false, msg: '无法在这里投放' };
+    if (!src) return fail('tool.cantDrop');
     src.placed = true;
-    const msg = `你在${this.describePlace(x, z)}投放了${info.name}`;
+    const msg = L('tool.dropped', { place: this.describePlace(x, z), food: info.name });
     this.colony.pushEvent(msg, { kind: 'food', id: src.id });
     return { ok: true, msg };
   }
 
   placeObstacle(kind: PlaceableObstacle, x: number, z: number, yaw: number, dry = false): ToolResult {
     const info = OBSTACLE_INFO[kind];
-    if (this.veg.placed.length >= CONFIG.intervention.maxPlacedObstacles) return { ok: false, msg: '放置的障碍物太多了，先移除一些' };
+    if (this.veg.placed.length >= CONFIG.intervention.maxPlacedObstacles) return fail('tool.tooManyObstacles');
     const pts = kind === 'twig' ? [-0.5, -0.25, 0, 0.25, 0.5].map((t) => [x + Math.cos(yaw) * t * info.len!, z + Math.sin(yaw) * t * info.len!]) : [[x, z]];
     for (const [px, pz] of pts) {
       const err = this.checkSpot(px, pz, info.r, true);
-      if (err) return { ok: false, msg: err };
+      if (err) return err;
     }
-    if (dry) return { ok: true, msg: '' };
+    if (dry) return { ok: true };
     const p = this.veg.place(kind, x, z, yaw);
-    const msg = `你在${this.describePlace(x, z)}放了一${kind === 'twig' ? '根' : '块'}${info.name}`;
+    const msg = L(kind === 'twig' ? 'tool.placedTwig' : 'tool.placedStone', { place: this.describePlace(x, z), name: info.name });
     this.colony.pushEvent(msg, { kind: 'placed', id: p.id });
     return { ok: true, msg };
   }
 
   removeObstacle(x: number, z: number, dry = false): ToolResult {
     const p = this.veg.placedNear(x, z, 2.5);
-    if (!p) return { ok: false, msg: '这里没有你放置的障碍物（自然生成的石块和植物不能移除）' };
-    if (dry) return { ok: true, msg: '' };
+    if (!p) return fail('tool.noPlaced');
+    if (dry) return { ok: true };
     this.veg.removePlaced(p);
-    return { ok: true, msg: `移除了${OBSTACLE_INFO[p.kind].name}` };
+    return { ok: true, msg: L('tool.removed', { name: OBSTACLE_INFO[p.kind].name }) };
   }
 
   removePlacedById(id: number): ToolResult {
     const p = this.veg.placedById(id);
-    if (!p) return { ok: false, msg: '已经移除了' };
+    if (!p) return fail('tool.alreadyRemoved');
     this.veg.removePlaced(p);
-    return { ok: true, msg: `移除了${OBSTACLE_INFO[p.kind].name}` };
+    return { ok: true, msg: L('tool.removed', { name: OBSTACLE_INFO[p.kind].name }) };
   }
 
   pourWater(x: number, z: number, big: boolean, dry = false): ToolResult {
     const r = CONFIG.intervention.waterRadius[big ? 1 : 0];
     const err = this.checkSpot(x, z, r, false);
-    if (err) return { ok: false, msg: err };
-    if (dry) return { ok: true, msg: '' };
+    if (err) return err;
+    if (dry) return { ok: true };
     this.water.pour(x, z, r);
-    const msg = `你在${this.describePlace(x, z)}浇了${big ? '一大杯' : '一点'}水，冲掉了那里的信息素`;
+    const msg = L(big ? 'tool.pouredBig' : 'tool.pouredSmall', { place: this.describePlace(x, z) });
     this.colony.pushEvent(msg, undefined, { x, y: this.terrain.heightAt(x, z), z });
     return { ok: true, msg };
   }
@@ -150,49 +152,49 @@ export class World {
     const name = PREDATOR_INFO[kind].name;
     let placed: Predator;
     if (kind === 'spider') {
-      if (this.predators.spiders.length >= P.maxSpiders) return { ok: false, msg: '狼蛛已经够多了' };
+      if (this.predators.spiders.length >= P.maxSpiders) return fail('tool.tooManySpiders');
       const err = this.checkSpot(x, z, 1, false);
-      if (err) return { ok: false, msg: err };
-      if (this.veg.obstacleAt(x, z, 1, true)) return { ok: false, msg: '这里被石块或植物占着' };
-      if (dry) return { ok: true, msg: '' };
+      if (err) return err;
+      if (this.veg.obstacleAt(x, z, 1, true)) return fail('tool.blockedSpider');
+      if (dry) return { ok: true };
       placed = this.predators.addSpider(x, z, Math.atan2(-z, -x), true);
     } else {
-      if (this.predators.antlions.filter((p) => p.placed).length >= P.maxPlacedAntlions) return { ok: false, msg: '放入的蚁狮太多了，先移除一些' };
+      if (this.predators.antlions.filter((p) => p.placed).length >= P.maxPlacedAntlions) return fail('tool.tooManyAntlions');
       const err = this.checkSpot(x, z, P.pitRadius, true);
-      if (err) return { ok: false, msg: err };
-      if (this.predators.antlions.some((p) => Math.hypot(p.x - x, p.z - z) < P.pitRadius * 2.5)) return { ok: false, msg: '离另一个蚁狮陷阱太近' };
-      if (this.water.at(x, z)) return { ok: false, msg: '蚁狮只在干燥的地面挖坑' };
-      if (dry) return { ok: true, msg: '' };
+      if (err) return err;
+      if (this.predators.antlions.some((p) => Math.hypot(p.x - x, p.z - z) < P.pitRadius * 2.5)) return fail('tool.antlionTooClose');
+      if (this.water.at(x, z)) return fail('tool.antlionDry');
+      if (dry) return { ok: true };
       placed = this.predators.addAntlion(x, z, true);
     }
-    const msg = `你在${this.describePlace(x, z)}放入了一只${name}`;
+    const msg = L('tool.placedPredator', { place: this.describePlace(x, z), name });
     this.colony.pushEvent(msg, { kind: 'predator', id: placed.id });
     return { ok: true, msg };
   }
 
   removePredator(x: number, z: number, dry = false): ToolResult {
     const p = this.predators.near(x, z, CONFIG.predators.pitRadius + 1);
-    if (!p) return { ok: false, msg: '这里没有天敌' };
-    if (dry) return { ok: true, msg: '' };
+    if (!p) return fail('tool.noPredator');
+    if (dry) return { ok: true };
     return this.dismissPredator(p);
   }
 
   removePredatorById(id: number): ToolResult {
     const p = this.predators.byId(id);
-    if (!p) return { ok: false, msg: '它已经不在了' };
+    if (!p) return fail('tool.predatorGone');
     return this.dismissPredator(p);
   }
 
   callRain(dry = false): ToolResult {
-    if (this.weather.phase !== 'clear') return { ok: false, msg: '已经在下雨了' };
-    if (dry) return { ok: true, msg: '' };
+    if (this.weather.phase !== 'clear') return fail('tool.alreadyRaining');
+    if (dry) return { ok: true };
     this.weather.startRain(this);
-    return { ok: true, msg: '你招来了一片雨云，马上就要下雨了' };
+    return { ok: true, msg: L('tool.rainCalled') };
   }
 
   private dismissPredator(p: Predator): ToolResult {
     this.predators.remove(p);
-    const msg = p instanceof Spider ? '赶走了狼蛛' : '填平了蚁狮的陷阱';
+    const msg = L(p instanceof Spider ? 'tool.spiderDismissed' : 'tool.pitFilled');
     this.colony.pushEvent(msg, undefined, { x: p.x, y: this.terrain.heightAt(p.x, p.z), z: p.z });
     return { ok: true, msg };
   }

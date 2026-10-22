@@ -1,11 +1,11 @@
 import { CONFIG } from '../config';
+import { L, type Text } from '../i18n';
 import { clamp, smoothstep } from '../util/math';
 import type { Rng } from '../util/random';
 import type { World } from './world';
 
 export type WeatherPhase = 'clear' | 'overcast' | 'rain';
 
-export const WEATHER_NAMES: Record<WeatherPhase, string> = { clear: '晴', overcast: '阴', rain: '雨' };
 
 export interface WeatherSave {
   phase: WeatherPhase;
@@ -56,10 +56,10 @@ export class WeatherSystem {
     return clamp((this.wetness - W.dryWet) / (W.reopenWet - W.dryWet), 0, 1);
   }
 
-  get label(): string {
-    if (this.phase === 'rain') return this.strength > 0.75 ? '大雨' : '小雨';
-    if (this.phase === 'overcast') return '转阴';
-    return this.wetness > 0.2 ? '雨后' : '晴';
+  get label(): Text {
+    if (this.phase === 'rain') return L(this.strength > 0.75 ? 'weather.heavyRain' : 'weather.lightRain');
+    if (this.phase === 'overcast') return L('weather.overcast');
+    return L(this.wetness > 0.2 ? 'weather.afterRain' : 'weather.clear');
   }
 
   startRain(w: World): void {
@@ -104,16 +104,16 @@ export class WeatherSystem {
     if (p === 'overcast') {
       this.phaseT = W.overcastSec;
       this.strength = this.rng.range(W.rainStrength[0], W.rainStrength[1]);
-      col.pushEvent('天色转阴，觅食蚁陆续回巢，内务蚁开始封堵入口');
+      col.pushEvent(L('ev.overcast'));
       col.seekShelter(0.6);
     } else if (p === 'rain') {
       this.rains++;
       this.phaseT = this.rng.range(W.rainDays[0], W.rainDays[1]) * CONFIG.time.dayLength;
-      col.pushEvent(`开始下${this.strength > 0.75 ? '大' : '小'}雨，雨水冲淡了地表的信息素`);
+      col.pushEvent(L(this.strength > 0.75 ? 'ev.rainHeavy' : 'ev.rainLight'));
       col.seekShelter(1);
     } else {
       this.phaseT = 0;
-      col.pushEvent('雨停了，等地面晾干后蚂蚁才会重新出巢');
+      col.pushEvent(L('ev.rainStop'));
     }
   }
 
@@ -148,9 +148,9 @@ export class WeatherSystem {
       const depthK = Math.max(0, 1 - c.depth / W.floodDepth);
       c.wet = clamp(c.wet + (this.rain * runoff * open * W.floodRate * depthK - W.drainRate) * dt, 0, 1);
       if (before < W.floodedAt && c.wet >= W.floodedAt) {
-        w.colony.pushEvent(`雨水从入口灌进来，${c.name}进水了`, { kind: 'chamber', id: c.id });
+        w.colony.pushEvent(L('ev.flooded', { room: c.label }), { kind: 'chamber', id: c.id });
         w.colony.updateClimate();
-      } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.colony.pushEvent(`${c.name}的积水渗干了`, { kind: 'chamber', id: c.id });
+      } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.colony.pushEvent(L('ev.drained', { room: c.label }), { kind: 'chamber', id: c.id });
     }
   }
 
@@ -182,8 +182,8 @@ export class WeatherSystem {
     e.plug = clamp(e.plug + (job.open ? -1 : 1) * CONFIG.weather.plugPerLoad, 0, 1);
     if (e.plug > 0.999) e.plug = 1;
     if (e.plug < 0.001) e.plug = 0;
-    if (before < 1 && e.plug === 1) w.colony.pushEvent(`内务蚁用土粒封住了${e.name}`, { kind: 'entrance', id: job.entrance });
-    if (before > 0 && e.plug === 0) w.colony.pushEvent(`内务蚁清开了${e.name}，蚂蚁可以出巢了`, { kind: 'entrance', id: job.entrance });
+    if (before < 1 && e.plug === 1) w.colony.pushEvent(L('ev.sealed', { ent: e.label }), { kind: 'entrance', id: job.entrance });
+    if (before > 0 && e.plug === 0) w.colony.pushEvent(L('ev.reopened', { ent: e.label }), { kind: 'entrance', id: job.entrance });
   }
 
   toSave(w: World): WeatherSave {

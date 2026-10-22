@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG, type Role } from '../config';
+import { asText, L, type Text } from '../i18n';
 import { clamp, wrapAngle } from '../util/math';
 import { rng } from '../util/random';
 import type { NestEdge } from '../nest/nest';
@@ -22,9 +23,10 @@ export type Command =
 
 export type Routine = Generator<Command, void, unknown>;
 
+/** t 是模拟秒数；较早的存档里 t 和 msg 都是拼好的中文 */
 export interface LogEntry {
-  t: string;
-  msg: string;
+  t: number | string;
+  msg: Text;
 }
 
 const _c = new THREE.Vector3();
@@ -62,7 +64,7 @@ export interface AntSave {
   mem: number[] | null;
   contacts: number;
   shares: number;
-  log: LogEntry[];
+  log: { t: number | string; msg: Text | string }[];
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
@@ -123,7 +125,7 @@ export class Ant {
   private timer = 0;
   private result: unknown = undefined;
   routine: Routine | null = null;
-  activity = '待命';
+  activity: Text = L('act.idle');
   log: LogEntry[] = [];
 
   trips = 0;
@@ -149,7 +151,7 @@ export class Ant {
   private alarmX = 0;
   private alarmZ = 0;
   private nextAlarmCheck = rng.range(0, 0.5);
-  private taskActivity = '';
+  private taskActivity: Text = L('act.idle');
   /** 正在撕咬的狼蛛 */
   mobTarget = -1;
   /** 因为狼蛛逼近而出巢警戒（日常的入口巡逻不算） */
@@ -240,7 +242,7 @@ export class Ant {
     a.memory = s.mem ? { x: s.mem[0], z: s.mem[1] } : null;
     a.contacts = s.contacts;
     a.shares = s.shares;
-    a.log = s.log;
+    a.log = s.log.map((e) => ({ t: e.t, msg: asText(e.msg) }));
     a.heading = s.h;
     const nest = w.nest;
     if (s.surface) {
@@ -260,8 +262,8 @@ export class Ant {
     return a;
   }
 
-  note(w: World, msg: string): void {
-    this.log.unshift({ t: w.clock.stamp(), msg });
+  note(w: World, msg: Text): void {
+    this.log.unshift({ t: Math.round(w.clock.seconds), msg });
     if (this.log.length > 14) this.log.pop();
   }
 
@@ -316,13 +318,13 @@ export class Ant {
     return this.node;
   }
 
-  locationLabel(w: World): string {
-    if (this.domain === 'surface') return '地表';
-    if (this.room >= 0) return w.nest.chambers[this.room].name;
-    if (this.edge) return this.edge.isShaft ? '主竖井' : '隧道';
+  locationLabel(w: World): Text {
+    if (this.domain === 'surface') return L('loc.surface');
+    if (this.room >= 0) return w.nest.chambers[this.room].label;
+    if (this.edge) return L(this.edge.isShaft ? 'loc.shaft' : 'loc.tunnel');
     const n = w.nest.nodes[this.node];
-    if (n?.kind === 'entrance') return '入口';
-    return '隧道';
+    if (n?.kind === 'entrance') return L('loc.entrance');
+    return L('loc.tunnel');
   }
 
   depth(w: World): number {
@@ -388,7 +390,7 @@ export class Ant {
     this.alarmX = src.x;
     this.alarmZ = src.z;
     this.taskActivity = this.activity;
-    this.note(w, '闻到警报信息素，赶去增援');
+    this.note(w, L('note.alarm'));
   }
 
   /** 冲向警报源；附近有狼蛛就贴身撕咬，并不断补充警报招来更多同伴 */
@@ -408,21 +410,21 @@ export class Ant {
         this.faceTo(_f);
         this.alarmT = Math.max(this.alarmT, 2);
         w.alarm.emit(s.x, s.z, D.mobEmit * dt);
-        this.activity = '围攻狼蛛：咬住它的腿，喷射蚁酸';
+        this.activity = L('act.mobSpider');
         return;
       }
-      this.activity = '闻到警报信息素，冲向狼蛛';
+      this.activity = L('act.rushSpider');
       this.surfaceMove(dt, w, Math.atan2(s.z - this.pos.z, s.x - this.pos.x), 8, D.rushSpeed);
     } else {
       const dx = this.alarmX - this.pos.x;
       const dz = this.alarmZ - this.pos.z;
       const far = dx * dx + dz * dz > 2.25;
-      this.activity = '闻到警报信息素，在附近搜寻敌人';
+      this.activity = L('act.searchEnemy');
       this.surfaceMove(dt, w, far ? Math.atan2(dz, dx) : this.heading + rng.gauss(0, 1) * 2 * Math.sqrt(dt), 6, far ? D.rushSpeed : 0.7);
     }
     if (this.alarmT <= 0) {
       this.activity = this.taskActivity;
-      this.note(w, '警报解除，回去继续工作');
+      this.note(w, L('note.alarmEnd'));
     }
   }
 
@@ -670,7 +672,7 @@ export class Ant {
       } else if (!this.exitBlocked) {
         this.exitBlocked = true;
         this.taskActivity = this.activity;
-        this.activity = `${ent.name}已被土粒封住，在里面等待雨停`;
+        this.activity = L('act.waitSealed', { ent: ent.label });
       }
       return false;
     }
@@ -743,7 +745,7 @@ export class Ant {
     } else {
       if (this.pitT > 0.6) {
         this.avoidPit = { x: this.pitX, z: this.pitZ };
-        this.note(w, '从蚁狮的陷阱里爬了出来，记住了这个地方');
+        this.note(w, L('note.escapedPit'));
       }
       this.pitT = 0;
     }

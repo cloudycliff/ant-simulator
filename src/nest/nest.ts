@@ -1,48 +1,19 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { L, type Text } from '../i18n';
 import { Rng } from '../util/random';
 import type { Terrain } from '../world/terrain';
 
 export type ChamberType = 'queen' | 'egg' | 'larva' | 'pupa' | 'solar' | 'food' | 'waste' | 'rest' | 'winter';
 
-export const CHAMBER_INFO: Record<ChamberType, { name: string; desc: string }> = {
-  queen: {
-    name: '蚁后室',
-    desc: '蚁群唯一的繁殖个体居住于此。黑毛蚁蚁后寿命可达 20 年以上，由保育蚁喂食、清洁，持续产卵。',
-  },
-  egg: {
-    name: '卵室',
-    desc: '保育蚁把蚁后产下的卵聚成卵团，不断舔舐以保持湿润、抑制霉菌。',
-  },
-  larva: {
-    name: '幼虫室',
-    desc: '幼虫无足，完全依赖保育蚁喂食猎物碎块与反刍液。幼虫期获得的营养决定其成年后的体型。',
-  },
-  pupa: {
-    name: '蛹室',
-    desc: '黑毛蚁老熟幼虫吐丝结茧化蛹。蛹偏好较温暖干燥的环境，白天常被搬到靠近地表的房间。',
-  },
-  solar: {
-    name: '向阳育幼室',
-    desc: '紧贴在石块下方的浅层房间。石块白天吸收阳光、升温很快，保育蚁会在午后把蛹搬到这里“晒暖”加速发育，夜间降温后再搬回深处。',
-  },
-  food: {
-    name: '储食室',
-    desc: '暂存觅食蚁带回的猎物碎块与种子。蜜露等液体食物主要储存在工蚁的嗉囊（“社会胃”）中。',
-  },
-  waste: {
-    name: '垃圾室',
-    desc: '食物残渣、茧壳与排泄物先在此堆放，再由内务蚁搬到巢外垃圾堆，以降低病原体在巢内传播的风险。',
-  },
-  rest: {
-    name: '工蚁休息室',
-    desc: '暂时没有任务的工蚁在此聚集休息。这些“后备劳动力”会在蚁群需要时被动员。',
-  },
-  winter: {
-    name: '越冬室',
-    desc: '位于蚁穴最深处，温度全年稳定。秋冬季整个蚁群会迁入这里进入滞育状态。',
-  },
-};
+export const CHAMBER_INFO: Record<ChamberType, { name: Text; desc: Text }> = Object.fromEntries(
+  (['queen', 'egg', 'larva', 'pupa', 'solar', 'food', 'waste', 'rest', 'winter'] as const).map((k) => [k, { name: L(`chamber.${k}`), desc: L(`chamberDesc.${k}`) }]),
+) as Record<ChamberType, { name: Text; desc: Text }>;
+
+/** 同类型的第 n 间（从 1 起）房间的名字，第 1 间不带编号 */
+function chamberLabel(type: ChamberType, n: number): Text {
+  return n > 1 ? L('chamber.numbered', { name: CHAMBER_INFO[type].name, n }) : CHAMBER_INFO[type].name;
+}
 
 export type NodeKind = 'entrance' | 'junction' | 'door' | 'deadend';
 
@@ -70,7 +41,9 @@ export interface NestEdge {
 export interface Chamber {
   id: number;
   type: ChamberType;
-  name: string;
+  /** 同类型房间里的第几间，从 1 起 */
+  ordinal: number;
+  label: Text;
   /** 地板中心 */
   floor: THREE.Vector3;
   rx: number;
@@ -110,7 +83,7 @@ export interface Entrance {
   node: number;
   x: number;
   z: number;
-  name: string;
+  label: Text;
   /** 被土粒封堵的程度 0..1，为 1 时不能出巢 */
   plug: number;
 }
@@ -119,7 +92,8 @@ export interface Entrance {
 export interface NestSave {
   nodes: { kind: NodeKind; p: number[]; e: number[]; c?: number }[];
   edges: { a: number; b: number; p: number[]; r: number; s: boolean }[];
-  chambers: { type: ChamberType; name: string; floor: number[]; rx: number; rz: number; ry: number; yaw: number; door: number; ready: boolean; grow: number; stone: boolean; big?: number }[];
+  /** n 是同类型房间里的第几间；较早的存档没有 n，只有拼好的中文名 name（第 2 间起带编号） */
+  chambers: { type: ChamberType; n?: number; name?: string; floor: number[]; rx: number; rz: number; ry: number; yaw: number; door: number; ready: boolean; grow: number; stone: boolean; big?: number }[];
   faces: { node: number; edge: number; full: number[]; len: number; maxLen: number }[];
   reserved: { x: number; y: number; z: number; r: number }[];
 }
@@ -157,10 +131,10 @@ export class Nest {
   constructor(private terrain: Terrain) {}
 
   /** 生成前调用：在地形上登记入口土丘 */
-  static entranceLayout(): { x: number; z: number; name: string }[] {
+  static entranceLayout(): { x: number; z: number; main: boolean; label: Text }[] {
     return [
-      { x: 0, z: 0, name: '主入口' },
-      { x: 9.5, z: -6.5, name: '侧入口' },
+      { x: 0, z: 0, main: true, label: L('entrance.main') },
+      { x: 9.5, z: -6.5, main: false, label: L('entrance.side') },
     ];
   }
 
@@ -174,7 +148,7 @@ export class Nest {
     for (const e of Nest.entranceLayout()) {
       const y = t.heightAt(e.x, e.z) - 0.4;
       const id = this.addNode('entrance', new THREE.Vector3(e.x, y, e.z));
-      this.entrances.push({ node: id, x: e.x, z: e.z, name: e.name, plug: 0 });
+      this.entrances.push({ node: id, x: e.x, z: e.z, label: e.label, plug: 0 });
     }
 
     // 主竖井：从主入口蜿蜒向下，沿途设置分岔点
@@ -250,12 +224,12 @@ export class Nest {
   private addChamber(type: ChamberType, floor: THREE.Vector3, rx: number, rz: number, ry: number, yaw: number, door: number, ready: boolean): Chamber {
     const cid = this.chambers.length;
     this.nodes[door].chamber = cid;
-    const info = CHAMBER_INFO[type];
-    const sameType = this.chambers.filter((c) => c.type === type).length;
+    const ordinal = this.chambers.filter((c) => c.type === type).length + 1;
     const c: Chamber = {
       id: cid,
       type,
-      name: sameType > 0 ? `${info.name} ${sameType + 1}` : info.name,
+      ordinal,
+      label: chamberLabel(type, ordinal),
       floor,
       rx,
       rz,
@@ -417,7 +391,7 @@ export class Nest {
       edges: this.edges.map((e) => ({ a: e.a, b: e.b, p: flat(e.points), r: e.radius, s: e.isShaft })),
       chambers: this.chambers.map((c) => ({
         type: c.type,
-        name: c.name,
+        ...(c.ordinal > 1 ? { n: c.ordinal } : {}),
         floor: flat([c.floor]),
         rx: c.rx,
         rz: c.rz,
@@ -443,7 +417,8 @@ export class Nest {
     });
     this.chambers = s.chambers.map((c, id) => {
       const floor = unflat(c.floor)[0];
-      return { id, type: c.type, name: c.name, floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone, wet: 0, enlarged: c.big ?? 0 };
+      const ordinal = c.n ?? Number(/ (\d+)$/.exec(c.name ?? '')?.[1] ?? 1);
+      return { id, type: c.type, ordinal, label: chamberLabel(c.type, ordinal), floor, rx: c.rx, rz: c.rz, ry: c.ry, yaw: c.yaw, door: c.door, depth: this.surfaceY - floor.y, ready: c.ready, grow: c.grow, underStone: c.stone, wet: 0, enlarged: c.big ?? 0 };
     });
     this.faces = s.faces.map((f) => ({ node: f.node, edge: this.edges[f.edge], full: pathOf(unflat(f.full)), len: f.len, maxLen: f.maxLen }));
     this.reserved = s.reserved.map((r) => ({ ...r }));

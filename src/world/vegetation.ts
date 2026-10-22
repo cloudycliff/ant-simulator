@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { L, type Text } from '../i18n';
 import { Noise2D, Rng } from '../util/random';
 import type { Terrain } from './terrain';
 
@@ -12,10 +13,10 @@ export interface Obstacle {
 
 export type PlaceableObstacle = 'pebble' | 'rock' | 'twig';
 
-export const OBSTACLE_INFO: Record<PlaceableObstacle, { name: string; r: number; len?: number }> = {
-  pebble: { name: '小石子', r: 1.6 },
-  rock: { name: '大石块', r: 4 },
-  twig: { name: '树枝路障', r: 0.5, len: 18 },
+export const OBSTACLE_INFO: Record<PlaceableObstacle, { name: Text; r: number; len?: number }> = {
+  pebble: { name: L('obstacle.pebble'), r: 1.6 },
+  rock: { name: L('obstacle.rock'), r: 4 },
+  twig: { name: L('obstacle.twig'), r: 0.5, len: 18 },
 };
 
 /** 玩家放置的障碍物；树枝路障由一串避障圆组成 */

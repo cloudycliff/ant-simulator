@@ -1,3 +1,4 @@
+import { L, t, tr, type Text } from '../i18n';
 import type { NestSave } from '../nest/nest';
 import type { ColonySave } from '../sim/colony';
 import type { PlaceableObstacle } from './vegetation';
@@ -14,8 +15,8 @@ export interface SaveData {
   seed: number;
   /** 保存时的现实时间（毫秒） */
   savedAt: number;
-  /** 保存时的游戏时刻，如“第3天 14:20” */
-  stamp: string;
+  /** 较早的存档里有保存时的游戏时刻，如“第3天 14:20”；现在由 clock.seconds 算出 */
+  stamp?: string;
   clock: { seconds: number; speed: number };
   nest: NestSave;
   colony: ColonySave;
@@ -42,7 +43,6 @@ export function saveWorld(w: World, savedAt: number): SaveData {
     version: SAVE_VERSION,
     seed: w.seed,
     savedAt,
-    stamp: w.clock.stamp(),
     clock: { seconds: w.clock.seconds, speed: w.clock.speed },
     nest: w.nest.toSave(),
     colony: w.colony.toSave(),
@@ -57,15 +57,16 @@ export function saveWorld(w: World, savedAt: number): SaveData {
 }
 
 /** 存档不能用于当前版本时返回原因 */
-export function saveProblem(d: SaveData): string | null {
-  if (d.version !== SAVE_VERSION) return '存档来自不兼容的旧版本';
+export function saveProblem(d: SaveData): Text | null {
+  if (d.version !== SAVE_VERSION) return L('save.incompatible');
   return null;
 }
 
 /** 把存档套到一个用 d.seed 刚生成的世界上，必须在创建任何视图之前调用 */
 export function loadWorld(w: World, d: SaveData): void {
-  const problem = saveProblem(d) ?? (w.seed !== d.seed ? '世界种子与存档不同' : null);
-  if (problem) throw new Error(problem);
+  if (w.seed !== d.seed) throw new Error(t('save.seedMismatch'));
+  const problem = saveProblem(d);
+  if (problem) throw new Error(tr(problem));
   w.clock.seconds = d.clock.seconds;
   w.clock.speed = d.clock.speed;
   w.nest.restore(d.nest);

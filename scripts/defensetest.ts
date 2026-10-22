@@ -2,6 +2,7 @@
  * 防御测试：在蚂蚁来往多的地方和巢口附近各放一只狼蛛，观察警报、围攻、驱赶和入口警戒。
  * npx tsx scripts/defensetest.ts [热身秒数，默认 500]
  */
+import { tr } from '../src/i18n';
 import { CONFIG } from '../src/config';
 import { World } from '../src/world/world';
 
@@ -30,7 +31,7 @@ function busiestSpot(): { x: number; z: number; n: number } {
 
 function run(label: string, x: number, z: number, secs: number): void {
   const r = w.placePredator('spider', x, z);
-  console.log(`\n== ${label}：(${x.toFixed(0)}, ${z.toFixed(0)}) ${r.msg}`);
+  console.log(`\n== ${label}：(${x.toFixed(0)}, ${z.toFixed(0)}) ${r.msg ? tr(r.msg) : ''}`);
   const s = w.predators.spiders[w.predators.spiders.length - 1];
   const st = w.colony.stats;
   const p0 = st.preyed;
@@ -62,8 +63,8 @@ console.log(`热身 ${warm} 秒，最密集处 ${spot.n} 只`);
 run('觅食路线上', spot.x, spot.z, 120);
 for (let t = 0; t < 60; t += step) w.advance(step);
 const e = w.nest.entrances[0];
-run(`${e.name}外 8 cm`, e.x + 8, e.z + 2, 150);
+run(`${tr(e.label)}外 8 cm`, e.x + 8, e.z + 2, 150);
 for (let t = 0; t < 60; t += step) w.advance(step);
 const e2 = w.nest.entrances[1];
 const ang = Math.atan2(e2.z, e2.x);
-run(`${e2.name}外 16 cm`, e2.x + Math.cos(ang) * 16, e2.z + Math.sin(ang) * 16, 120);
+run(`${tr(e2.label)}外 16 cm`, e2.x + Math.cos(ang) * 16, e2.z + Math.sin(ang) * 16, 120);

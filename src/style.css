@@ -147,6 +147,14 @@ button.on kbd {
 #colony .row b {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 英文标签和事件比中文长，放宽面板以免一行折成两三行 */
+html:lang(en) #colony {
+  width: 270px;
+}
+html:lang(en) #events {
+  width: 360px;
 }
 #colony .row.big {
   font-size: 14px;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { L, type Text } from '../i18n';
 import type { FoodKind } from '../world/food';
 
 export type ItemType = 'egg' | 'larva' | 'pupa' | 'food' | 'waste' | 'soil' | 'corpse';
@@ -6,14 +7,14 @@ export type ItemType = 'egg' | 'larva' | 'pupa' | 'food' | 'waste' | 'soil' | 'c
 /** chamber=房间内，node=隧道节点，surface=地表散落，midden=巢外垃圾堆，mound=蚁丘土粒 */
 export type ItemPlace = 'none' | 'chamber' | 'node' | 'surface' | 'midden' | 'mound' | 'carried' | 'gone';
 
-export const ITEM_NAMES: Record<ItemType, string> = {
-  egg: '卵',
-  larva: '幼虫',
-  pupa: '蛹',
-  food: '食物',
-  waste: '垃圾',
-  soil: '土粒',
-  corpse: '同伴尸体',
+export const ITEM_NAMES: Record<ItemType, Text> = {
+  egg: L('item.egg'),
+  larva: L('item.larva'),
+  pupa: L('item.pupa'),
+  food: L('item.food'),
+  waste: L('item.waste'),
+  soil: L('item.soil'),
+  corpse: L('item.corpse'),
 };
 
 let nextItemId = 1;

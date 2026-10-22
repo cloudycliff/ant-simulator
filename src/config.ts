@@ -1,3 +1,5 @@
+import { L, type Text } from './i18n';
+
 /** 世界单位：1 单位 ≈ 1 厘米。蚂蚁体长按观察需要放大到约 1 单位（真实黑毛蚁工蚁 3–5 毫米）。 */
 export const CONFIG = {
   seed: 20261021,
@@ -252,11 +254,11 @@ export const CONFIG = {
 
 export type Role = 'queen' | 'nurse' | 'maintenance' | 'forager';
 
-export const ROLE_NAMES: Record<Role, string> = {
-  queen: '蚁后',
-  nurse: '保育蚁',
-  maintenance: '内务蚁',
-  forager: '觅食蚁',
+export const ROLE_NAMES: Record<Role, Text> = {
+  queen: L('role.queen'),
+  nurse: L('role.nurse'),
+  maintenance: L('role.maintenance'),
+  forager: L('role.forager'),
 };
 
 export const ROLE_COLORS: Record<Role, number> = {
