@@ -1,4 +1,5 @@
 // 触屏操作测试：无头 Chrome 开启触屏模拟，用 DevTools 协议派发触摸事件
+// 用法：node scripts/touchtest.mjs [网址，默认 http://localhost:5173/]
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -63,7 +64,7 @@ try {
   const g = await connect(tab.webSocketDebuggerUrl);
   await g.send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 2, mobile: true });
   await g.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-  await g.send('Page.navigate', { url: 'http://localhost:5173/?new=1&seed=20261021&hour=12&lang=zh' });
+  await g.send('Page.navigate', { url: `${process.argv[2] ?? 'http://localhost:5173/'}?new=1&seed=20261021&hour=12&lang=zh` });
   await sleep(1000);
   for (let i = 0; i < 120 && !(await g.ev(`!!window.world && !document.getElementById('loading')`).catch(() => false)); i++) await sleep(500);
   await sleep(1500);
