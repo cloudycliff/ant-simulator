@@ -28,6 +28,17 @@ export const CONFIG = {
     backgroundMaxBudgetMs: 1000,
   },
 
+  /** 光照强度（three.js 单位）；地下的观察灯只在透视时打开 */
+  light: {
+    sun: 3.2,
+    hemiDay: 1.15,
+    hemiNight: 0.95,
+    moon: 2.4,
+    /** 夜间地表跟随相机的冷色观察灯，让黑色的蚂蚁在深色地面上分得出来 */
+    surfaceLamp: 5,
+    xrayLamp: 12,
+  },
+
   colony: {
     initialWorkers: 1000,
     maxPopulation: 3000,

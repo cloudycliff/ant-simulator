@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CONFIG } from '../config';
 import type { SimClock } from '../sim/clock';
 import { TAU, clamp } from '../util/math';
 
@@ -10,6 +11,10 @@ const NIGHT_TOP = new THREE.Color(0x060a18);
 const NIGHT_BOTTOM = new THREE.Color(0x141c30);
 const CLOUD_TOP = new THREE.Color(0x7d8794);
 const CLOUD_BOTTOM = new THREE.Color(0xa3abb3);
+const WHITE = new THREE.Color(0xffffff);
+const MOONLIGHT = new THREE.Color(0xa8bcf0);
+const LAMP_WARM = new THREE.Color(0xffe2b8);
+const LAMP_COOL = new THREE.Color(0xdde6ff);
 
 export class Environment {
   sun: THREE.DirectionalLight;
@@ -121,25 +126,28 @@ export class Environment {
     this.stars.position.copy(camera.position);
     (this.stars.material as THREE.PointsMaterial).opacity = clamp(1 - day * 1.6, 0, 1) * (1 - cloud);
 
-    this.sun.intensity = 2.8 * clamp(elev * 3, 0, 1) * (1 - 0.75 * cloud);
+    const L = CONFIG.light;
+    this.sun.intensity = L.sun * clamp(elev * 3, 0, 1) * (1 - 0.75 * cloud);
     this.sun.color.setHSL(0.09, 0.6 * dusk + 0.2, 0.75 + 0.2 * (1 - dusk));
     this.sun.position.copy(focus).addScaledVector(dir, 200);
     this.sun.target.position.copy(focus);
     this.sun.castShadow = elev > 0.02 && cloud < 0.8;
 
     const moonDir = dir.clone().negate();
-    moonDir.y = Math.abs(moonDir.y) + 0.3;
+    // 月亮一直挂得较高：刚日落时若贴着地平线，平地几乎照不到，反而比深夜更黑
+    moonDir.y = Math.abs(moonDir.y) + 1.2;
     this.moon.position.copy(focus).addScaledVector(moonDir.normalize(), 200);
     this.moon.target.position.copy(focus);
-    this.moon.intensity = 1.3 * (1 - day) * (1 - 0.6 * cloud);
+    this.moon.intensity = L.moon * (1 - day) * (1 - 0.6 * cloud);
 
-    this.hemi.intensity = (0.55 + 0.45 * day) * (1 - 0.15 * cloud);
-    this.hemi.color.copy(this.tmpTop).lerp(new THREE.Color(0xffffff), 0.4 + 0.25 * (1 - day));
+    this.hemi.intensity = (L.hemiNight + (L.hemiDay - L.hemiNight) * day) * (1 - 0.15 * cloud);
+    this.hemi.color.copy(this.tmpTop).lerp(this.tmpCloud.copy(WHITE).lerp(MOONLIGHT, 1 - day), 0.4 + 0.3 * (1 - day));
     this.fog.color.copy(this.tmpBottom);
     this.fog.near = 140 - 90 * cloud;
     this.fog.far = 420 - 200 * cloud;
 
     this.lamp.position.copy(camera.position);
-    this.lamp.intensity = xray ? 12 * (0.4 + 0.6 * (1 - day)) : 0;
+    this.lamp.intensity = xray ? L.xrayLamp * (0.4 + 0.6 * (1 - day)) : L.surfaceLamp * (1 - day);
+    this.lamp.color.copy(xray ? LAMP_WARM : LAMP_COOL);
   }
 }

@@ -19,6 +19,8 @@
 | `time.startHour` | 7.5 | 开局时刻 |
 | `time.maxStepsPerFrame / frameBudgetMs` | 24 / 10 | 每帧最多补算的模拟步数；每帧模拟最多占用的毫秒数，超出就降低实际倍速 |
 | `time.backgroundTickMs / backgroundCpuShare / backgroundMaxBudgetMs` | 100 / 0.4 / 1000 | 页面隐藏时的后台节拍；后台模拟最多占用的时间比例，单次节拍最多算多少毫秒 |
+| `light.sun / hemiDay / hemiNight / moon` | 3.2 / 1.15 / 0.95 / 2.4 | 阳光、白天和夜间的天空环境光、月光强度（原为 2.8 / 1.0 / 0.55 / 1.3） |
+| `light.surfaceLamp / xrayLamp` | 5 / 12 | 跟随相机的观察灯：夜间地表（冷色，白天为 0）；透视地下（暖色） |
 | `colony.initialWorkers` | 1000 | 初始工蚁数 |
 | `colony.maxPopulation` | 3000 | 成虫 + 幼体的上限（超过后停止产卵） |
 | `colony.roleRatio` | 保育 0.26 / 内务 0.24 / 觅食 0.50 | 初始分工比例 |
