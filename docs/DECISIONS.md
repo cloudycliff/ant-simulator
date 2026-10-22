@@ -428,3 +428,10 @@
 - **土壤模型**：`SimClock` 只管时刻和昼夜；土壤温湿度和天气写入的降温、湿润度移到蚂蚁游戏的 `world/soil.ts`（`World.soil`）。鱼缸之类的游戏不需要它，地表生态类以后可以复制或再抽出来
 - **类型检查覆盖脚本**：这一步改名时 `weathertest` 还在用 `colony.pushEvent`，`tsc` 只查 `src/` 没发现。加了 `tsconfig.scripts.json` 和 `@types/node`，`npm run typecheck` 同时检查 `scripts/`；顺带发现 `tooltest` 放石块时漏了角度参数
 - **结果**：`SIM_SEED=7` 的 5 天模拟与重构前逐行相同
+
+### T-052 空间接口（框架重构第 4 步）
+- **`core/space/space.ts` 的 `Space`**：相机能去的范围 `cameraBox`、某处的表面高度 `surfaceAt`、视线和表面的交点 `raycast`。相机（离地高度、平移和活动范围的限制）、点选（鼠标下的地面点）、工具的放置点、雨丝溅水圈和注视点都通过它，不再直接调用 `Terrain.heightAt`
+- **`HeightfieldSpace`**：一张高度场的地面，求交沿视线步进再二分，就是原来 `Picker.groundPoint` 的做法（T-024），交点超出地图范围返回空。蚂蚁游戏在 `games/ant/space.ts` 里用地形高度和 `CONFIG.world.cameraRange / cameraMinY / cameraMaxY` 构造；这三个数原来写死在 `camera.ts` 里
+- **不进 Space 的**：透视地下（相机在地面以下时切换）和选中对象的位置仍由蚂蚁游戏处理，第 5 步交给实体注册表和视图层。鱼缸这类全 3D 的游戏另写一个体积空间，交点取在缸壁或底沙上
+- **框架层单元测试**：新增 `scripts/coretest.ts`，不依赖任何游戏，覆盖高度场求交、存档登记的顺序和可选部分、事件记录、模拟内核的子系统顺序和每帧步数上限、词典重名
+- **结果**：`SIM_SEED=7` 的 5 天模拟与重构前逐行相同；触屏和鼠标测试（平移、缩放、放工具）通过

@@ -13,6 +13,10 @@ export const CONFIG = {
     /** 大石块正午对下方土壤的最大加温（°C），随深度线性衰减到 stoneHeatDepth 处为 0 */
     stoneHeat: 6,
     stoneHeatDepth: 26,
+    /** 相机能去的范围：水平 ±cameraRange，高度 cameraMinY 到 cameraMaxY（地下最深的房间约 -80） */
+    cameraRange: 300,
+    cameraMinY: -140,
+    cameraMaxY: 320,
   },
 
   time: {

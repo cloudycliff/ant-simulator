@@ -15,7 +15,7 @@
 - 数值优先放进 `src/games/ant/config.ts`（主循环、后台运行、画质、自动保存这类框架数值在 `src/core/config.ts`）；写在代码里的数值要同步登记到 `docs/BALANCE.md`
 
 ## 完成一轮开发后
-1. `npm run typecheck`（源码和 `scripts/` 都检查）和 `npm run build` 必须通过；它会更新根目录的 `cyber-ant-farm.html`（双击即可运行的发布文件），提交时一并提交
+1. `npm run typecheck`（源码和 `scripts/` 都检查）和 `npm run build` 必须通过；它会更新根目录的 `cyber-ant-farm.html`（双击即可运行的发布文件），提交时一并提交。改了 `src/core` 还要跑 `npx tsx scripts/coretest.ts` 和 `node scripts/layercheck.mjs`
 2. 改动了行为或数值：跑 `npx tsx scripts/simtest.ts 3000`，把基线指标的变化写进 `docs/PROGRESS.md`。只是重构、不该改变行为时，设 `SIM_SEED` 跑改动前后两次，输出除耗时外应逐行相同
 3. 改动了画面：按 `docs/ARCHITECTURE.md` 的“验证工具”一节截图检查
 4. 更新文档：

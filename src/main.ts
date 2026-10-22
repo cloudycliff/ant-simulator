@@ -19,6 +19,7 @@ import { MOBILE } from './core/platform/device';
 import { Installer, registerServiceWorker } from './core/platform/install';
 import { QUALITY_LEVELS, QUALITY_MODES, Quality } from './core/render/quality';
 import { loadWorld, saveMeta, saveProblem, saveSlot, saveWorld } from './games/ant/world/save';
+import { createSpace } from './games/ant/space';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
 
@@ -94,7 +95,8 @@ async function boot(): Promise<void> {
   const env = new Environment(scene, CONFIG.light);
   const quality = new Quality(renderer, env.sun, MOBILE);
 
-  const controller = new CameraController(camera, renderer.domElement, (x, z) => world.terrain.heightAt(x, z));
+  const space = createSpace(world);
+  const controller = new CameraController(camera, renderer.domElement, space);
   controller.setPose(new THREE.Vector3(16, 13, 22), new THREE.Vector3(0, 0, 1));
   // 支持 ?cam=x,y,z,tx,ty,tz 指定初始视角，便于分享观察位置；否则恢复存档时的视角
   const camParam = params.get('cam')?.split(',').map(Number) ?? savedCamera;
@@ -102,7 +104,7 @@ async function boot(): Promise<void> {
     controller.setPose(new THREE.Vector3(camParam[0], camParam[1], camParam[2]), new THREE.Vector3(camParam[3], camParam[4], camParam[5]));
   }
 
-  const picker = new Picker(world, camera, renderer.domElement, antView, {
+  const picker = new Picker(world, space, camera, renderer.domElement, antView, {
     chambers: nestView.chamberMeshes,
     surface: [world.food.group, nestView.surfaceGroup, world.veg.placedGroup, world.water.group, world.predators.group, ...world.veg.group.children.filter((o) => o.userData.pick)],
     terrain: world.terrain.mesh,
@@ -561,9 +563,9 @@ async function boot(): Promise<void> {
       if (a) focus.copy(a.pos);
     } else {
       camera.getWorldDirection(fwd);
-      const h = Math.max(4, cp.y - world.terrain.heightAt(cp.x, cp.z));
+      const h = Math.max(4, cp.y - space.surfaceAt(cp.x, cp.z));
       focus.copy(cp).addScaledVector(fwd, Math.min(60, h * 1.6));
-      focus.y = world.terrain.heightAt(focus.x, focus.z);
+      focus.y = space.surfaceAt(focus.x, focus.z);
     }
 
     if (tools.active >= 0) tools.hover(tools.pending ?? (mouse ? picker.groundPoint(mouse.x, mouse.y, groundPt) : null));
@@ -575,7 +577,7 @@ async function boot(): Promise<void> {
     antView.update(time, camera.position);
     itemView.update();
     env.update(world.clock, camera, focus, xrayOn(), world.weather.cloud);
-    rain.sync(dt, camera, focus, world.weather.rain, (x, z) => world.terrain.heightAt(x, z));
+    rain.sync(dt, camera, focus, world.weather.rain, (x, z) => space.surfaceAt(x, z));
     terrainMat.color.setScalar(1 - 0.28 * world.weather.wetness);
     terrainMat.roughness = 0.97 - 0.3 * world.weather.wetness;
 

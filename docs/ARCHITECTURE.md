@@ -34,10 +34,14 @@ src/
       environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗；光照强度由游戏传入
       rain.ts           雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
       quality.ts        画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
+    space/
+      space.ts          Space：相机能去的范围、某处的表面高度、视线和表面的交点；相机、点选、工具都通过它
+      heightfield.ts    HeightfieldSpace：一张高度场的地面（沿视线步进再二分求交点）
     ui/
-      camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理
+      camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理；离地高度和活动范围取自 Space
   games/ant/            —— 蚂蚁游戏的内容 ——
     config.ts           配置与常量（职别名称、颜色）；调参优先改这里。导入它时顺带登记游戏的词典
+    space.ts            createSpace：把地形高度场和相机范围包成 Space
     i18n/
       index.ts          把游戏的键并进 Messages，登记词典
       zh.ts             中文词典，也是游戏所有键的来源
@@ -69,11 +73,12 @@ src/
       itemView.ts       物品的实例化渲染
     ui/
       hud.ts            顶栏（上行状态与画质、帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
-      picking.ts        点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 用解析高度场求鼠标下的地面点
+      picking.ts        点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 通过 Space 求鼠标下的地面点
       tools.ts          干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法；触屏先记下 pending 位置，确认后再放
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
   layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
+  coretest.ts           框架层单元测试：高度场求交、存档登记、事件记录、模拟内核的推进、词典重名
   saveui.mjs            页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
@@ -89,7 +94,7 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EventLog` 的对象位置），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049、T-050、T-051。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EventLog` 的对象位置、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-052。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
 
 配置也分两份：`src/core/config.ts` 的 `ENGINE` 是框架的（主循环、后台运行、画质、自动保存），`src/games/ant/config.ts` 的 `CONFIG` 是蚂蚁游戏的。
 

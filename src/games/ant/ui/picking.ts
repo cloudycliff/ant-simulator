@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONFIG } from '../config';
+import type { Space } from '../../../core/space/space';
 import type { AntView } from '../render/antView';
 import type { World } from '../world/world';
 
@@ -16,8 +16,6 @@ export type Selection =
   | { kind: 'predator'; id: number };
 
 const _v = new THREE.Vector3();
-const _o = new THREE.Vector3();
-const _d = new THREE.Vector3();
 
 export class Picker {
   private ray = new THREE.Raycaster();
@@ -25,6 +23,7 @@ export class Picker {
 
   constructor(
     private world: World,
+    private space: Space,
     private camera: THREE.PerspectiveCamera,
     private dom: HTMLElement,
     private antView: AntView,
@@ -38,40 +37,13 @@ export class Picker {
     this.middenTarget.updateMatrixWorld();
   }
 
-  /** 鼠标下的地面点：沿视线步进，与解析高度场求交（比对地形网格做射线检测快得多） */
+  /** 鼠标下的地面点 */
   groundPoint(clientX: number, clientY: number, out = new THREE.Vector3()): THREE.Vector3 | null {
     const rect = this.dom.getBoundingClientRect();
     const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
     const ny = -((clientY - rect.top) / rect.height) * 2 + 1;
     this.ray.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
-    _o.copy(this.ray.ray.origin);
-    _d.copy(this.ray.ray.direction);
-    const h = (p: THREE.Vector3) => p.y - this.world.terrain.heightAt(p.x, p.z);
-    let t = 0;
-    let prev = h(_o);
-    if (prev < 0) return null;
-    for (let i = 0; i < 400; i++) {
-      const step = Math.max(0.3, prev * 0.5);
-      const nt = t + step;
-      _v.copy(_o).addScaledVector(_d, nt);
-      const cur = h(_v);
-      if (cur <= 0) {
-        let a = t;
-        let b = nt;
-        for (let k = 0; k < 12; k++) {
-          const m = (a + b) / 2;
-          _v.copy(_o).addScaledVector(_d, m);
-          if (h(_v) > 0) a = m;
-          else b = m;
-        }
-        out.copy(_o).addScaledVector(_d, b);
-        return Math.abs(out.x) < CONFIG.world.size / 2 && Math.abs(out.z) < CONFIG.world.size / 2 ? out : null;
-      }
-      t = nt;
-      prev = cur;
-      if (t > 1500) break;
-    }
-    return null;
+    return this.space.raycast(this.ray.ray, out);
   }
 
   /** tolerance：蚂蚁的点选容差（像素），手指点选时放宽 */

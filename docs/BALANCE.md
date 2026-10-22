@@ -49,6 +49,7 @@
 | `pheromone.trailHalfLife` | 90 | 路径信息素半衰期（秒） |
 | `pheromone.depositFood` | 1.0 | 返巢释放强度基数 |
 | `food.initialSources / spawnIntervalSec / maxSources` | 12 / 35 / 20 | 地表食物源 |
+| `world.cameraRange / cameraMinY / cameraMaxY` | 300 / −140 / 320 | 相机能去的范围：水平 ±300 cm，高度 −140 到 320 cm（只影响画面） |
 | `world.stoneHeat / stoneHeatDepth` | 6 / 26 | 大石块正午对下方土壤的最大加温（°C），到该深度（cm）衰减为 0 |
 | `colony.initialCropShare` | 0.4 | 开局嗉囊里带甜液的工蚁比例 |
 | `polyethism.reviewDays` | 0.02 | 分工评估间隔（游戏日，约 12 秒） |

@@ -1,9 +1,8 @@
 import * as THREE from 'three';
+import type { Space } from '../space/space';
 import { clamp } from '../util/math';
 
 const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
-
-type GroundFn = (x: number, z: number) => number;
 
 /** 手指移动不超过这么多像素算点按；两次点按间隔和距离在这以内算双击 */
 const TAP_SLOP = 10;
@@ -49,7 +48,7 @@ export class CameraController {
   constructor(
     public camera: THREE.PerspectiveCamera,
     private dom: HTMLElement,
-    private ground: GroundFn,
+    private space: Space,
   ) {
     camera.rotation.order = 'YXZ';
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -100,7 +99,7 @@ export class CameraController {
 
   private heightAboveGround(): number {
     const p = this.camera.position;
-    return Math.abs(p.y - this.ground(p.x, p.z));
+    return Math.abs(p.y - this.space.surfaceAt(p.x, p.z));
   }
 
   private onMove(e: PointerEvent): void {
@@ -253,8 +252,9 @@ export class CameraController {
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const p = this.camera.position;
     p.addScaledVector(right, -dx * k).addScaledVector(fwd, (dy * k) / Math.max(0.3, Math.sin(-this.pitch)));
-    p.x = clamp(p.x, -300, 300);
-    p.z = clamp(p.z, -300, 300);
+    const b = this.space.cameraBox;
+    p.x = clamp(p.x, b.min.x, b.max.x);
+    p.z = clamp(p.z, b.min.z, b.max.z);
   }
 
   /** 绕视线落点转向（dYaw）和俯仰（dPitch），落点保持在画面同一位置 */
@@ -371,8 +371,6 @@ export class CameraController {
     if (k.has('KeyD')) p.addScaledVector(right, speed);
     if (k.has('KeyE')) p.y += speed;
     if (k.has('KeyQ')) p.y -= speed;
-    p.x = clamp(p.x, -300, 300);
-    p.z = clamp(p.z, -300, 300);
-    p.y = clamp(p.y, -140, 320);
+    p.clamp(this.space.cameraBox.min, this.space.cameraBox.max);
   }
 }
