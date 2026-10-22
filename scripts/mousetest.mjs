@@ -1,53 +1,5 @@
-// 桌面鼠标回归：触屏适配后，鼠标的拖拽、滚轮、点选、工具直接放置保持原样
-import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-const PORT = 9342;
-const chrome = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', [
-  '--headless=new',
-  `--remote-debugging-port=${PORT}`,
-  `--user-data-dir=${mkdtempSync(join(tmpdir(), 'mousetest-'))}`,
-  'about:blank',
-]);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const http = async (path, method = 'GET') => {
-  for (let i = 0; i < 50; i++) {
-    try {
-      const txt = await (await fetch(`http://127.0.0.1:${PORT}${path}`, { method })).text();
-      try {
-        return JSON.parse(txt);
-      } catch {
-        return txt;
-      }
-    } catch {
-      await sleep(200);
-    }
-  }
-  throw new Error('no devtools');
-};
-const connect = (wsUrl) =>
-  new Promise((resolve) => {
-    const ws = new WebSocket(wsUrl);
-    let id = 0;
-    const waits = new Map();
-    ws.onmessage = (m) => {
-      const d = JSON.parse(m.data);
-      if (d.id && waits.has(d.id)) waits.get(d.id)(d.result ?? d.error);
-    };
-    const send = (method, params = {}) =>
-      new Promise((r) => {
-        waits.set(++id, r);
-        ws.send(JSON.stringify({ id, method, params }));
-      });
-    const ev = async (expr) => {
-      const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true });
-      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'eval error');
-      return r.result.value;
-    };
-    ws.onopen = () => resolve({ send, ev, close: () => ws.close() });
-  });
+// 桌面鼠标回归：拖拽、滚轮、点选、工具直接放置保持原样；窗口变窄时切到手机布局，再变宽时切回
+import { BASE, launch, sleep } from './cdp.mjs';
 
 let failed = 0;
 const check = (name, ok, info) => {
@@ -55,16 +7,13 @@ const check = (name, ok, info) => {
   console.log(`${ok ? '通过' : '失败'}  ${name}`, info ?? '');
 };
 
+const br = await launch(9342);
 try {
-  await http('/json/version');
-  const tab = await http('/json/new?about:blank', 'PUT');
-  const g = await connect(tab.webSocketDebuggerUrl);
-  await g.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-  await g.send('Page.navigate', { url: 'http://localhost:5173/?new=1&seed=20261021&hour=12&lang=zh' });
-  await sleep(1000);
-  for (let i = 0; i < 120 && !(await g.ev(`!!window.world && !document.getElementById('loading')`).catch(() => false)); i++) await sleep(500);
-  await sleep(1500);
+  const g = await br.page();
+  await g.viewport(1280, 800, false);
+  await g.open(`${BASE}?new=1&seed=20261021&hour=12&lang=zh`);
   check('鼠标环境不是 pointer: coarse', !(await g.ev(`matchMedia('(pointer: coarse)').matches`)));
+  check('1280 宽使用桌面布局', !(await g.ev(`document.body.classList.contains('compact')`)));
 
   const mouse = (type, x, y, button = 'none', extra = {}) => g.send('Input.dispatchMouseEvent', { type, x, y, button, clickCount: 1, ...extra });
   const drag = async (button, from, to) => {
@@ -108,9 +57,21 @@ try {
   await sleep(400);
   const n1 = await g.ev(`world.food.sources.length`);
   check('工具：鼠标点地面直接放下，没有“放在这里”按钮', n1 === n0 + 1 && !hasPlace, { n0, n1, toast: await g.ev(`document.getElementById('toast').textContent`) });
+  await g.ev(`document.querySelector('#tool [data-a="toolexit"]').click()`);
+
+  // 窗口缩窄到手机宽度：切到手机布局，按钮状态和打开的统计不丢
+  await g.ev(`document.querySelector('[data-a="pheromone"]').click()`);
+  await g.viewport(600, 800, false);
+  await sleep(800);
+  const narrow = await g.ev(`({ compact: document.body.classList.contains('compact'), dock: !!document.querySelector('#dock [data-a="sheet"]'), pher: document.getElementById('btn-pheromone').classList.contains('on') })`);
+  check('窗口变窄后切到手机布局，信息素开关保持', narrow.compact && narrow.dock && narrow.pher, narrow);
+  await g.viewport(1280, 800, false);
+  await sleep(800);
+  const wide = await g.ev(`({ compact: document.body.classList.contains('compact'), dock: !!document.querySelector('#dock [data-a="sheet"]'), top: !!document.querySelector('#topbar .controls') })`);
+  check('再变宽后切回桌面布局', !wide.compact && !wide.dock && wide.top, wide);
   g.close();
 } finally {
-  chrome.kill();
+  br.close();
 }
 console.log(failed ? `${failed} 项失败` : '全部通过');
 process.exit(failed ? 1 : 0);

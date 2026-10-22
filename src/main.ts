@@ -174,6 +174,7 @@ async function boot(): Promise<void> {
     antView.selectedId = sel?.kind === 'ant' ? sel.id : -1;
     nestView.highlightChamber(sel?.kind === 'chamber' ? sel.id : null);
     if (controller.mode === 'follow' && sel?.kind !== 'ant') controller.stopFollow();
+    if (sel && hud.compact) hud.hideHelp();
   };
 
   const flyToSelection = () => {
@@ -248,14 +249,10 @@ async function boot(): Promise<void> {
       case 'grass':
         hud.state.grass = !hud.state.grass;
         break;
-      case 'stats': {
-        hud.state.stats = !hud.state.stats;
-        hud.invalidateStats();
-        const help = document.getElementById('help')!;
-        if (hud.state.stats && !help.classList.contains('hidden')) hud.toggleHelp();
+      case 'stats':
+        hud.toggleStats();
         hud.refresh(selection, 60);
         break;
-      }
       case 'follow':
         toggleFollow();
         break;
@@ -268,12 +265,11 @@ async function boot(): Promise<void> {
       case 'help':
         hud.toggleHelp();
         break;
-      case 'tool': {
+      case 'tool':
         tools.select(v ?? 0);
-        const help = document.getElementById('help')!;
-        if (!help.classList.contains('hidden')) hud.toggleHelp();
+        hud.hideHelp();
+        hud.setSheet(null);
         break;
-      }
       case 'toolopt':
         tools.setOption(v ?? 0);
         break;
@@ -299,7 +295,7 @@ async function boot(): Promise<void> {
         break;
       }
       case 'savePanel':
-        hud.saveOpen = !hud.saveOpen;
+        hud.toggleSave();
         hud.saveMeta = readMeta();
         break;
       case 'saveNow':
@@ -360,6 +356,11 @@ async function boot(): Promise<void> {
   const TOUCH_PICK_PX = 32;
 
   controller.onClick = (x, y, touch) => {
+    // 手机布局里点画面先收起打开的抽屉，和地图应用一样
+    if (hud.sheet) {
+      hud.setSheet(null);
+      return;
+    }
     if (tools.active >= 0) {
       if (!touch) return void applyTool(picker.groundPoint(x, y, groundPt));
       tools.pending = picker.groundPoint(x, y)?.clone() ?? null;
@@ -423,6 +424,8 @@ async function boot(): Promise<void> {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    hud.updateMode();
+    hud.refresh(selection, fps);
   });
 
   // 支持 ?select=ant:1 / chamber:4 / plant:0 直接选中对象，&follow=1 跟随；?hour=21 从指定时刻开始
@@ -450,17 +453,14 @@ async function boot(): Promise<void> {
     if (v === 'xray') hud.state.xray = true;
     if (v === 'pheromone') hud.state.pheromone = true;
     if (v === 'roles') hud.state.roleColors = true;
-    if (v === 'stats') hud.state.stats = true;
+    if (v === 'stats' && !hud.state.stats) hud.toggleStats();
   }
   if (hud.state.pheromone) world.pheromone.refreshTexture();
 
   applyView();
   document.getElementById('loading')?.remove();
   if (loadMsg) hud.toast(loadMsg);
-  setTimeout(() => {
-    const help = document.getElementById('help')!;
-    if (!help.classList.contains('hidden')) hud.toggleHelp();
-  }, 25000);
+  setTimeout(() => hud.hideHelp(), 25000);
 
   const focus = new THREE.Vector3();
   const fwd = new THREE.Vector3();
@@ -567,7 +567,7 @@ async function boot(): Promise<void> {
   hud.refresh(selection, fps);
   requestAnimationFrame(frame);
 
-  Object.assign(window, { world, camera, controller });
+  Object.assign(window, { world, camera, controller, hud });
 }
 
 boot();

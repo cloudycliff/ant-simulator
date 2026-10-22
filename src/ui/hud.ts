@@ -37,9 +37,26 @@ export type HudAction =
   | 'newGame'
   | 'langMenu'
   | 'background'
-  | 'lang';
+  | 'lang'
+  | 'sheet'
+  | 'menu';
+
+/** 手机布局里从底栏打开的面板，同一时间只开一个 */
+export const SHEETS = ['colony', 'views', 'tools', 'events', 'stats', 'save', 'help'] as const;
+export type Sheet = (typeof SHEETS)[number];
 
 const SPEEDS = [1, 2, 5, 10, 20];
+const svg = (body: string) => `<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+const ICON = {
+  colony: svg('<circle cx="10" cy="4.5" r="2"/><ellipse cx="10" cy="9.5" rx="1.8" ry="2.2"/><ellipse cx="10" cy="15" rx="2.8" ry="3.2"/><path d="M8.2 9 4 7M11.8 9 16 7M8.2 10.5 4 12M11.8 10.5 16 12M8 14 4.5 17M12 14l3.5 3"/>'),
+  xray: svg('<path d="M10 3 2.5 7 10 11l7.5-4z"/><path d="m2.5 10.5 7.5 4 7.5-4"/><path d="m2.5 14 7.5 4 7.5-4"/>'),
+  views: svg('<path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/>'),
+  tools: svg('<path d="M13.5 2.8a4 4 0 0 0-4.6 5.3L3 14a1.9 1.9 0 0 0 2.7 2.7l5.9-5.9a4 4 0 0 0 5.3-4.6l-2.3 2.3-2.4-.6-.6-2.4z"/>'),
+  events: svg('<path d="M5 13.5V9a5 5 0 0 1 10 0v4.5l1.5 2h-13z"/><path d="M8.3 17.5a1.8 1.8 0 0 0 3.4 0"/>'),
+  more: svg('<path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13"/>'),
+};
+const GITHUB =
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
 const GLOBE =
   '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.4"/><ellipse cx="8" cy="8" rx="2.7" ry="6.4"/><path d="M1.8 6h12.4M1.8 10h12.4"/></g></svg>';
 const REPO_URL = 'https://github.com/cloudycliff/ant-simulator';
@@ -182,6 +199,9 @@ export class Hud {
   private toolKey = '';
   tools: ToolController | null = null;
   private saveEl = document.getElementById('save')!;
+  private viewsEl = document.getElementById('views')!;
+  private toolboxEl = document.getElementById('toolbox')!;
+  private dockEl = document.getElementById('dock')!;
   private saveKey = '';
   saveOpen = false;
   saveMeta: SaveMeta | null = null;
@@ -192,37 +212,120 @@ export class Hud {
   private shownEvents: ColonyEvent[] = [];
   private eventsKey = '';
   state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false, background: true };
+  /** 手机布局：一行顶栏 + 底栏，面板改为抽屉（见 updateMode） */
+  compact = false;
+  sheet: Sheet | null = null;
+  /** 手机顶栏里展开的菜单：0 倍速，1 更多 */
+  private menu: number | null = null;
+  private colonyFolded = false;
 
   constructor(private world: World) {
-    this.renderStatic();
+    this.updateMode(true);
     this.statsEl.innerHTML = `
       <canvas id="chart-pop"></canvas>
       <canvas id="chart-food"></canvas>`;
     const handler = (e: Event) => {
       const b = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
       if (!b) return;
-      this.onAction?.(b.dataset.a as HudAction, b.dataset.v ? Number(b.dataset.v) : undefined);
+      const a = b.dataset.a as HudAction;
+      const v = b.dataset.v ? Number(b.dataset.v) : undefined;
+      if (a === 'sheet') this.toggleSheet(SHEETS[v ?? 0]);
+      if (a === 'menu') this.setMenu(this.menu === v ? null : (v ?? null));
+      else if (b.closest('.pop')) this.setMenu(null);
+      this.onAction?.(a, v);
     };
-    this.top.addEventListener('click', handler);
-    window.addEventListener('pointerdown', (e) => {
-      if (!(e.target as HTMLElement).closest('#lang')) this.setLangMenu(false);
-    });
-    this.infoEl.addEventListener('click', handler);
-    this.helpEl.addEventListener('click', handler);
-    this.toolEl.addEventListener('click', handler);
-    this.saveEl.addEventListener('click', handler);
+    for (const el of [this.top, this.infoEl, this.helpEl, this.toolEl, this.saveEl, this.viewsEl, this.toolboxEl, this.dockEl]) el.addEventListener('click', handler);
+    // 捕获阶段：面板会拦下 pointerdown，菜单也要能关掉
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        const el = e.target as HTMLElement;
+        if (!el.closest('#lang')) this.setLangMenu(false);
+        if (!el.closest('.popwrap')) this.setMenu(null);
+      },
+      true,
+    );
     this.infoEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.statsEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.toolEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.saveEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.infoEl.addEventListener('click', (e) => {
+      if (this.compact && (e.target as HTMLElement).closest('h2')) this.infoEl.classList.toggle('folded');
+    });
+    this.colonyEl.addEventListener('click', (e) => {
+      if (this.compact || !(e.target as HTMLElement).closest('h3.fold')) return;
+      this.colonyFolded = !this.colonyFolded;
+      this.colonyEl.classList.toggle('folded', this.colonyFolded);
+    });
     // 列表随时会重写，等不到 click
     this.eventsEl.addEventListener('pointerdown', (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>('[data-ev]');
       if (!row || e.button !== 0) return;
       e.stopPropagation();
       const ev = this.shownEvents[Number(row.dataset.ev)];
+      if (this.compact) this.setSheet(null);
       if (ev) this.onEvent?.(ev);
     });
+  }
+
+  /** 宽小于 700 或高小于 500（手机竖屏和横屏）用手机布局；切换时重写界面 */
+  updateMode(force = false): void {
+    const compact = innerWidth < 700 || innerHeight < 500;
+    document.body.classList.toggle('land', compact && innerWidth > innerHeight);
+    if (compact === this.compact && !force) return;
+    this.compact = compact;
+    document.body.classList.toggle('compact', compact);
+    this.menu = null;
+    this.relocalize();
+    // 手机上帮助以抽屉的形式在开局时打开，和桌面一样过一会儿自动收起
+    this.setSheet(compact && !this.helpEl.classList.contains('hidden') ? 'help' : null);
+  }
+
+  toggleSheet(s: Sheet): void {
+    this.setSheet(this.sheet === s ? null : s);
+  }
+
+  /** 手机布局里打开一个抽屉（null 全部收起）；统计、存档、帮助的开关跟着抽屉走 */
+  setSheet(s: Sheet | null): void {
+    if (!this.compact) s = null;
+    else {
+      this.state.stats = s === 'stats';
+      this.saveOpen = s === 'save';
+      this.helpEl.classList.toggle('hidden', s !== 'help');
+    }
+    if (s === 'stats' && this.sheet !== 'stats') this.statsDrawn = -1;
+    this.sheet = s;
+    const b = document.body.classList;
+    for (const x of SHEETS) b.toggle(`sheet-${x}`, s === x);
+    b.toggle('sheet-open', !!s);
+    this.syncDock();
+  }
+
+  private syncDock(): void {
+    const toolOn = (this.tools?.active ?? -1) >= 0;
+    this.dockEl.querySelectorAll<HTMLElement>('[data-a="sheet"]').forEach((b) => {
+      const s = SHEETS[Number(b.dataset.v)];
+      b.classList.toggle('on', s === this.sheet || (s === 'tools' && toolOn && !this.sheet));
+    });
+  }
+
+  private setMenu(i: number | null): void {
+    if (i === this.menu) return;
+    this.menu = i;
+    this.top.querySelectorAll<HTMLElement>('.pop').forEach((p, k) => p.classList.toggle('hidden', k !== i));
+    this.top.querySelectorAll<HTMLElement>('[data-a="menu"]').forEach((b, k) => b.classList.toggle('on', k === i));
+  }
+
+  toggleStats(): void {
+    if (this.compact) return this.toggleSheet('stats');
+    this.state.stats = !this.state.stats;
+    this.statsDrawn = -1;
+    if (this.state.stats) this.hideHelp();
+  }
+
+  toggleSave(): void {
+    if (this.compact) this.toggleSheet('save');
+    else this.saveOpen = !this.saveOpen;
   }
 
   /** 顶栏、帮助和图例：只在创建和切换语言时重写，按钮的开关状态由 refresh 每帧补上 */
@@ -230,10 +333,52 @@ export class Hud {
     const sc = (key: string) => t('ui.shortcut', { key });
     const toggle = (a: string, label: string, key: string) => `<button data-a="${a}" id="btn-${a}" title="${sc(key)}">${label} <kbd>${key}</kbd></button>`;
     const cur = getLang();
-    this.top.innerHTML = `
+    const title = `<div class="title">${t('app.title')} <em>${t('app.subtitle')}</em></div>`;
+    const clock = `<div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>`;
+    const repo = `<a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">${GITHUB} GitHub</a>`;
+    const speeds = SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('');
+    const bgBtn = `<button data-a="background" id="btn-background" class="bg" title="${t('ui.backgroundTitle')}">${t('ui.background')}</button>`;
+    const views = ['pheromone', 'roleColors', 'grass', 'stats'] as const;
+    const viewKeys = { pheromone: 'P', roleColors: 'C', grass: 'G', stats: 'T' };
+    if (this.compact) {
+      this.top.innerHTML = `
+        <div class="tb-row">
+          ${title}${clock}
+          <div class="tb-acts">
+            <button data-a="pause" id="btn-pause" title="${t('ui.pause')}">⏸</button>
+            <div class="popwrap">
+              <button data-a="menu" data-v="0" id="btn-speedmenu" title="${t('ui.groupSpeed')}"></button>
+              <div class="pop hidden"><div class="speeds">${speeds}</div>${bgBtn}</div>
+            </div>
+            <div class="popwrap">
+              <button data-a="menu" data-v="1" title="${t('ui.more')}" aria-label="${t('ui.more')}">${ICON.more}</button>
+              <div class="pop hidden">
+                <div class="perf" id="perf"></div>
+                <button data-a="help">${t('ui.help')}</button>
+                <button data-a="savePanel" id="btn-save">${t('save.title')}</button>
+                <div class="label">${GLOBE}${t('ui.language')}</div>
+                <div class="langs">${LANGS.map((l, i) => `<button data-a="lang" data-v="${i}" class="${l === cur ? 'on' : ''}">${LANG_NAMES[l]}</button>`).join('')}</div>
+                ${repo}
+              </div>
+            </div>
+          </div>
+        </div>`;
+      const dockBtn = (s: Sheet, label: string) => `<button data-a="sheet" data-v="${SHEETS.indexOf(s)}">${ICON[s as keyof typeof ICON]}<span>${label}</span></button>`;
+      this.dockEl.innerHTML =
+        dockBtn('colony', t('dock.colony')) +
+        `<button data-a="xray" id="btn-xray">${ICON.xray}<span>${t('dock.xray')}</span></button>` +
+        dockBtn('views', t('ui.groupView')) +
+        dockBtn('tools', t('ui.groupTools')) +
+        dockBtn('events', t('dock.events'));
+      this.viewsEl.innerHTML = `<h3>${t('ui.groupView')}</h3><div class="grid">${views.map((v) => `<button data-a="${v}" id="btn-${v}">${t(`ui.${v}`)}</button>`).join('')}</div>`;
+      this.toolboxEl.innerHTML = `<h3>${t('ui.groupTools')}</h3><div class="grid">${TOOLS.map(
+        (d, i) => `<button data-a="tool" data-v="${i}"><b>${tr(d.name)}</b><small>${d.options.map((o) => cap(tr(o.label))).join(' · ')}</small></button>`,
+      ).join('')}</div>`;
+    } else {
+      this.dockEl.innerHTML = this.viewsEl.innerHTML = this.toolboxEl.innerHTML = '';
+      this.top.innerHTML = `
       <div class="tb-row">
-        <div class="title">${t('app.title')} <em>${t('app.subtitle')}</em></div>
-        <div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>
+        ${title}${clock}
         <div class="perf" id="perf"></div>
         <div class="meta">
           <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
@@ -244,32 +389,27 @@ export class Hud {
               ${LANGS.map((l, i) => `<button data-a="lang" data-v="${i}" role="menuitemradio" aria-checked="${l === cur}" class="${l === cur ? 'on' : ''}">${LANG_NAMES[l]}</button>`).join('')}
             </div>
           </div>
-          <a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-            GitHub
-          </a>
+          ${repo}
         </div>
       </div>
       <div class="tb-row controls">
         <div class="group" id="speeds">
           <span class="label">${t('ui.groupSpeed')}</span>
           <button data-a="pause" id="btn-pause" title="${sc(t('ui.space'))}">⏸</button>
-          ${SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('')}
-          <button data-a="background" id="btn-background" class="bg" title="${t('ui.backgroundTitle')}">${t('ui.background')}</button>
+          ${speeds}
+          ${bgBtn}
         </div>
         <div class="group">
           <span class="label">${t('ui.groupView')}</span>
           ${toggle('xray', t('ui.xray'), 'X')}
-          ${toggle('pheromone', t('ui.pheromone'), 'P')}
-          ${toggle('roleColors', t('ui.roleColors'), 'C')}
-          ${toggle('grass', t('ui.grass'), 'G')}
-          ${toggle('stats', t('ui.stats'), 'T')}
+          ${views.map((v) => toggle(v, t(`ui.${v}`), viewKeys[v])).join('')}
         </div>
         <div class="group" id="tools">
           <span class="label">${t('ui.groupTools')}</span>
           ${TOOLS.map((d, i) => `<button data-a="tool" data-v="${i}" title="${t('ui.toolTitle', { key: d.key })}">${tr(d.name)} <kbd>${d.key}</kbd></button>`).join('')}
         </div>
       </div>`;
+    }
     this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + (isTouch() ? TOUCH_HELP_LINES : HELP_LINES).map((k) => `<div>${t(k)}</div>`).join('');
     this.legendEl.innerHTML = `
       <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>${t('legend.trail')}</div>
@@ -291,6 +431,8 @@ export class Hud {
   /** 切换语言后重写所有界面文字，包括已经产生的事件和日志 */
   relocalize(): void {
     this.renderStatic();
+    this.menu = null;
+    this.syncDock();
     this.toolKey = '';
     this.saveKey = '';
     this.eventsKey = '';
@@ -322,7 +464,13 @@ export class Hud {
   }
 
   toggleHelp(): void {
-    this.helpEl.classList.toggle('hidden');
+    if (this.compact) this.toggleSheet('help');
+    else this.helpEl.classList.toggle('hidden');
+  }
+
+  hideHelp(): void {
+    if (!this.compact) this.helpEl.classList.add('hidden');
+    else if (this.sheet === 'help') this.setSheet(null);
   }
 
   toast(msg: string): void {
@@ -344,7 +492,7 @@ export class Hud {
     document.getElementById('clock')!.textContent = tr(c.stamp());
     const wp = w.weather.phase;
     document.getElementById('dayicon')!.textContent = wp === 'rain' ? '🌧️' : wp === 'overcast' ? '☁️' : c.isNight ? '🌙' : c.daylight < 0.6 ? '🌅' : '☀️';
-    document.getElementById('temp')!.textContent = t('ui.temp', { weather: w.weather.label, t: c.temperatureAt(0).toFixed(1), h: Math.round(c.humidityAt(0)) });
+    document.getElementById('temp')!.textContent = t(this.compact ? 'ui.tempShort' : 'ui.temp', { weather: w.weather.label, t: c.temperatureAt(0).toFixed(1), h: Math.round(c.humidityAt(0)) });
     const pe = document.getElementById('perf')!;
     const lagging = !c.paused && w.effectiveSpeed < c.speed * 0.9;
     pe.textContent =
@@ -357,6 +505,9 @@ export class Hud {
       b.classList.toggle('on', !c.paused && Number(b.dataset.v) === c.speed);
     });
     document.getElementById('btn-pause')!.classList.toggle('on', c.paused);
+    const sm = document.getElementById('btn-speedmenu');
+    if (sm) sm.textContent = `${c.speed}×`;
+    document.body.classList.toggle('show-info', !!sel);
     document.getElementById('btn-background')!.classList.toggle('on', this.state.background);
     const s = this.state;
     document.getElementById('btn-xray')!.classList.toggle('on', s.xray || s.forcedXray);
@@ -379,7 +530,9 @@ export class Hud {
       this.eventsKey = key;
       this.shownEvents = events.slice();
       const title = t('ui.eventTitle');
-      this.eventsEl.innerHTML = events.map((e, i) => (e.at ? `<div class="go" data-ev="${i}" title="${title}">${texts[i]}</div>` : `<div>${texts[i]}</div>`)).join('');
+      this.eventsEl.innerHTML =
+        `<h3>${t('events.title')}</h3>` +
+        (events.map((e, i) => (e.at ? `<div class="go" data-ev="${i}" title="${title}">${texts[i]}</div>` : `<div>${texts[i]}</div>`)).join('') || `<p>${t('events.none')}</p>`);
     }
     this.layout();
   }
@@ -388,8 +541,9 @@ export class Hud {
   renderTool(): void {
     const tc = this.tools;
     const active = tc?.active ?? -1;
-    this.top.querySelectorAll<HTMLButtonElement>('[data-a="tool"]').forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === active));
+    document.querySelectorAll<HTMLButtonElement>('#topbar [data-a="tool"], #toolbox [data-a="tool"]').forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === active));
     document.body.classList.toggle('tooling', active >= 0);
+    this.syncDock();
     const key = tc && active >= 0 ? `${active}:${tc.option[active]}:${tc.pending ? 1 : 0}` : '';
     if (key === this.toolKey) return;
     this.toolKey = key;
@@ -411,14 +565,16 @@ export class Hud {
       ${actions ? `<div class="opts acts">${actions}</div>` : ''}`;
   }
 
+  /** 面板的位置由 CSS 按这几个变量排：顶栏下沿、底栏高度（横屏时是左侧竖排的宽度）、事件列表和图例的高度 */
   private layout(): void {
-    const top = Math.round(this.top.getBoundingClientRect().bottom + 8);
-    const H = window.innerHeight;
-    this.colonyEl.style.top = this.infoEl.style.top = this.saveEl.style.top = `${top}px`;
-    this.toastEl.style.top = `${top + 4}px`;
-    this.colonyEl.style.maxHeight = `${Math.max(160, H - top - this.eventsEl.offsetHeight - 20)}px`;
-    const legend = this.state.pheromone ? this.legendEl.offsetHeight + 10 : 0;
-    this.infoEl.style.maxHeight = `${Math.max(160, H - top - legend - 10)}px`;
+    const s = document.body.style;
+    s.setProperty('--top', `${Math.round(this.top.getBoundingClientRect().bottom + 6)}px`);
+    const dock = this.compact ? this.dockEl.getBoundingClientRect() : null;
+    const land = document.body.classList.contains('land');
+    s.setProperty('--dock', `${dock && !land ? Math.round(innerHeight - dock.top) : 0}px`);
+    s.setProperty('--rail', `${dock && land ? Math.round(dock.right) : 0}px`);
+    s.setProperty('--events', `${this.compact ? 0 : this.eventsEl.offsetHeight}px`);
+    s.setProperty('--legend', `${this.state.pheromone ? this.legendEl.offsetHeight + 10 : 0}px`);
   }
 
   private renderStats(): void {
@@ -440,11 +596,6 @@ export class Hud {
       { label: t('chart.social'), color: '#f2c25a', values: pick('liquid') },
       { label: t('chart.total'), color: '#e9e4da', values: h.map((x) => x.food + x.liquid), dash: true },
     ]);
-  }
-
-  /** 统计数据重新开始绘制（例如面板刚打开） */
-  invalidateStats(): void {
-    this.statsDrawn = -1;
   }
 
   private renderColony(): void {
@@ -473,7 +624,7 @@ export class Hud {
     const pupaRoom = w.nest.chambers[col.pupaChamber];
     const stat = (k: Parameters<typeof t>[0], v: string | number) => `<span>${t(k)}</span><b>${v}</b>`;
     this.colonyEl.innerHTML = `
-      <h3>${t('col.title')}</h3>
+      <h3 class="fold" title="${t(this.colonyFolded ? 'col.unfold' : 'col.fold')}">${t('col.title')}</h3>
       <div class="row big">${t('col.adults')}<b>${col.ants.length}</b></div>
       ${roleRow('queen')}${roleRow('nurse')}${roleRow('maintenance')}${roleRow('forager')}
       <div class="row sub">${t('col.scouts')}<b>${scouts}</b></div>
