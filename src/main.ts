@@ -14,6 +14,8 @@ import { Hud, type HudAction } from './ui/hud';
 import { ToolController } from './ui/tools';
 import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
 import { chooseLang, initLang } from './ui/lang';
+import { BackgroundRunner } from './ui/background';
+import { stampAt } from './sim/clock';
 import { loadWorld, saveProblem, saveWorld } from './world/save';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
@@ -301,6 +303,11 @@ async function boot(): Promise<void> {
         clearSave();
         reloadClean();
         break;
+      case 'background':
+        background.setEnabled(!background.enabled);
+        hud.state.background = background.enabled;
+        hud.toast(t(background.enabled ? 'toast.bgOn' : 'toast.bgOff'));
+        break;
       case 'langMenu':
         hud.toggleLangMenu();
         break;
@@ -447,6 +454,29 @@ async function boot(): Promise<void> {
   let pherTimer = 0;
   let autosaveTimer = 0;
   let time = 0;
+  const autosave = (dt: number) => {
+    autosaveTimer += dt;
+    if (autosaveTimer > CONFIG.save.autosaveSec) {
+      autosaveTimer = 0;
+      save(false);
+    }
+  };
+
+  /** 后台接手时的模拟秒数，回到页面时据此提示离开期间过了多久 */
+  let awayFrom = -1;
+  const background = new BackgroundRunner((dt) => {
+    if (awayFrom < 0) awayFrom = world.clock.seconds;
+    const T = CONFIG.time;
+    world.advance(dt, Math.min(T.backgroundMaxBudgetMs, dt * 1000 * T.backgroundCpuShare), Infinity);
+    autosave(dt);
+  });
+  hud.state.background = background.enabled;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || awayFrom < 0) return;
+    if (world.clock.seconds - awayFrom > 30) hud.toast(t('toast.bgResumed', { from: stampAt(awayFrom), to: world.clock.stamp() }));
+    awayFrom = -1;
+    hud.refresh(selection, fps);
+  });
 
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -501,11 +531,7 @@ async function boot(): Promise<void> {
       world.pheromone.refreshTexture();
     }
     hud.tick(dt);
-    autosaveTimer += dt;
-    if (autosaveTimer > CONFIG.save.autosaveSec) {
-      autosaveTimer = 0;
-      save(false);
-    }
+    autosave(dt);
     hudTimer += dt;
     if (hudTimer > 0.25) {
       hudTimer = 0;

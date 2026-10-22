@@ -51,7 +51,8 @@ src/
     tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法
     saveSlot.ts         存档在 localStorage 中的读写（完整存档 + 一份小摘要）
     lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
-    hud.ts              顶栏（上行状态与存档、语言、GitHub，下行速度、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板
+    background.ts       后台运行：页面隐藏时用 Worker 节拍继续推进模拟
+    hud.ts              顶栏（上行状态与帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板
 scripts/
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
@@ -156,6 +157,10 @@ requestAnimationFrame
 ### 存档（`world/save.ts`）
 
 页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
+
+### 主循环与后台运行
+
+页面可见时 `requestAnimationFrame` 每帧调用 `world.advance(dt, frameBudgetMs)`，然后同步视图、渲染。页面隐藏时浏览器不再调用 `requestAnimationFrame`，开启了后台运行的话由 `BackgroundRunner` 接手：Worker 每 100 ms 发一次消息，主线程只推进模拟和自动保存，不同步视图也不渲染；视图都是对照当前状态同步的，回到页面后第一帧就能跟上。设计取舍见 DECISIONS T-042。
 
 ### 界面文字（`src/i18n`）
 

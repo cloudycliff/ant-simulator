@@ -21,6 +21,11 @@ export const CONFIG = {
     maxStepsPerFrame: 24,
     /** 每帧模拟最多占用的主线程时间，超出就降低实际倍速以保住帧率 */
     frameBudgetMs: 10,
+    /** 页面隐藏时的后台节拍（ms） */
+    backgroundTickMs: 100,
+    /** 后台运行时模拟最多占用的时间比例，以及单次节拍的耗时上限（ms） */
+    backgroundCpuShare: 0.4,
+    backgroundMaxBudgetMs: 1000,
   },
 
   colony: {

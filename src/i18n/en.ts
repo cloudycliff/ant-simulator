@@ -369,6 +369,9 @@ export const en: Record<MsgKey, Entry> = {
   'toast.confirmNew': 'Starting over deletes the current save and begins a new colony from scratch. Continue?',
   'toast.eventGone': "It's gone; flying to where the event happened",
   'toast.lang': 'Switched to English',
+  'toast.bgOn': 'Background running on: the colony keeps living when you leave the page',
+  'toast.bgOff': 'Background running off: the game pauses when you leave the page',
+  'toast.bgResumed': 'While you were away the colony lived on from {from} to {to}',
 
   // ---------------- Top bar, help, legend ----------------
   'ui.shortcut': 'Shortcut: {key}',
@@ -382,6 +385,8 @@ export const en: Record<MsgKey, Entry> = {
   'ui.help': 'Help',
   'ui.repoTitle': 'View the source on GitHub',
   'ui.groupSpeed': 'Speed',
+  'ui.background': 'Run in background',
+  'ui.backgroundTitle': 'When on, the colony keeps living while the browser is minimized or another tab is open; when off, the game pauses as you leave the page',
   'ui.groupView': 'View',
   'ui.groupTools': 'Tools',
   'ui.langTitle': '切换语言 / Switch language',

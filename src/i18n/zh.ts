@@ -364,6 +364,9 @@ export const zh = {
   'toast.confirmNew': '重新开始会删除当前存档，用一个新的蚁群从头开始。确定吗？',
   'toast.eventGone': '它已经不在了，跳到事件发生的位置',
   'toast.lang': '已切换到中文',
+  'toast.bgOn': '后台运行已开启：离开页面后蚁群继续生活',
+  'toast.bgOff': '后台运行已关闭：离开页面时暂停',
+  'toast.bgResumed': '你不在的时候，蚁群从 {from} 生活到了 {to}',
 
   // ---------------- 顶栏、帮助、图例 ----------------
   'ui.shortcut': '快捷键 {key}',
@@ -377,6 +380,8 @@ export const zh = {
   'ui.help': '帮助',
   'ui.repoTitle': '在 GitHub 上查看源码',
   'ui.groupSpeed': '速度',
+  'ui.background': '后台运行',
+  'ui.backgroundTitle': '开启时，最小化浏览器或切到其他标签页后蚁群继续生活；关闭时离开页面就暂停',
   'ui.groupView': '视图',
   'ui.groupTools': '工具',
   'ui.langTitle': '切换语言 / Switch language',

@@ -119,9 +119,10 @@ button.on kbd {
   font-size: 11px;
   color: #8f877a;
 }
-#topbar .help {
-  margin-left: auto;
+#topbar .group .bg {
+  margin-left: 6px;
 }
+
 /* 放不下时只截断性能数字，保证存档、语言和 GitHub 停在最右侧 */
 #topbar .perf {
   flex: 1 1 0;

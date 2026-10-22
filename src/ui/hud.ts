@@ -34,6 +34,7 @@ export type HudAction =
   | 'loadSave'
   | 'newGame'
   | 'langMenu'
+  | 'background'
   | 'lang';
 
 const SPEEDS = [1, 2, 5, 10, 20];
@@ -186,7 +187,7 @@ export class Hud {
   onEvent: ((e: ColonyEvent) => void) | null = null;
   private shownEvents: ColonyEvent[] = [];
   private eventsKey = '';
-  state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false };
+  state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false, background: true };
 
   constructor(private world: World) {
     this.renderStatic();
@@ -231,6 +232,7 @@ export class Hud {
         <div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>
         <div class="perf" id="perf"></div>
         <div class="meta">
+          <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
           <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
           <div class="lang" id="lang">
             <button data-a="langMenu" id="btn-lang" title="${t('ui.langTitle')}" aria-haspopup="menu" aria-expanded="false">${GLOBE}${LANG_NAMES[cur]}<i class="caret"></i></button>
@@ -249,6 +251,7 @@ export class Hud {
           <span class="label">${t('ui.groupSpeed')}</span>
           <button data-a="pause" id="btn-pause" title="${sc(t('ui.space'))}">⏸</button>
           ${SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('')}
+          <button data-a="background" id="btn-background" class="bg" title="${t('ui.backgroundTitle')}">${t('ui.background')}</button>
         </div>
         <div class="group">
           <span class="label">${t('ui.groupView')}</span>
@@ -262,7 +265,6 @@ export class Hud {
           <span class="label">${t('ui.groupTools')}</span>
           ${TOOLS.map((d, i) => `<button data-a="tool" data-v="${i}" title="${t('ui.toolTitle', { key: d.key })}">${tr(d.name)} <kbd>${d.key}</kbd></button>`).join('')}
         </div>
-        <button data-a="help" class="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
       </div>`;
     this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + HELP_LINES.map((k) => `<div>${t(k)}</div>`).join('');
     this.legendEl.innerHTML = `
@@ -351,6 +353,7 @@ export class Hud {
       b.classList.toggle('on', !c.paused && Number(b.dataset.v) === c.speed);
     });
     document.getElementById('btn-pause')!.classList.toggle('on', c.paused);
+    document.getElementById('btn-background')!.classList.toggle('on', this.state.background);
     const s = this.state;
     document.getElementById('btn-xray')!.classList.toggle('on', s.xray || s.forcedXray);
     document.getElementById('btn-pheromone')!.classList.toggle('on', s.pheromone);

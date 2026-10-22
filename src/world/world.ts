@@ -218,11 +218,11 @@ export class World {
    * 推进真实时间 realDt 秒（内部乘以倍速）。一帧内模拟耗时超过 budgetMs 就停下，
    * 丢掉没来得及算的时间，这时实际倍速低于设定倍速（见 effectiveSpeed）。
    */
-  advance(realDt: number, budgetMs = Infinity): void {
+  advance(realDt: number, budgetMs = Infinity, maxSteps = CONFIG.time.maxStepsPerFrame): void {
     this.lastSteps = 0;
     if (this.clock.paused) return;
     const step = CONFIG.time.fixedStep;
-    this.acc += Math.min(realDt * this.clock.speed, step * CONFIG.time.maxStepsPerFrame);
+    this.acc += Math.min(realDt * this.clock.speed, step * maxSteps);
     const start = performance.now();
     while (this.acc >= step) {
       this.acc -= step;
