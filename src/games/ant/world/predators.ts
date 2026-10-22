@@ -248,7 +248,7 @@ export class PredatorManager {
         const z = Math.sin(a) * R;
         if (this.veg.obstacleAt(x, z, 2, true)) continue;
         const s = this.addSpider(x, z, a + Math.PI + rng.range(-0.5, 0.5), false);
-        w.colony.pushEvent(L('ev.spiderArrived'), { kind: 'predator', id: s.id });
+        w.events.push(L('ev.spiderArrived'), { kind: 'predator', id: s.id });
         break;
       }
     }
@@ -257,7 +257,7 @@ export class PredatorManager {
   }
 
   private speedFactor(w: World): number {
-    return clamp((w.clock.temperatureAt(0) - 4) / 18, 0.3, 1.25);
+    return clamp((w.soil.temperatureAt(0) - 4) / 18, 0.3, 1.25);
   }
 
   private updateSpider(s: Spider, dt: number, days: number, w: World): void {
@@ -288,7 +288,7 @@ export class PredatorManager {
         // 被石块、植物困住太久就当作已经从缝隙里钻走了
         if (Math.hypot(s.x, s.z) > CONFIG.world.forageRadius + 2 || s.timer <= 0) {
           this.remove(s);
-          w.colony.pushEvent(s.meals > 0 ? L('ev.spiderLeftAte', { n: s.meals }) : L('ev.spiderLeft'), undefined, { x: s.x, y: this.terrain.heightAt(s.x, s.z), z: s.z });
+          w.events.push(s.meals > 0 ? L('ev.spiderLeftAte', { n: s.meals }) : L('ev.spiderLeft'), undefined, { x: s.x, y: this.terrain.heightAt(s.x, s.z), z: s.z });
         }
         return;
       case 'chase': {
@@ -310,7 +310,7 @@ export class PredatorManager {
             s.caught++;
             s.heading = Math.atan2(dz, dx);
             w.colony.stats.preyed++;
-            w.colony.pushEvent(L('ev.spiderAte', { id: a.id }), { kind: 'predator', id: s.id });
+            w.events.push(L('ev.spiderAte', { id: a.id }), { kind: 'predator', id: s.id });
             w.colony.kill(a, L('cause.spider'), false);
           } else {
             a.note(w, L('note.escapedSpider'));
@@ -368,7 +368,7 @@ export class PredatorManager {
     s.fled = true;
     s.mob = 0;
     w.colony.stats.repelled++;
-    w.colony.pushEvent(L('ev.spiderRepelled', { n: mob }), { kind: 'predator', id: s.id });
+    w.events.push(L('ev.spiderRepelled', { n: mob }), { kind: 'predator', id: s.id });
     return true;
   }
 
@@ -422,7 +422,7 @@ export class PredatorManager {
       p.feedT = CONFIG.predators.antlionFeedSec;
       p.caught++;
       w.colony.stats.preyed++;
-      w.colony.pushEvent(L('ev.antlionAte', { id: a.id }), { kind: 'predator', id: p.id });
+      w.events.push(L('ev.antlionAte', { id: a.id }), { kind: 'predator', id: p.id });
       w.colony.kill(a, L('cause.antlion'), false);
       return;
     }

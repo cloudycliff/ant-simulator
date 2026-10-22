@@ -86,11 +86,11 @@ export class WeatherSystem {
 
     if (this.rain > 0.05) this.wetness = Math.min(1, this.wetness + (this.rain * dt) / W.soakSec);
     else {
-      const t = w.clock.temperatureAt(0);
+      const t = w.soil.temperatureAt(0);
       this.wetness = Math.max(0, this.wetness - (dt / W.drySec) * clamp(0.4 + t / 33, 0.3, 1.5) * (1 - 0.7 * this.cloud));
     }
-    w.clock.weatherCool = W.rainCool * this.cloud;
-    w.clock.groundWet = this.wetness;
+    w.soil.weatherCool = W.rainCool * this.cloud;
+    w.soil.groundWet = this.wetness;
     w.pheromone.rain = this.rain;
 
     if (this.rain > 0.3 && this.rng.chance(dt * W.puddlePerSec * this.rain)) this.rainPuddle(w);
@@ -104,16 +104,16 @@ export class WeatherSystem {
     if (p === 'overcast') {
       this.phaseT = W.overcastSec;
       this.strength = this.rng.range(W.rainStrength[0], W.rainStrength[1]);
-      col.pushEvent(L('ev.overcast'));
+      w.events.push(L('ev.overcast'));
       col.seekShelter(0.6);
     } else if (p === 'rain') {
       this.rains++;
       this.phaseT = this.rng.range(W.rainDays[0], W.rainDays[1]) * CONFIG.time.dayLength;
-      col.pushEvent(L(this.strength > 0.75 ? 'ev.rainHeavy' : 'ev.rainLight'));
+      w.events.push(L(this.strength > 0.75 ? 'ev.rainHeavy' : 'ev.rainLight'));
       col.seekShelter(1);
     } else {
       this.phaseT = 0;
-      col.pushEvent(L('ev.rainStop'));
+      w.events.push(L('ev.rainStop'));
     }
   }
 
@@ -148,9 +148,9 @@ export class WeatherSystem {
       const depthK = Math.max(0, 1 - c.depth / W.floodDepth);
       c.wet = clamp(c.wet + (this.rain * runoff * open * W.floodRate * depthK - W.drainRate) * dt, 0, 1);
       if (before < W.floodedAt && c.wet >= W.floodedAt) {
-        w.colony.pushEvent(L('ev.flooded', { room: c.label }), { kind: 'chamber', id: c.id });
+        w.events.push(L('ev.flooded', { room: c.label }), { kind: 'chamber', id: c.id });
         w.colony.updateClimate();
-      } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.colony.pushEvent(L('ev.drained', { room: c.label }), { kind: 'chamber', id: c.id });
+      } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.events.push(L('ev.drained', { room: c.label }), { kind: 'chamber', id: c.id });
     }
   }
 
@@ -182,8 +182,8 @@ export class WeatherSystem {
     e.plug = clamp(e.plug + (job.open ? -1 : 1) * CONFIG.weather.plugPerLoad, 0, 1);
     if (e.plug > 0.999) e.plug = 1;
     if (e.plug < 0.001) e.plug = 0;
-    if (before < 1 && e.plug === 1) w.colony.pushEvent(L('ev.sealed', { ent: e.label }), { kind: 'entrance', id: job.entrance });
-    if (before > 0 && e.plug === 0) w.colony.pushEvent(L('ev.reopened', { ent: e.label }), { kind: 'entrance', id: job.entrance });
+    if (before < 1 && e.plug === 1) w.events.push(L('ev.sealed', { ent: e.label }), { kind: 'entrance', id: job.entrance });
+    if (before > 0 && e.plug === 0) w.events.push(L('ev.reopened', { ent: e.label }), { kind: 'entrance', id: job.entrance });
   }
 
   toSave(w: World): WeatherSave {

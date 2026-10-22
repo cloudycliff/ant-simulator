@@ -43,7 +43,7 @@ for (const a of w.colony.ants) {
   texts.push(tr(a.activity), tr(a.locationLabel(w)));
   for (const l of a.log) texts.push(tr(l.msg));
 }
-for (const e of w.colony.events) texts.push(tr(e.msg));
+for (const e of w.events.entries) texts.push(tr(e.msg));
 for (const c of w.nest.chambers) texts.push(tr(c.label));
 texts.push(t('ui.temp', { weather: w.weather.label, t: 20, h: 50 }), tr(w.clock.stamp()));
 for (const s of texts) {

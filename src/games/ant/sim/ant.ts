@@ -337,7 +337,7 @@ export class Ant {
     if (now >= this.tempAt || this.tempDomain !== this.domain) {
       this.tempAt = now + 0.5;
       this.tempDomain = this.domain;
-      this.tempK = clamp((w.clock.temperatureAt(this.domain === 'surface' ? 0 : this.depth(w)) - 4) / 18, 0.3, 1.25);
+      this.tempK = clamp((w.soil.temperatureAt(this.domain === 'surface' ? 0 : this.depth(w)) - 4) / 18, 0.3, 1.25);
     }
     const f = this.tempK;
     const wet = this.domain === 'surface' ? 1 - CONFIG.weather.rainSlow * w.weather.rain : 1;

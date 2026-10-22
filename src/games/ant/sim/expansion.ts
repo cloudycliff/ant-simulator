@@ -153,7 +153,7 @@ export class NestExpansion {
         startedDay: this.w.clock.totalDays,
         enlarge: { from: [c.floor.x, c.floor.z, c.rx, c.rz], to: [x, z, c.rx * s, c.rz * s] },
       };
-      this.w.colony.pushEvent(L('ev.enlargeStart', { pct: Math.round(this.occupancy() * 100), room: c.label }), { kind: 'chamber', id: c.id });
+      this.w.events.push(L('ev.enlargeStart', { pct: Math.round(this.occupancy() * 100), room: c.label }), { kind: 'chamber', id: c.id });
       return true;
     }
     return false;
@@ -194,7 +194,7 @@ export class NestExpansion {
         startedDay: this.w.clock.totalDays,
         enlarge: null,
       };
-      col.pushEvent(L('ev.digStart', { pct: Math.round(this.occupancy() * 100), room: CHAMBER_INFO[type].name }), undefined, nest.nodes[face.node].pos);
+      this.w.events.push(L('ev.digStart', { pct: Math.round(this.occupancy() * 100), room: CHAMBER_INFO[type].name }), undefined, nest.nodes[face.node].pos);
       return true;
     }
     return false;
@@ -267,7 +267,7 @@ export class NestExpansion {
           c.enlarged++;
           this.project = null;
           const days = this.w.clock.totalDays - p.startedDay;
-          col.pushEvent(L('ev.enlargeDone', { room: c.label, days: days.toFixed(1), w: (c.rx * 2 * 0.71).toFixed(0), d: (c.rz * 2 * 0.71).toFixed(0) }), { kind: 'chamber', id: c.id });
+          this.w.events.push(L('ev.enlargeDone', { room: c.label, days: days.toFixed(1), w: (c.rx * 2 * 0.71).toFixed(0), d: (c.rz * 2 * 0.71).toFixed(0) }), { kind: 'chamber', id: c.id });
         }
         return;
       }
@@ -276,7 +276,7 @@ export class NestExpansion {
         if (p.face.len >= p.face.full.length - 1e-3) {
           p.chamber = nest.openChamber(p.face, p.type, p.floor, p.rx, p.rz, p.ry, p.yaw);
           col.ensureChamberSlots();
-          col.pushEvent(L('ev.tunnelThrough', { room: p.chamber.label }), { kind: 'chamber', id: p.chamber.id });
+          this.w.events.push(L('ev.tunnelThrough', { room: p.chamber.label }), { kind: 'chamber', id: p.chamber.id });
         }
       } else {
         const c = p.chamber;
@@ -289,7 +289,7 @@ export class NestExpansion {
           this.completed++;
           this.project = null;
           const days = this.w.clock.totalDays - p.startedDay;
-          col.pushEvent(L('ev.digDone', { room: c.label, days: days.toFixed(1) }), { kind: 'chamber', id: c.id });
+          this.w.events.push(L('ev.digDone', { room: c.label, days: days.toFixed(1) }), { kind: 'chamber', id: c.id });
         }
       }
       return;

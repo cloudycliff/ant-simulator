@@ -25,7 +25,10 @@ src/
       lang.ts           选择界面语言（网址参数、上次的选择、浏览器语言）与切换
       saveSlot.ts       SaveSlot：localStorage 里的一个存档位（完整存档 + 一份小摘要），存档和摘要的类型由游戏给出
     sim/                不依赖 WebGL 和 DOM
-      clock.ts          SimClock：游戏日、时刻、昼夜、土壤温湿度模型；一天多长、几点开局由游戏传入
+      simulation.ts     Simulation：模拟内核。时钟、按登记顺序每步推进的子系统、存档登记、最近事件、advance（固定步长、帧预算、实际倍速）
+      saves.ts          SaveRegistry：存档的各部分（字段名、保存、恢复、是否可选），读档按登记顺序恢复
+      events.ts         EventLog：最近事件（时刻、文字、涉及的对象、位置），对象的位置由游戏提供
+      clock.ts          SimClock：游戏日、时刻、昼夜；一天多长、几点开局由游戏传入
       spatial.ts        SpatialHash：每步重建的均匀网格，用于近邻查询；放什么由游戏定（有 pos 和 alive 即可）
     render/
       environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗；光照强度由游戏传入
@@ -46,7 +49,8 @@ src/
       items.ts          Item：卵/幼虫/蛹/食物/垃圾/土粒/尸体
       expansion.ts      NestExpansion：拥挤度、规划新房间、分配挖掘工作面、推进隧道和房间的挖掘
     world/
-      world.ts          World：组装所有模拟子系统，按固定步长推进；房间温度（含石块加温）
+      world.ts          World（继承 Simulation）：组装所有模拟子系统，登记每步的更新顺序和存档的各部分；房间温度（含石块加温）
+      soil.ts           Soil：土壤温湿度模型（随深度衰减的日较差、阴雨降温、地面湿润）
       terrain.ts        解析式高度场、蚁丘、草被密度、地形网格
       vegetation.ts     草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
       food.ts           食物源类型、生成、网格
@@ -55,7 +59,7 @@ src/
       alarm.ts          警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
       weather.ts        天气：晴 / 转阴 / 下雨的阶段与雨势、云量、地面湿润度；积水洼、浅层房间进水；入口封堵任务的分配
       water.ts          玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
-      save.ts           存档：组装各子系统的 toSave / restore，版本与种子检查；蚂蚁游戏的存档位和摘要
+      save.ts           存档格式 SaveData、版本与种子检查、蚂蚁游戏的存档位和摘要；各部分由 World 登记
       pheromone.ts      信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
     nest/
       nest.ts           蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
@@ -85,7 +89,7 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049、T-050。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EventLog` 的对象位置），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049、T-050、T-051。
 
 配置也分两份：`src/core/config.ts` 的 `ENGINE` 是框架的（主循环、后台运行、画质、自动保存），`src/games/ant/config.ts` 的 `CONFIG` 是蚂蚁游戏的。
 
@@ -94,7 +98,7 @@ docs/                   本文档目录
 ```
 requestAnimationFrame
  ├─ world.advance(dt, 10 ms)    按倍速累积时间，按固定步长 1/30 秒逐步 tick；超过帧预算就丢掉剩余时间
- │    └─ tick: clock → weather.update → colony.update → predators.update → alarm.update → food.update → aphids.update → water.update → pheromone.update
+ │    └─ tick: clock → 按 World 构造时登记的顺序：weather → colony → predators → alarm → food → aphids → water → pheromone
  ├─ controller.update(dt)       相机
  ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
  ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
@@ -166,7 +170,7 @@ requestAnimationFrame
 
 ### 玩家干预（`World` 的干预方法）
 
-`dropFood`、`placeObstacle`、`removeObstacle`、`removePlacedById`、`pourWater`、`placePredator`、`removePredator`、`removePredatorById` 都返回 `ToolResult {ok, msg}`，成功时把 `msg` 记进蚁群事件。传 `dry = true` 只做检查不改动世界，界面用它决定预览圈的颜色。合法性检查集中在 `World.checkSpot`：活动范围、离入口的距离、与石块 / 植物 / 水洼 / 食物是否重叠。
+`dropFood`、`placeObstacle`、`removeObstacle`、`removePlacedById`、`pourWater`、`placePredator`、`removePredator`、`removePredatorById` 都返回 `ToolResult {ok, msg}`，成功时把 `msg` 记进最近事件（`World.events.push`）。传 `dry = true` 只做检查不改动世界，界面用它决定预览圈的颜色。合法性检查集中在 `World.checkSpot`：活动范围、离入口的距离、与石块 / 植物 / 水洼 / 食物是否重叠。
 
 界面层（`ToolController`）只负责选工具和给出地面点，不直接改世界。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
 
@@ -174,13 +178,13 @@ requestAnimationFrame
 
 防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines.ts` 里觅食蚁出巢前和内务蚁选任务时读取它们。
 
-天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `SimClock`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`Ant.stepExit` 只走没封死的入口；全部封死时带 `giveUp` 的 `exit` 指令以结果 `'blocked'` 结束，由协程决定怎么处理手里的东西（T-036）。雨后的分批出巢由 `WeatherSystem.damp` 控制。
+天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `Soil`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`Ant.stepExit` 只走没封死的入口；全部封死时带 `giveUp` 的 `exit` 指令以结果 `'blocked'` 结束，由协程决定怎么处理手里的东西（T-036）。雨后的分批出巢由 `WeatherSystem.damp` 控制。
 
 地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `Ant.surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
 
 ### 存档（`world/save.ts`）
 
-页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
+页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
 
 ### 主循环与后台运行
 
@@ -198,7 +202,7 @@ requestAnimationFrame
 
 ### 界面文字（`src/core/i18n` 与 `src/games/ant/i18n`）
 
-模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`，并更新页面标题。
+模拟层产生的文字（`Ant.activity`、`Ant.log`、`World.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`，并更新页面标题。
 
 词典分两份：框架自己用到的几条在 `src/core/i18n/zh.ts`、`en.ts`，蚂蚁游戏的在 `src/games/ant/i18n/`。所有键的类型是 `Messages`：框架只放自己的键，游戏在 `games/ant/i18n/index.ts` 里用声明合并（`declare module` + `interface Messages extends Record<keyof typeof zh, true>`）补上自己的，所以 `L` / `t` 照样能检查键写没写错；同一个文件在模块加载时调用 `registerDicts` 把两种语言的词典并进去，键和框架重名时报错。`games/ant/config.ts` 导入它，游戏的任何模块都会先读配置，所以第一次翻译之前词典一定已经登记。
 
@@ -240,7 +244,7 @@ requestAnimationFrame
 
 **新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充；想让玩家能投放，再加进 `PLACEABLE_FOOD`。
 
-**新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上（或新增一对方法并在 `world/save.ts` 中调用）；结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时可以像 `predators` 那样设为可选字段，旧存档缺这一项就沿用新世界的初始状态。用 `npx tsx scripts/savetest.ts` 检查读档前后指标一致。
+**新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上；新的子系统在 `World` 构造函数里用 `saves.add(字段名, 保存, 恢复)` 登记，并在 `SaveData` 里写上这个字段的类型。注意登记顺序就是读档顺序。结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时登记为可选（`saves.add` 的第四个参数），旧存档缺这一项就沿用新世界的初始状态。新的子系统要每步更新的，用 `addSystem(名字, 更新函数)` 登记，`perftest` 会自动统计它的耗时。用 `npx tsx scripts/savetest.ts` 检查读档前后指标一致。
 
 **新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在 `ToolController.apply` / `hover` 里调用。
 

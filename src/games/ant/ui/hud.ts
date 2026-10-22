@@ -5,7 +5,8 @@ import { FOOD_KIND_NAMES } from '../world/food';
 import { PREDATOR_INFO, Spider } from '../world/predators';
 import type { SimClock } from '../../../core/sim/clock';
 import { ITEM_NAMES } from '../sim/items';
-import type { ColonyEvent, ColonySample } from '../sim/colony';
+import type { ColonySample, EventRef } from '../sim/colony';
+import type { SimEvent } from '../../../core/sim/events';
 import { OBSTACLE_INFO } from '../world/vegetation';
 import type { World } from '../world/world';
 import type { Selection } from './picking';
@@ -215,8 +216,8 @@ export class Hud {
   private toastTimer = 0;
   private statsDrawn = -1;
   onAction: ((a: HudAction, arg?: number) => void) | null = null;
-  onEvent: ((e: ColonyEvent) => void) | null = null;
-  private shownEvents: ColonyEvent[] = [];
+  onEvent: ((e: SimEvent<EventRef>) => void) | null = null;
+  private shownEvents: SimEvent<EventRef>[] = [];
   private eventsKey = '';
   state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false, background: true };
   /** 手机布局：一行顶栏 + 底栏，面板改为抽屉（见 updateMode） */
@@ -517,7 +518,7 @@ export class Hud {
     document.getElementById('clock')!.textContent = tr(c.stamp());
     const wp = w.weather.phase;
     document.getElementById('dayicon')!.textContent = wp === 'rain' ? '🌧️' : wp === 'overcast' ? '☁️' : c.isNight ? '🌙' : c.daylight < 0.6 ? '🌅' : '☀️';
-    document.getElementById('temp')!.textContent = t(this.compact ? 'ui.tempShort' : 'ui.temp', { weather: w.weather.label, t: c.temperatureAt(0).toFixed(1), h: Math.round(c.humidityAt(0)) });
+    document.getElementById('temp')!.textContent = t(this.compact ? 'ui.tempShort' : 'ui.temp', { weather: w.weather.label, t: w.soil.temperatureAt(0).toFixed(1), h: Math.round(w.soil.humidityAt(0)) });
     const pe = document.getElementById('perf')!;
     const lagging = !c.paused && w.effectiveSpeed < c.speed * 0.9;
     pe.textContent =
@@ -555,7 +556,7 @@ export class Hud {
 
     this.renderColony();
     this.renderInfo(sel);
-    const events = w.colony.events;
+    const events = w.events.entries;
     const texts = events.map((e) => `<span>${when(this.world.clock, e.t)}</span>${esc(tr(e.msg))}`);
     const key = texts.join('|');
     if (key !== this.eventsKey) {
@@ -806,8 +807,8 @@ export class Hud {
     const c = w.nest.chambers[id];
     const col = w.colony;
     const temp = w.chamberTemperature(c);
-    const stoneBonus = temp - w.clock.temperatureAt(c.depth);
-    const h = w.clock.humidityAt(c.depth);
+    const stoneBonus = temp - w.soil.temperatureAt(c.depth);
+    const h = w.soil.humidityAt(c.depth);
     const counts: Record<Role, number> = { queen: 0, nurse: 0, maintenance: 0, forager: 0 };
     for (const a of col.ants) if (a.room === id) counts[a.role]++;
     const items = col.byChamber[id];

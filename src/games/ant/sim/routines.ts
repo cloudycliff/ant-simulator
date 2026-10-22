@@ -638,7 +638,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   // 储备耗尽时，觅食蚁不会留在巢里挨饿，而是出去在食物源处进食
   if (wantsToEat(a, w) && (col.reserve > 3 || a.crop >= 0.1)) return yield* eat(a, w);
   if (a.domain === 'nest' && a.crop > 0.3 && a.room >= 0 && rng.chance(0.5)) return yield* offerCrop(a, w, 3);
-  const surfaceT = w.clock.temperatureAt(0);
+  const surfaceT = w.soil.temperatureAt(0);
   const excited = a.excitedUntil > now;
   if (a.domain === 'nest' && ((w.clock.isNight && rng.chance(excited ? 0.3 : 0.6)) || surfaceT < 8)) {
     return yield* rest(a, w, L(surfaceT < 8 ? 'act.restCold' : 'act.restNight'));
@@ -678,7 +678,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
     if (!found.discovered) {
       found.discovered = true;
       a.note(w, L('note.foundAphids'));
-      col.pushEvent(L('ev.foundAphids', { who: L(a.scout ? 'role.scout' : 'role.forager'), id: a.id }), { kind: 'plant', id: found.plant.index });
+      w.events.push(L('ev.foundAphids', { who: L(a.scout ? 'role.scout' : 'role.forager'), id: a.id }), { kind: 'plant', id: found.plant.index });
     }
     return yield* tendAphids(a, w, found, true);
   }
@@ -714,7 +714,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   a.layTrail = CONFIG.pheromone.depositFood * (0.5 + found.fraction) * (a.scout ? 1.3 : 1);
   if (isNew) {
     a.note(w, L('note.foundFood', { food: found.info.name }));
-    col.pushEvent(L('ev.foundFood', { who: L(a.scout ? 'role.scout' : 'role.forager'), id: a.id, food: found.info.name }), { kind: 'food', id: found.id });
+    w.events.push(L('ev.foundFood', { who: L(a.scout ? 'role.scout' : 'role.forager'), id: a.id, food: found.info.name }), { kind: 'food', id: found.id });
   } else a.note(w, L('note.tookFood', { food: found.info.name }));
 
   a.activity = L(found.kind === 'sugar' ? 'act.returnSugar' : 'act.returnFood');

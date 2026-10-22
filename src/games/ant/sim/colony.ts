@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG, ROLE_NAMES, type Role } from '../config';
-import { asText, L, t, type Text } from '../../../core/i18n';
+import { L, t, type Text } from '../../../core/i18n';
 import { clamp, lerp, smoothstep } from '../../../core/util/math';
 import { rng } from '../../../core/util/random';
 import type { Chamber, ChamberType } from '../nest/nest';
@@ -11,18 +11,10 @@ import { NestExpansion, type ExpansionSave } from './expansion';
 import { Item, type ItemSave, type ItemType } from './items';
 import { routineFor, shelter } from './routines';
 import { SpatialHash } from '../../../core/sim/spatial';
+import type { SimEventSave } from '../../../core/sim/events';
 
 /** 事件涉及的对象：界面上点击事件时选中它并飞过去 */
 export type EventRef = { kind: 'ant' | 'chamber' | 'entrance' | 'food' | 'plant' | 'predator' | 'placed'; id: number };
-
-/** t 是模拟秒数；较早的存档里 t 和 msg 都是拼好的中文 */
-export interface ColonyEvent {
-  t: number | string;
-  msg: Text;
-  ref?: EventRef;
-  /** 事件发生的位置；对象已经不在时跳到这里 */
-  at?: [number, number, number];
-}
 
 /** 读档后狼蛛、蚁狮、食物源、玩家障碍物的编号会重新分配，存档里只留位置 */
 const UNSTABLE_REFS = new Set<EventRef['kind']>(['food', 'predator', 'placed']);
@@ -71,7 +63,8 @@ export interface ColonySave {
   targets: RoleTargets;
   stats: ColonyStats;
   history: ColonySample[];
-  events: (Omit<ColonyEvent, 'msg'> & { msg: Text | string })[];
+  /** 事件记录在 World.events，存档格式里放在蚁群下面 */
+  events: SimEventSave<EventRef>[];
   expansion: ExpansionSave;
 }
 
@@ -111,8 +104,6 @@ export class Colony {
     repelled: 0,
   };
   history: ColonySample[] = [];
-  /** 新出生/死亡等事件，供 UI 做提示 */
-  events: ColonyEvent[] = [];
   readonly spatial = new SpatialHash<Ant>(1);
   private edgeGroups = new Map<number, Ant[]>();
   expansion: NestExpansion;
@@ -218,7 +209,7 @@ export class Colony {
       targets: { ...this.targets },
       stats: { ...this.stats },
       history: this.history.map((h) => ({ ...h, day: Math.round(h.day * 1e4) / 1e4, food: r2(h.food), liquid: r2(h.liquid) })),
-      events: this.events.map((e) => (e.ref && UNSTABLE_REFS.has(e.ref.kind) ? { t: e.t, msg: e.msg, at: e.at } : e)),
+      events: this.w.events.toSave((r) => !UNSTABLE_REFS.has(r.kind)),
       expansion: this.expansion.toSave(),
     };
   }
@@ -257,7 +248,7 @@ export class Colony {
     this.targets = s.targets;
     this.stats = { ...this.stats, ...s.stats };
     this.history = s.history;
-    this.events = s.events.map((e) => ({ ...e, msg: asText(e.msg) }));
+    this.w.events.restore(s.events);
     this.expansion.restore(s.expansion);
     this.refreshFoodStock();
     this.liquidStock = this.ants.reduce((sum, a) => sum + a.crop, 0);
@@ -593,7 +584,7 @@ export class Colony {
     shell.claimedBy = -1;
     shell.wantsMove = false;
     this.stats.emerged++;
-    this.pushEvent(L('ev.eclosed', { id: ant.id }), { kind: 'ant', id: ant.id });
+    this.w.events.push(L('ev.eclosed', { id: ant.id }), { kind: 'ant', id: ant.id });
     return ant;
   }
 
@@ -624,13 +615,6 @@ export class Colony {
     if (ant.domain === 'surface') this.dropOnSurface(it, ant.pos.x, ant.pos.z);
     else if (ant.room >= 0) this.addToChamber(it, this.w.nest.chambers[ant.room], ant.pos);
     else this.dropAtNode(it, ant.currentNode(this.w), ant.pos);
-  }
-
-  /** at 省略时取 ref 现在的位置 */
-  pushEvent(msg: Text, ref?: EventRef, at?: { x: number; y: number; z: number }): void {
-    const p = at ?? (ref ? this.refPos(ref) : null);
-    this.events.unshift({ t: Math.round(this.w.clock.seconds), msg, ref, at: p ? [p.x, p.y, p.z] : undefined });
-    if (this.events.length > 8) this.events.pop();
   }
 
   /** 事件对象现在的位置，不在了返回 null */
@@ -842,7 +826,7 @@ export class Colony {
     const day = Math.floor(this.w.clock.totalDays);
     if (early >= 5 && day !== this.lastShortageDay) {
       this.lastShortageDay = day;
-      this.pushEvent(L('ev.foragerShortage'));
+      this.w.events.push(L('ev.foragerShortage'));
     }
   }
 
@@ -874,8 +858,8 @@ export class Colony {
     for (const arr of this.byChamber) for (const it of arr) if (it.type === 'pupa') it.wantsMove = it.chamber !== best.id;
     const t = this.w.chamberTemperature(best).toFixed(1);
     const ref = { kind: 'chamber', id: best.id } as const;
-    if (flooded) this.pushEvent(L('ev.pupaeFlood', { from: cur.label, to: best.label }), ref);
-    else this.pushEvent(L(best.type === 'solar' ? 'ev.pupaeUp' : 'ev.pupaeDown', { room: best.label, t }), ref);
+    if (flooded) this.w.events.push(L('ev.pupaeFlood', { from: cur.label, to: best.label }), ref);
+    else this.w.events.push(L(best.type === 'solar' ? 'ev.pupaeUp' : 'ev.pupaeDown', { room: best.label, t }), ref);
   }
 
   // ---------------- 储食与幼体 ----------------
@@ -930,7 +914,7 @@ export class Colony {
       } else if (it.hunger > 3.5 && it.place === 'chamber') {
         it.type = 'waste';
         it.wantsMove = false;
-        this.pushEvent(L('ev.larvaStarved'), { kind: 'chamber', id: it.chamber }, it.pos);
+        this.w.events.push(L('ev.larvaStarved'), { kind: 'chamber', id: it.chamber }, it.pos);
       }
     } else if (it.type === 'pupa') {
       // 温暖处发育更快

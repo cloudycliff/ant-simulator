@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
-import type { SimClock } from '../../../core/sim/clock';
 import type { PheromoneField } from './pheromone';
+import type { Soil } from './soil';
 import type { Terrain } from './terrain';
 import type { Obstacle, Vegetation } from './vegetation';
 
@@ -102,9 +102,9 @@ export class WaterManager {
     return this.puddles.find((p) => p.id === id);
   }
 
-  update(dt: number, clock: SimClock): void {
-    const t = clock.temperatureAt(0);
-    const rate = (dt / (CONFIG.intervention.waterDays * CONFIG.time.dayLength)) * Math.max(0.3, 0.4 + t / 33) * (1 - 0.9 * clock.groundWet);
+  update(dt: number, soil: Soil): void {
+    const t = soil.temperatureAt(0);
+    const rate = (dt / (CONFIG.intervention.waterDays * CONFIG.time.dayLength)) * Math.max(0.3, 0.4 + t / 33) * (1 - 0.9 * soil.groundWet);
     this.washTimer += dt;
     const wash = this.washTimer > 0.5;
     if (wash) this.washTimer = 0;

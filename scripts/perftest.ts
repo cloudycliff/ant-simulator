@@ -15,16 +15,15 @@ const t0 = performance.now();
 const w = new World();
 console.log(`${n} 只工蚁，建世界 ${(performance.now() - t0).toFixed(0)} ms`);
 
-const parts = ['weather', 'colony', 'predators', 'alarm', 'food', 'aphids', 'water', 'pheromone'] as const;
+const parts = w.systems.map((s) => s.name);
 const cost: Record<string, number> = {};
-for (const p of parts) {
-  const sys = w[p] as unknown as { update: (...a: unknown[]) => void };
-  const orig = sys.update.bind(sys);
-  cost[p] = 0;
-  sys.update = (...a: unknown[]) => {
+for (const sys of w.systems) {
+  const orig = sys.update;
+  cost[sys.name] = 0;
+  sys.update = (dt) => {
     const s = performance.now();
-    orig(...a);
-    cost[p] += performance.now() - s;
+    orig(dt);
+    cost[sys.name] += performance.now() - s;
   };
 }
 

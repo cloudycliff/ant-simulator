@@ -14,7 +14,7 @@ run(60);
 // 蚁穴东侧 25 cm 处投放糖水，在它和入口之间横一根树枝、放一块大石，再浇一大杯水
 log(w.dropFood('syrup', 25, 2));
 log(w.placeObstacle('twig', 14, 2, Math.PI / 2));
-log(w.placeObstacle('rock', 19, -8));
+log(w.placeObstacle('rock', 19, -8, 0));
 log(w.pourWater(19, 8, true));
 log(w.placeObstacle('rock', 0.5, 0.5, 0));
 log(w.dropFood('syrup', 300, 0));
@@ -46,7 +46,7 @@ for (let k = 0; k < 12; k++) {
   stuckMax = Math.max(stuckMax, stuck);
   const pd = w.water.puddles[0];
   console.log(
-    `t=${(60 + (k + 1) * 50).toString().padStart(4)}s 糖水剩余 ${syrup.amount}/${start}  巢外 ${w.colony.outsideCount()}  原地打转 ${stuck}  水洼 ${pd ? pd.r.toFixed(1) + 'cm' : '已干'}  事件: ${w.colony.events[0] ? tr(w.colony.events[0].msg) : ''}`,
+    `t=${(60 + (k + 1) * 50).toString().padStart(4)}s 糖水剩余 ${syrup.amount}/${start}  巢外 ${w.colony.outsideCount()}  原地打转 ${stuck}  水洼 ${pd ? pd.r.toFixed(1) + 'cm' : '已干'}  事件: ${w.events.entries[0] ? tr(w.events.entries[0].msg) : ''}`,
   );
 }
 console.log('最多同时原地打转的蚂蚁', stuckMax);

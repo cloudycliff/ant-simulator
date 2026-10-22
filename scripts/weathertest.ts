@@ -13,8 +13,8 @@ const step = 1 / 30;
 CONFIG.weather.rainPerDay = 0;
 for (let t = 0; t < warm; t += step) w.advance(step);
 const log: string[] = [];
-const push = w.colony.pushEvent.bind(w.colony);
-w.colony.pushEvent = (...args) => {
+const push = w.events.push.bind(w.events);
+w.events.push = (...args) => {
   log.push(`${tr(w.clock.stamp())} ${tr(args[0])}`);
   push(...args);
 };
@@ -58,7 +58,7 @@ for (let t = 0; t < secs; t += step) {
     const wet = shallow.map((c) => `${tr(c.label)}${c.wet.toFixed(2)}`).join(' ');
     const pluggers = w.colony.ants.filter((a) => a.plugging >= 0).length;
     console.log(
-      `t=${t.toFixed(0).padStart(3)}s ${tr(W.label).padEnd(2)} 雨${W.rain.toFixed(2)} 云${W.cloud.toFixed(2)} 湿${W.wetness.toFixed(2)} ${w.clock.temperatureAt(0).toFixed(1)}°C` +
+      `t=${t.toFixed(0).padStart(3)}s ${tr(W.label).padEnd(2)} 雨${W.rain.toFixed(2)} 云${W.cloud.toFixed(2)} 湿${W.wetness.toFixed(2)} ${w.soil.temperatureAt(0).toFixed(1)}°C` +
         ` 巢外=${out} 封堵=${plugs} 封堵中=${pluggers} 等在入口=${blocked} 水洼=${w.water.puddles.length} 信息素=${sum(w.pheromone.trail).toFixed(0)} | ${wet} 蛹室=${tr(w.nest.chambers[w.colony.pupaChamber].label)}`,
     );
   }

@@ -548,3 +548,12 @@
 - 依赖检查的待拆名单清空；新增 `scripts/saveui.mjs`（页面里 Ctrl+S 保存、重新打开后恢复，中英文标题）
 
 **结果**：`SIM_SEED=7` 跑 5 天，输出与第 1 步逐行相同；类型、依赖、词典检查通过；存档、工具、防御、天气、性能测试通过；触屏、鼠标、画质、添加到主屏幕、页面存档测试和各屏幕截图通过
+
+### 2026-10-22 · 框架重构（三）：模拟内核
+
+**实现**（DECISIONS T-051）
+- 新增 `core/sim/simulation.ts`（时钟、固定步长推进、子系统列表、存档登记、最近事件）、`saves.ts`、`events.ts`；`World` 继承 `Simulation`，在构造函数里登记更新顺序和存档的各部分
+- 事件从 `Colony` 移到 `World.events`；土壤温湿度从时钟移到 `world/soil.ts`
+- `perftest` 按内核的子系统列表统计耗时；`npm run typecheck` 也检查 `scripts/`（新增 `tsconfig.scripts.json`、`@types/node`），修了 `weathertest` 和 `tooltest` 里的两处
+
+**结果**：`SIM_SEED=7` 跑 5 天，输出与重构前逐行相同；上一版代码生成的存档能读入，各项指标一致，继续运行正常；类型、依赖、词典检查通过；存档（含下雨中）、工具、防御、天气、性能测试通过；触屏、鼠标、画质、添加到主屏幕、页面存档测试和各屏幕截图通过

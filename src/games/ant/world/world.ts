@@ -1,12 +1,11 @@
 import { CONFIG } from '../config';
-import { ENGINE } from '../../../core/config';
 import { L, type MsgKey, type Text } from '../../../core/i18n';
+import { Simulation } from '../../../core/sim/simulation';
 import { TAU } from '../../../core/util/math';
 import { Rng } from '../../../core/util/random';
 import { Nest, type Chamber } from '../nest/nest';
 import type { Ant } from '../sim/ant';
-import { SimClock } from '../../../core/sim/clock';
-import { Colony } from '../sim/colony';
+import { Colony, type EventRef } from '../sim/colony';
 import { AlarmField } from './alarm';
 import { AphidManager } from './aphids';
 import { FoodManager, SOURCE_INFO, type FoodSourceType } from './food';
@@ -14,6 +13,7 @@ import { PheromoneField } from './pheromone';
 import { PREDATOR_INFO, PredatorManager, Spider, type Predator, type PredatorKind } from './predators';
 import { Terrain } from './terrain';
 import { OBSTACLE_INFO, Vegetation, type PlaceableObstacle } from './vegetation';
+import { Soil } from './soil';
 import { WaterManager } from './water';
 import { WeatherSystem } from './weather';
 
@@ -27,9 +27,9 @@ const fail = (k: MsgKey): ToolResult => ({ ok: false, msg: L(k) });
 const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 'dir.7'] as const;
 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
-export class World {
+export class World extends Simulation<EventRef> {
   readonly rng: Rng;
-  readonly clock = new SimClock(CONFIG.time.dayLength, CONFIG.time.startHour);
+  readonly soil: Soil;
   readonly terrain: Terrain;
   readonly nest: Nest;
   readonly veg: Vegetation;
@@ -41,14 +41,11 @@ export class World {
   readonly alarm: AlarmField;
   readonly weather: WeatherSystem;
   readonly colony: Colony;
-  private acc = 0;
-  /** 最近一帧实际执行的模拟步数（性能面板用） */
-  lastSteps = 0;
-  /** 最近的实际倍速（指数平均），模拟跟不上时低于 clock.speed */
-  effectiveSpeed = 1;
 
   constructor(readonly seed: number = CONFIG.seed) {
+    super(CONFIG.time.dayLength, CONFIG.time.startHour);
     this.rng = new Rng(seed);
+    this.soil = new Soil(this.clock);
     this.terrain = new Terrain(seed);
     for (const e of Nest.entranceLayout()) this.terrain.addMound(e.x, e.z, e.main ? 4.2 : 3.2, e.main ? 1.3 : 0.9);
     this.terrain.build();
@@ -69,6 +66,34 @@ export class World {
     this.weather = new WeatherSystem(this.rng);
     this.colony = new Colony(this);
     this.colony.init();
+    this.events.locate = (r) => this.colony.refPos(r);
+
+    this.addSystem('weather', (dt) => this.weather.update(dt, this));
+    this.addSystem('colony', (dt) => this.colony.update(dt));
+    this.addSystem('predators', (dt) => this.predators.update(dt, this));
+    this.addSystem('alarm', (dt) => this.alarm.update(dt));
+    this.addSystem('food', (dt) => this.food.update(dt));
+    this.addSystem('aphids', (dt) => this.aphids.update(dt, this.clock.seconds));
+    this.addSystem('water', (dt) => this.water.update(dt, this.soil));
+    this.addSystem('pheromone', (dt) => this.pheromone.update(dt));
+
+    // 读档顺序：蚁群最后，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号
+    const S = this.saves;
+    S.add('nest', () => this.nest.toSave(), (d) => this.nest.restore(d));
+    S.add(
+      'placed',
+      () => this.veg.placed.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw, ...(p.kind === 'twig' ? {} : { shape: p.shape }) })),
+      (d: { kind: PlaceableObstacle; x: number; z: number; yaw: number; shape?: number }[]) => {
+        for (const p of d) this.veg.place(p.kind, p.x, p.z, p.yaw, p.shape);
+      },
+    );
+    S.add('puddles', () => this.water.toSave(), (d) => this.water.restore(d));
+    S.add('predators', () => this.predators.toSave(), (d) => this.predators.restore(d), true);
+    S.add('weather', () => this.weather.toSave(this), (d) => this.weather.restore(d, this), true);
+    S.add('food', () => this.food.toSave(), (d) => this.food.restore(d));
+    S.add('aphids', () => this.aphids.toSave(), (d) => this.aphids.restore(d));
+    S.add('pheromone', () => this.pheromone.toSave(), (d) => this.pheromone.restore(d));
+    S.add('colony', () => this.colony.toSave(), (d) => this.colony.restore(d));
   }
 
   // ---------------- 玩家干预 ----------------
@@ -103,7 +128,7 @@ export class World {
     if (!src) return fail('tool.cantDrop');
     src.placed = true;
     const msg = L('tool.dropped', { place: this.describePlace(x, z), food: info.name });
-    this.colony.pushEvent(msg, { kind: 'food', id: src.id });
+    this.events.push(msg, { kind: 'food', id: src.id });
     return { ok: true, msg };
   }
 
@@ -118,7 +143,7 @@ export class World {
     if (dry) return { ok: true };
     const p = this.veg.place(kind, x, z, yaw);
     const msg = L(kind === 'twig' ? 'tool.placedTwig' : 'tool.placedStone', { place: this.describePlace(x, z), name: info.name });
-    this.colony.pushEvent(msg, { kind: 'placed', id: p.id });
+    this.events.push(msg, { kind: 'placed', id: p.id });
     return { ok: true, msg };
   }
 
@@ -144,7 +169,7 @@ export class World {
     if (dry) return { ok: true };
     this.water.pour(x, z, r);
     const msg = L(big ? 'tool.pouredBig' : 'tool.pouredSmall', { place: this.describePlace(x, z) });
-    this.colony.pushEvent(msg, undefined, { x, y: this.terrain.heightAt(x, z), z });
+    this.events.push(msg, undefined, { x, y: this.terrain.heightAt(x, z), z });
     return { ok: true, msg };
   }
 
@@ -169,7 +194,7 @@ export class World {
       placed = this.predators.addAntlion(x, z, true);
     }
     const msg = L('tool.placedPredator', { place: this.describePlace(x, z), name });
-    this.colony.pushEvent(msg, { kind: 'predator', id: placed.id });
+    this.events.push(msg, { kind: 'predator', id: placed.id });
     return { ok: true, msg };
   }
 
@@ -196,13 +221,13 @@ export class World {
   private dismissPredator(p: Predator): ToolResult {
     this.predators.remove(p);
     const msg = L(p instanceof Spider ? 'tool.spiderDismissed' : 'tool.pitFilled');
-    this.colony.pushEvent(msg, undefined, { x: p.x, y: this.terrain.heightAt(p.x, p.z), z: p.z });
+    this.events.push(msg, undefined, { x: p.x, y: this.terrain.heightAt(p.x, p.z), z: p.z });
     return { ok: true, msg };
   }
 
   /** 房间温度：土壤温度随深度变化；石块下方的房间白天额外吸热升温 */
   chamberTemperature(c: Chamber): number {
-    const t = this.clock.temperatureAt(c.depth);
+    const t = this.soil.temperatureAt(c.depth);
     if (!c.underStone) return t;
     const W = CONFIG.world;
     const heat = Math.max(0, Math.sin(((this.clock.hour - 9) / 24) * TAU)) * (1 - this.weather.cloud);
@@ -210,43 +235,8 @@ export class World {
   }
 
   antTemperature(a: Ant): number {
-    if (a.domain === 'surface') return this.clock.temperatureAt(0);
+    if (a.domain === 'surface') return this.soil.temperatureAt(0);
     if (a.room >= 0) return this.chamberTemperature(this.nest.chambers[a.room]);
-    return this.clock.temperatureAt(a.depth(this));
-  }
-
-  /**
-   * 推进真实时间 realDt 秒（内部乘以倍速）。一帧内模拟耗时超过 budgetMs 就停下，
-   * 丢掉没来得及算的时间，这时实际倍速低于设定倍速（见 effectiveSpeed）。
-   */
-  advance(realDt: number, budgetMs = Infinity, maxSteps = ENGINE.loop.maxStepsPerFrame): void {
-    this.lastSteps = 0;
-    if (this.clock.paused) return;
-    const step = ENGINE.loop.fixedStep;
-    this.acc += Math.min(realDt * this.clock.speed, step * maxSteps);
-    const start = performance.now();
-    while (this.acc >= step) {
-      this.acc -= step;
-      this.tick(step);
-      this.lastSteps++;
-      if (performance.now() - start > budgetMs) {
-        this.acc = Math.min(this.acc, step);
-        break;
-      }
-    }
-    const eff = (this.lastSteps * step) / Math.max(realDt, 1e-3);
-    this.effectiveSpeed += (eff - this.effectiveSpeed) * 0.05;
-  }
-
-  private tick(dt: number): void {
-    this.clock.seconds += dt;
-    this.weather.update(dt, this);
-    this.colony.update(dt);
-    this.predators.update(dt, this);
-    this.alarm.update(dt);
-    this.food.update(dt);
-    this.aphids.update(dt, this.clock.seconds);
-    this.water.update(dt, this.clock);
-    this.pheromone.update(dt);
+    return this.soil.temperatureAt(a.depth(this));
   }
 }

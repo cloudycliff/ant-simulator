@@ -38,23 +38,10 @@ export interface SaveData {
 /**
  * 地形、植被、初始蚁穴由世界种子决定，读档时用存档里的种子重新生成；
  * 存档记录之后会变化的一切：蚁穴扩建、蚁群、食物源、蚜虫群、信息素和玩家的干预。
+ * 各部分在 World 的构造函数里登记（w.saves），字段名和 SaveData 一致。
  */
 export function saveWorld(w: World, savedAt: number): SaveData {
-  return {
-    version: SAVE_VERSION,
-    seed: w.seed,
-    savedAt,
-    clock: { seconds: w.clock.seconds, speed: w.clock.speed },
-    nest: w.nest.toSave(),
-    colony: w.colony.toSave(),
-    food: w.food.toSave(),
-    aphids: w.aphids.toSave(),
-    pheromone: w.pheromone.toSave(),
-    placed: w.veg.placed.map((p) => ({ kind: p.kind, x: p.x, z: p.z, yaw: p.yaw, ...(p.kind === 'twig' ? {} : { shape: p.shape }) })),
-    puddles: w.water.toSave(),
-    predators: w.predators.toSave(),
-    weather: w.weather.toSave(w),
-  };
+  return { version: SAVE_VERSION, seed: w.seed, savedAt, ...w.saves.save() } as unknown as SaveData;
 }
 
 export interface AntSaveMeta extends SaveMeta {
@@ -78,16 +65,6 @@ export function loadWorld(w: World, d: SaveData): void {
   if (w.seed !== d.seed) throw new Error(t('save.seedMismatch'));
   const problem = saveProblem(d);
   if (problem) throw new Error(tr(problem));
-  w.clock.seconds = d.clock.seconds;
-  w.clock.speed = d.clock.speed;
-  w.nest.restore(d.nest);
-  for (const p of d.placed) w.veg.place(p.kind, p.x, p.z, p.yaw, p.shape);
-  w.water.restore(d.puddles);
-  if (d.predators) w.predators.restore(d.predators);
-  if (d.weather) w.weather.restore(d.weather, w);
-  w.food.restore(d.food);
-  w.aphids.restore(d.aphids);
-  w.pheromone.restore(d.pheromone);
-  w.colony.restore(d.colony);
+  w.saves.restore(d as unknown as Record<string, unknown>);
   w.aphids.sync();
 }
