@@ -221,6 +221,9 @@ export class Hud {
 
   constructor(private world: World) {
     this.updateMode(true);
+    // 竖屏平板上左右两块面板会把画面挤得很窄，开局先把蚁群面板折起来
+    this.colonyFolded = isTouch() && innerHeight > innerWidth;
+    this.colonyEl.classList.toggle('folded', this.colonyFolded);
     this.statsEl.innerHTML = `
       <canvas id="chart-pop"></canvas>
       <canvas id="chart-food"></canvas>`;
@@ -410,7 +413,8 @@ export class Hud {
         </div>
       </div>`;
     }
-    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + (isTouch() ? TOUCH_HELP_LINES : HELP_LINES).map((k) => `<div>${t(k)}</div>`).join('');
+    const lines = (isTouch() ? TOUCH_HELP_LINES : HELP_LINES).map((k) => (this.compact && k === 'help.events' ? 'help.dockEvents' : k));
+    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + lines.map((k) => `<div>${t(k)}</div>`).join('');
     this.legendEl.innerHTML = `
       <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>${t('legend.trail')}</div>
       <div><i style="background:#3c96ff"></i>${t('legend.home')}</div>
