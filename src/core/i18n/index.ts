@@ -13,6 +13,8 @@ export const LANG_NAMES: Record<Lang, string> = { zh: '中文', en: 'English' };
  */
 export interface Messages extends Record<keyof typeof coreZh, true> {}
 export type MsgKey = keyof Messages;
+/** 框架自己的键；框架代码只能用这些（scripts/i18ncheck.ts 检查） */
+export type CoreKey = keyof typeof coreZh;
 export type Param = string | number | Text;
 
 /**
@@ -30,12 +32,20 @@ export type Entry = string | ((p: Record<string, string | number>) => string);
 const DICTS: Record<Lang, Record<string, Entry>> = { zh: { ...coreZh }, en: { ...coreEn } };
 let current: Lang = 'zh';
 
-/** 登记游戏的词典，要在第一次翻译之前；和已有的键重名时报错 */
-export function registerDicts(d: Record<Lang, Record<string, Entry>>): void {
+/**
+ * 登记游戏的词典，要在第一次翻译之前；和已有的键重名时报错。
+ * overrides 改写框架文字的措辞（只能改框架已有的键，占位符要相同）
+ */
+export function registerDicts(d: Record<Lang, Record<string, Entry>>, overrides?: Record<Lang, Partial<Record<CoreKey, Entry>>>): void {
   for (const l of LANGS) {
     for (const k in d[l]) {
       if (k in DICTS[l]) throw new Error(`i18n: duplicate key ${k}`);
       DICTS[l][k] = d[l][k];
+    }
+    const o = overrides?.[l] ?? {};
+    for (const k in o) {
+      if (!(k in coreZh)) throw new Error(`i18n: override of unknown core key ${k}`);
+      DICTS[l][k] = o[k as CoreKey]!;
     }
   }
 }

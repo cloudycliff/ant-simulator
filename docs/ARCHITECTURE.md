@@ -7,7 +7,7 @@ index.html              页面骨架（各面板的容器）；Vite 的源码模
 cyber-ant-farm.html     构建生成的单文件发布版，双击即可运行（不要手改）
 vite.config.ts          构建配置；singleFile 插件把产物内联成单个 HTML，并复制到根目录
 src/
-  main.ts               入口：创建渲染器、场景、各视图，处理按键与选择，驱动主循环
+  main.ts               入口：把蚂蚁游戏模块交给 runApp
   style.css             界面样式
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
   core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/layercheck.mjs）——
@@ -17,7 +17,7 @@ src/
       math.ts           clamp / lerp / smoothstep / wrapAngle 等
     i18n/
       index.ts          Text（延迟翻译的文字）、L / t / tr、当前语言；Messages（所有键，游戏用声明合并补充）、registerDicts
-      zh.ts / en.ts     框架自己用到的几条文字（时刻、存档失败的原因）
+      zh.ts / en.ts     框架用到的文字（外壳的按钮、提示、帮助、存档面板、画质、时刻）；游戏可以改写其中几条（registerDicts 的 overrides）
     platform/
       device.ts         识别手机和平板的浏览器
       install.ts        添加到主屏幕（安卓弹安装框、iOS 给提示）；注册离线缓存脚本
@@ -40,11 +40,20 @@ src/
       heightfield.ts    HeightfieldSpace：一张高度场的地面（沿视线步进再二分求交点）
     ui/
       camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理；离地高度和活动范围取自 Space
+      tools.ts          ToolController：当前工具与选项、放置预览圈（绿 / 红）、触屏先记下 pending 位置；工具做什么由游戏的 run 决定
+      chart.ts          drawChart：按天的折线图
+      html.ts           面板 HTML 的小工具（进度条、颜色、首字母大写、转义、“多久以前”）
+    app/
+      game.ts           GameModule（游戏声明：标题、相机、存档、空间、mount）与 GameSession（场景对象、视图开关、工具、点选、每帧更新、面板内容）
+      shell.ts          Shell：界面外壳。顶栏（状态、性能、画质、帮助、存档、语言、GitHub，速度、后台运行、视图、工具）、主面板、信息面板、事件列表、帮助、统计、图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
+      app.ts            runApp：启动（语言、渲染器、相机、读档）、选中与跟随、按键、网址参数、自动保存、后台运行、主循环
   games/ant/            —— 蚂蚁游戏的内容 ——
+    game.ts             antGame：蚂蚁游戏模块；mount 搭场景、登记透视 / 信息素 / 分工着色 / 草丛四个视图开关、每帧同步视图
     config.ts           配置与常量（职别名称、颜色）；调参优先改这里。导入它时顺带登记游戏的词典
     space.ts            createSpace：把地形高度场和相机范围包成 Space
     i18n/
       index.ts          把游戏的键并进 Messages，登记词典
+      overrides.ts      改写的框架文字（提示里说“蚂蚁”“蚁群”的几条）
       zh.ts             中文词典，也是游戏所有键的来源
       en.ts             英文词典（单复数等写成函数）
     sim/                —— 模拟层，不依赖 WebGL ——
@@ -74,9 +83,10 @@ src/
       antView.ts        蚂蚁几何体、步态着色器、实例化更新、选中标记
       itemView.ts       物品的实例化渲染
     ui/
-      hud.ts            顶栏（上行状态与画质、帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
-      picking.ts        点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 通过 Space 求鼠标下的地面点
-      tools.ts          干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法；触屏先记下 pending 位置，确认后再放
+      panels.ts         外壳里的蚂蚁内容：顶栏状态（天气、地表温湿度）、蚁群概况、统计曲线、信息素图例、帮助条目、两个底栏图标
+      info.ts           信息面板：10 类对象各一个（类型检查保证不漏）
+      picking.ts        点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）
+      tools.ts          干预工具的定义（名称、按键、选项）和执行（调用 World 的干预方法）
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
   layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
@@ -89,7 +99,7 @@ scripts/
   defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
   weathertest.ts        天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
   perftest.ts           性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
-  i18ncheck.ts          界面文字检查：中英文占位符一致，英文模拟中没有漏翻的文字
+  i18ncheck.ts          界面文字检查：中英文占位符一致，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
   extract-shots.mjs     从浏览器捕获结果中提取截图
   icons.mjs             从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
 docs/                   本文档目录
@@ -97,7 +107,20 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-053。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-054。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
+
+### 游戏模块与界面外壳
+
+`main.ts` 只有一行 `runApp(antGame)`。一个游戏是一个 `GameModule`（`core/app/game.ts`）：标题、相机参数和开局视角、`create(seed)` 建世界、存档的读写和摘要、`space(world)`、`mount(ctx)`。`runApp` 负责和游戏无关的部分：语言、渲染器、相机控制、读档和自动保存、选中 / 飞过去 / 跟随（查实体注册表）、按键、网址参数、后台运行、画质、主循环；`mount` 把场景对象加进去，返回一个 `GameSession`：
+
+- `views`：视图开关（名字、按键、网址参数 `?view=` 用的名字、手机底栏的图标、当前状态、切换）。顶栏、视图面板、按键都按这张表生成；`syncViews` 在任何开关变化后调用一次
+- `tools`：`ToolController` 或 `null`（没有工具的游戏不显示工具栏）
+- `pick(x, y, 容差)`：屏幕点选，返回实体引用
+- `update(dt, frame)`：每帧同步视图，`frame` 给出时间、注视点、选中对象、是否在跟随
+- `ui`：外壳里由游戏填的内容。顶栏状态、性能行后缀、主面板（手机底栏第一个按钮）、未选中时的提示、信息面板、统计（可选，有就多一个 T 键开关）、图例（可选）、帮助条目
+- `onSelect`、`onToolApplied`、`action`（外壳不认识的按钮，如信息面板里的“移除”）、`applyParams`（游戏自己的网址参数）
+
+信息面板是 `InfoPanels<R>`：实体的每一种 `kind` 一个函数，少登记一种时编译报错。外壳 `Shell`（`core/app/shell.ts`）保留原来的 DOM 结构和 id（`#colony` 是主面板，抽屉名仍叫 `colony`），浏览器测试不用改；`window.hud` 现在就是 `Shell`。框架代码只能用框架词典里的键，`i18ncheck` 会检查。
 
 配置也分两份：`src/core/config.ts` 的 `ENGINE` 是框架的（主循环、后台运行、画质、自动保存），`src/games/ant/config.ts` 的 `CONFIG` 是蚂蚁游戏的。
 
@@ -108,14 +131,16 @@ requestAnimationFrame
  ├─ world.advance(dt, 10 ms)    按倍速累积时间，按固定步长 1/30 秒逐步 tick；超过帧预算就丢掉剩余时间
  │    └─ tick: clock → 按 World 构造时登记的顺序：weather → colony → predators → alarm → food → aphids → water → pheromone
  ├─ controller.update(dt)       相机
- ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
- ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
- ├─ predators.sync              狼蛛位置与腿部动画、蚁狮大颚与猎物
- ├─ alarm.sync                  信息素视图打开时更新警报红圈
- ├─ antView / itemView.update   把模拟状态写进实例矩阵
- ├─ env.update                  光照随时刻变化，阴影跟随视点
- ├─ 每 0.4 秒刷新信息素热力图（开启时）
- ├─ 每 0.25 秒刷新界面
+ ├─ tools.hover                 工具预览圈
+ ├─ session.update(dt, frame)   蚂蚁游戏（games/ant/game.ts）：
+ │    ├─ 判断是否需要强制透视        相机在地下，或跟随的蚂蚁在巢内
+ │    ├─ aphids.sync / nestView.sync 蚜虫数量或蚁穴结构变化时更新网格（按 rev 判断，未变化时几乎无开销）
+ │    ├─ predators.sync              狼蛛位置与腿部动画、蚁狮大颚与猎物
+ │    ├─ alarm.sync                  信息素视图打开时更新警报红圈
+ │    ├─ antView / itemView.update   把模拟状态写进实例矩阵
+ │    ├─ env.update                  光照随时刻变化，阴影跟随视点
+ │    └─ 每 0.4 秒刷新信息素热力图（开启时）
+ ├─ 每 0.25 秒刷新界面（Shell.refresh）
  └─ renderer.render
 ```
 
@@ -180,7 +205,7 @@ requestAnimationFrame
 
 `dropFood`、`placeObstacle`、`removeObstacle`、`removePlacedById`、`pourWater`、`placePredator`、`removePredator`、`removePredatorById` 都返回 `ToolResult {ok, msg}`，成功时把 `msg` 记进最近事件（`World.events.push`）。传 `dry = true` 只做检查不改动世界，界面用它决定预览圈的颜色。合法性检查集中在 `World.checkSpot`：活动范围、离入口的距离、与石块 / 植物 / 水洼 / 食物是否重叠。
 
-界面层（`ToolController`）只负责选工具和给出地面点，不直接改世界。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
+界面层（`core/ui/tools.ts` 的 `ToolController`）只负责选工具和给出地面点，执行交给游戏传入的 `run`（`games/ant/ui/tools.ts`），由它调用这些方法。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
 
 天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `Ant.surfaceMove` 里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
 
@@ -192,7 +217,7 @@ requestAnimationFrame
 
 ### 存档（`world/save.ts`）
 
-页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
+页面启动时 `runApp` 先 `create(seed)`（即 `new World(seed)`），有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
 
 ### 主循环与后台运行
 
@@ -206,13 +231,13 @@ requestAnimationFrame
 
 ### 界面布局：桌面与手机
 
-界面有两种布局：宽小于 700 或高小于 500 时 `Hud.updateMode` 给 `body` 加上 `compact`（横屏再加 `land`），`renderStatic` 改写成一行顶栏 + 底栏（`#dock`）+ 视图和工具两个选择面板（`#views`、`#toolbox`）；窗口尺寸变化时重新判断并重写界面。手机布局里各面板是“抽屉”，`Hud.sheet` 记着当前打开的那个，`body` 上的 `sheet-*`、`sheet-open`、`show-info`、`tooling` 决定谁显示，位置全部由 CSS 按 `--top`、`--dock`、`--rail` 等变量排（`Hud.layout` 每次刷新时写入）。统计、存档、帮助在手机布局里跟着抽屉开关。设计取舍见 DECISIONS T-045。
+界面有两种布局：宽小于 700 或高小于 500 时 `Shell.updateMode` 给 `body` 加上 `compact`（横屏再加 `land`），`renderStatic` 改写成一行顶栏 + 底栏（`#dock`）+ 视图和工具两个选择面板（`#views`、`#toolbox`）；窗口尺寸变化时重新判断并重写界面。手机布局里各面板是“抽屉”，`Shell.sheet` 记着当前打开的那个，`body` 上的 `sheet-*`、`sheet-open`、`show-info`、`tooling` 决定谁显示，位置全部由 CSS 按 `--top`、`--dock`、`--rail` 等变量排（`Shell.layout` 每次刷新时写入）。统计、存档、帮助在手机布局里跟着抽屉开关。设计取舍见 DECISIONS T-045。
 
 ### 界面文字（`src/core/i18n` 与 `src/games/ant/i18n`）
 
-模拟层产生的文字（`Ant.activity`、`Ant.log`、`World.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`，并更新页面标题。
+模拟层产生的文字（`Ant.activity`、`Ant.log`、`World.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `runApp` 调用 `chooseLang` 和 `Shell.relocalize`，并更新页面标题。
 
-词典分两份：框架自己用到的几条在 `src/core/i18n/zh.ts`、`en.ts`，蚂蚁游戏的在 `src/games/ant/i18n/`。所有键的类型是 `Messages`：框架只放自己的键，游戏在 `games/ant/i18n/index.ts` 里用声明合并（`declare module` + `interface Messages extends Record<keyof typeof zh, true>`）补上自己的，所以 `L` / `t` 照样能检查键写没写错；同一个文件在模块加载时调用 `registerDicts` 把两种语言的词典并进去，键和框架重名时报错。`games/ant/config.ts` 导入它，游戏的任何模块都会先读配置，所以第一次翻译之前词典一定已经登记。
+词典分两份：外壳和框架用到的在 `src/core/i18n/zh.ts`、`en.ts`（措辞不提蚂蚁），蚂蚁游戏的在 `src/games/ant/i18n/`。游戏想换掉框架的某条措辞（比如“先选中一只蚂蚁”），写进 `overrides.ts`，作为 `registerDicts` 的第二个参数；只能改写框架已有的键，占位符要和框架的一样（`i18ncheck` 检查）。所有键的类型是 `Messages`：框架只放自己的键，游戏在 `games/ant/i18n/index.ts` 里用声明合并（`declare module` + `interface Messages extends Record<keyof typeof zh, true>`）补上自己的，所以 `L` / `t` 照样能检查键写没写错；同一个文件在模块加载时调用 `registerDicts` 把两种语言的词典并进去，键和框架重名时报错。`games/ant/config.ts` 导入它，游戏的任何模块都会先读配置，所以第一次翻译之前词典一定已经登记。
 
 增加语种：在 `Lang`、`LANGS`、`LANG_TAGS`、`LANG_NAMES` 里补上，框架和游戏各新建一份词典（`registerDicts` 的参数要求每种语言都有），再改 `initLang` 的浏览器语言匹配。设计取舍见 DECISIONS T-040、T-050。
 
@@ -254,11 +279,15 @@ requestAnimationFrame
 
 **新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上；新的子系统在 `World` 构造函数里用 `saves.add(字段名, 保存, 恢复)` 登记，并在 `SaveData` 里写上这个字段的类型。注意登记顺序就是读档顺序。结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时登记为可选（`saves.add` 的第四个参数），旧存档缺这一项就沿用新世界的初始状态。新的子系统要每步更新的，用 `addSystem(名字, 更新函数)` 登记，`perftest` 会自动统计它的耗时。用 `npx tsx scripts/savetest.ts` 检查读档前后指标一致。
 
-**新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在 `ToolController.apply` / `hover` 里调用。
+**新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `games/ant/ui/tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在同一文件的 `run` 里调用。
+
+**新增一个视图开关**：在 `games/ant/game.ts` 的 `views` 里加一项（按键、网址参数名、手机底栏图标可选），在 `syncViews` 里把状态应用到视图上；名字在游戏词典里加 `ui.名字`。
+
+**新增一类可选中的对象**：在 `GameRef` 里加一种 `kind`，在 `entities.ts` 里登记位置，在 `info.ts` 里写它的信息面板（不写会编译报错），在 `picking.ts` 里让它能被点到。
 
 **新增一种物品**：在 `items.ts` 的 `ItemType`、`ITEM_NAMES` 和 `itemView.ts` 的图层中补充。
 
-**新增界面文字**：先在 `games/ant/i18n/zh.ts` 加键，再在 `en.ts` 加英文（不加会编译报错）；只有框架代码用的文字加在 `core/i18n/` 里。英文名词小写，需要单复数时写成函数；然后跑 `npx tsx scripts/i18ncheck.ts`。
+**新增界面文字**：先在 `games/ant/i18n/zh.ts` 加键，再在 `en.ts` 加英文（不加会编译报错）；`core/` 里的代码用的文字加在 `core/i18n/` 里，不能用游戏的键。英文名词小写，需要单复数时写成函数；然后跑 `npx tsx scripts/i18ncheck.ts`。
 
 ## 验证工具
 
@@ -307,4 +336,4 @@ node scripts/saveui.mjs      # 存档：Ctrl+S 保存、重新打开后恢复种
 node scripts/qualitytest.mjs # 画质：桌面和手机的默认档位、暂停降帧与操作唤醒、省电、人为卡顿后自动降档、选择记住
 node scripts/layoutshots.mjs [phone pad-land ant …] [--en]   # 手机 / 平板 / 桌面、横竖屏 × 几个场景的截图，存到 shots/layout/
 ```
-需要先 `npm run dev`。脚本直接启动无头 Chrome（共用 `scripts/cdp.mjs`），通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller`、`window.hud`、`window.quality`、`window.renderer` 判断结果；手机浏览器用 `Emulation.setUserAgentOverride` 伪装。截图脚本还会列出超出屏幕的面板。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。
+需要先 `npm run dev`。脚本直接启动无头 Chrome（共用 `scripts/cdp.mjs`），通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller`、`window.hud`（界面外壳 `Shell`）、`window.quality`、`window.renderer` 判断结果；手机浏览器用 `Emulation.setUserAgentOverride` 伪装。截图脚本还会列出超出屏幕的面板。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。

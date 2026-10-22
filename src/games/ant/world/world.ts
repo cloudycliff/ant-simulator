@@ -17,12 +17,10 @@ import { OBSTACLE_INFO, Vegetation, type PlaceableObstacle } from './vegetation'
 import { Soil } from './soil';
 import { WaterManager } from './water';
 import { WeatherSystem } from './weather';
+import type { ToolResult } from '../../../core/ui/tools';
 
 /** 干预操作的结果，msg 用于提示玩家；只做检查（dry）时成功没有 msg */
-export interface ToolResult {
-  ok: boolean;
-  msg?: Text;
-}
+export type { ToolResult };
 
 const fail = (k: MsgKey): ToolResult => ({ ok: false, msg: L(k) });
 const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 'dir.7'] as const;

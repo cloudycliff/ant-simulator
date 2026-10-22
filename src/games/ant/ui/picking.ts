@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import type { Space } from '../../../core/space/space';
 import type { AntView } from '../render/antView';
 import type { GameRef } from '../world/entities';
 import type { World } from '../world/world';
@@ -12,7 +11,6 @@ export class Picker {
 
   constructor(
     private world: World,
-    private space: Space,
     private camera: THREE.PerspectiveCamera,
     private dom: HTMLElement,
     private antView: AntView,
@@ -24,15 +22,6 @@ export class Picker {
     this.middenTarget.userData.pick = { kind: 'midden' };
     this.middenTarget.visible = false;
     this.middenTarget.updateMatrixWorld();
-  }
-
-  /** 鼠标下的地面点 */
-  groundPoint(clientX: number, clientY: number, out = new THREE.Vector3()): THREE.Vector3 | null {
-    const rect = this.dom.getBoundingClientRect();
-    const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
-    const ny = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this.ray.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
-    return this.space.raycast(this.ray.ray, out);
   }
 
   /** tolerance：蚂蚁的点选容差（像素），手指点选时放宽 */
