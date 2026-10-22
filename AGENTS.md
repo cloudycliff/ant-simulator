@@ -14,7 +14,7 @@
 - 数值优先放进 `src/config.ts`；写在代码里的数值要同步登记到 `docs/BALANCE.md`
 
 ## 完成一轮开发后
-1. `npm run build` 必须通过；它会更新根目录的 `赛博养蚂蚁.html`（双击即可运行的发布文件），提交时一并提交
+1. `npm run build` 必须通过；它会更新根目录的 `cyber-ant-farm.html`（双击即可运行的发布文件），提交时一并提交
 2. 改动了行为或数值：跑 `npx tsx scripts/simtest.ts 3000`，把基线指标的变化写进 `docs/PROGRESS.md`
 3. 改动了画面：按 `docs/ARCHITECTURE.md` 的“验证工具”一节截图检查
 4. 更新文档：

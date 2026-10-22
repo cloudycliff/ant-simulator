@@ -24,7 +24,7 @@
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # 类型检查 + 生产构建，输出单个文件 dist/index.html，并复制为根目录的 赛博养蚂蚁.html
+npm run build      # 类型检查 + 生产构建，输出单个文件 dist/index.html，并复制为根目录的 cyber-ant-farm.html
 npx tsx scripts/simtest.ts 3000   # 无界面模拟 5 个游戏日（6000 为 10 天），检查行为与平衡
 npx tsx scripts/savetest.ts       # 存档往返测试
 npx tsx scripts/defensetest.ts    # 放入狼蛛，观察警报、围攻与入口警戒
@@ -35,7 +35,7 @@ npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查
 
 ### 不用服务器直接打开
 
-双击根目录下的 **`赛博养蚂蚁.html`**，用 Chrome / Edge / Firefox 打开即可运行。它内联了全部脚本和样式（约 760 KB），没有其他依赖文件，可以复制到任意位置单独分享。
+双击根目录下的 **`cyber-ant-farm.html`**，用 Chrome / Edge / Firefox 打开即可运行。它内联了全部脚本和样式（约 790 KB），没有其他依赖文件，可以复制到任意位置单独分享。
 
 - 这个文件由 `npm run build` 生成（内容与 `dist/index.html` 相同），改了代码后要重新构建才会更新
 - 根目录的 `index.html` 是给 Vite 用的源码模板，引用的是 TypeScript 源码，不能直接双击运行

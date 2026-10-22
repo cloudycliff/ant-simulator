@@ -4,7 +4,7 @@ import { defineConfig, type Plugin } from 'vite';
 import type { OutputAsset, OutputChunk } from 'rollup';
 
 /** 双击即可运行的发布文件，构建时写到项目根目录，随仓库提交 */
-const RELEASE_FILE = '赛博养蚂蚁.html';
+const RELEASE_FILE = 'cyber-ant-farm.html';
 
 /** 把打包出的 JS 和 CSS 内联进 index.html：浏览器不允许从 file:// 加载外部模块脚本，内联后双击即可运行 */
 function singleFile(): Plugin {

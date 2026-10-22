@@ -75,7 +75,7 @@ try {
 
   const f = await browser.page();
   await f.viewport(1280, 800, false);
-  await f.open(`${pathToFileURL(resolve('赛博养蚂蚁.html')).href}?new=1&lang=zh`);
+  await f.open(`${pathToFileURL(resolve('cyber-ant-farm.html')).href}?new=1&lang=zh`);
   const local = await f.ev(`({ ants: world.colony.ants.length, sw: !!navigator.serviceWorker?.controller })`);
   check('双击打开的单文件照常运行，不注册离线缓存', local.ants > 0 && !local.sw, local);
   f.close();
