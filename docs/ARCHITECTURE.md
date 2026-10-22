@@ -54,6 +54,9 @@ src/
     lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
     background.ts       后台运行：页面隐藏时用 Worker 节拍继续推进模拟
     device.ts           识别手机和平板的浏览器
+    install.ts          添加到主屏幕（安卓弹安装框、iOS 给提示）；注册离线缓存脚本
+  assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
+public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
     hud.ts              顶栏（上行状态与画质、帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
 scripts/
   simtest.ts            无界面模拟测试
@@ -64,6 +67,7 @@ scripts/
   perftest.ts           性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
   i18ncheck.ts          界面文字检查：中英文占位符一致，英文模拟中没有漏翻的文字
   extract-shots.mjs     从浏览器捕获结果中提取截图
+  icons.mjs             从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
 docs/                   本文档目录
 ```
 
@@ -166,6 +170,10 @@ requestAnimationFrame
 
 每帧开头先问 `Quality.frame`：超过帧率上限（平时 60，省电 30，暂停 2 秒没操作 15）就跳过这一帧，什么都不做；`last` 只在真正画的帧更新，所以模拟时间不受影响。“自动”档统计满帧率时段的平均帧率，连续两个 3 秒都低于 40 就降一档。设计取舍见 DECISIONS T-047。
 
+### 网页版：添加到主屏幕与离线
+
+单文件构建不变：`vite.config.ts` 的插件把 JS、CSS 和 SVG 都内联进 `index.html`。`public/` 下的清单、`sw.js` 和 PNG 图标只给网页版用，Vite 原样复制到 `dist/`，双击打开的单文件里引用它们会失败，但不影响游戏。`sw.js` 联网时优先取网络、存一份，断网或 4 秒没响应时用缓存；改了缓存的文件列表要改 `CACHE` 的版本号。设计取舍见 DECISIONS T-048。
+
 ### 界面布局：桌面与手机
 
 界面有两种布局：宽小于 700 或高小于 500 时 `Hud.updateMode` 给 `body` 加上 `compact`（横屏再加 `land`），`renderStatic` 改写成一行顶栏 + 底栏（`#dock`）+ 视图和工具两个选择面板（`#views`、`#toolbox`）；窗口尺寸变化时重新判断并重写界面。手机布局里各面板是“抽屉”，`Hud.sheet` 记着当前打开的那个，`body` 上的 `sheet-*`、`sheet-open`、`show-info`、`tooling` 决定谁显示，位置全部由 CSS 按 `--top`、`--dock`、`--rail` 等变量排（`Hud.layout` 每次刷新时写入）。统计、存档、帮助在手机布局里跟着抽屉开关。设计取舍见 DECISIONS T-045。
@@ -258,6 +266,7 @@ npx tsx -e "import { World } from './src/world/world'; const w = new World(); fo
 ```
 node scripts/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置、底栏与菜单、转横屏
 node scripts/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置；窗口变窄切到手机布局再切回
+node scripts/pwatest.mjs     # 先 npm run build：清单、图标、安装条件、离线缓存、断网刷新、主屏幕入口、双击打开的单文件
 node scripts/qualitytest.mjs # 画质：桌面和手机的默认档位、暂停降帧与操作唤醒、省电、人为卡顿后自动降档、选择记住
 node scripts/layoutshots.mjs [phone pad-land ant …] [--en]   # 手机 / 平板 / 桌面、横竖屏 × 几个场景的截图，存到 shots/layout/
 ```

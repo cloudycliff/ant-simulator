@@ -34,6 +34,10 @@ function singleFile(): Plugin {
           const re = new RegExp(`<link rel="stylesheet"[^>]*href="[^"]*${escapeRe(name)}"[^>]*>`);
           src = src.replace(re, () => `<style>${String(file.source)}</style>`);
           delete bundle[name];
+        } else if (file.type === 'asset' && name.endsWith('.svg')) {
+          const data = `data:image/svg+xml;base64,${Buffer.from(file.source).toString('base64')}`;
+          src = src.replace(new RegExp(`"[^"]*${escapeRe(name)}"`, 'g'), () => `"${data}"`);
+          delete bundle[name];
         }
       }
       html.source = src;

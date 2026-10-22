@@ -60,6 +60,12 @@ try {
           if (!r.width || getComputedStyle(el).display === 'none' || getComputedStyle(el).opacity === '0') continue;
           if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) out.push(el.id + ' ' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(','));
         }
+        // 顶栏里被挤出去的按钮（顶栏本身不会超出屏幕，里面的东西会）
+        const bar = document.getElementById('topbar').getBoundingClientRect();
+        for (const el of document.querySelectorAll('#topbar .tb-row > * button, #topbar .tb-row > button, #topbar .tb-row > * > a')) {
+          const r = el.getBoundingClientRect();
+          if (r.width && !el.closest('.pop') && r.right > bar.right + 1) out.push('顶栏 ' + (el.id || el.textContent.trim().slice(0, 12)));
+        }
         return out;
       })()`);
       console.log(name, over.length ? '超出屏幕：' + over.join(' | ') : '');

@@ -55,7 +55,7 @@ function connect(wsUrl) {
         ws.send(JSON.stringify({ id, method, params }));
       });
     const ev = async (expr) => {
-      const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true });
+      const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'eval error');
       return r.result.value;
     };

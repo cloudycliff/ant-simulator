@@ -13,6 +13,7 @@ import { TOOLS, type ToolController } from './tools';
 import type { SaveMeta } from './saveSlot';
 import { BACKGROUND_LIMITED } from './background';
 import { QUALITY_LEVELS, QUALITY_MODES, type Quality } from '../render/quality';
+import type { Installer } from './install';
 
 export type HudAction =
   | 'pause'
@@ -40,6 +41,7 @@ export type HudAction =
   | 'langMenu'
   | 'background'
   | 'quality'
+  | 'install'
   | 'lang'
   | 'sheet'
   | 'menu';
@@ -202,6 +204,7 @@ export class Hud {
   private toolKey = '';
   tools: ToolController | null = null;
   quality: Quality | null = null;
+  installer: Installer | null = null;
   private saveEl = document.getElementById('save')!;
   private viewsEl = document.getElementById('views')!;
   private toolboxEl = document.getElementById('toolbox')!;
@@ -350,7 +353,7 @@ export class Hud {
     const cur = getLang();
     const title = `<div class="title">${t('app.title')} <em>${t('app.subtitle')}</em></div>`;
     const clock = `<div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>`;
-    const repo = `<a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">${GITHUB} GitHub</a>`;
+    const repo = `<a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">${GITHUB}<span>GitHub</span></a>`;
     const speeds = SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('');
     const bgBtn = `<button data-a="background" id="btn-background" class="bg${BACKGROUND_LIMITED ? ' limited' : ''}" title="${t(BACKGROUND_LIMITED ? 'ui.backgroundLimitedTitle' : 'ui.backgroundTitle')}">${t('ui.background')}</button>`;
     const views = ['pheromone', 'roleColors', 'grass', 'stats'] as const;
@@ -373,6 +376,7 @@ export class Hud {
                 <div class="opts" id="quality-opts">${QUALITY_MODES.map((m, i) => `<button data-a="quality" data-v="${i}">${t(`quality.${m}`)}</button>`).join('')}</div>
                 <button data-a="help">${t('ui.help')}</button>
                 <button data-a="savePanel" id="btn-save">${t('save.title')}</button>
+                <button data-a="install" id="btn-install" class="hidden" title="${t('ui.installTitle')}">${t('ui.install')}</button>
                 <div class="label">${GLOBE}${t('ui.language')}</div>
                 <div class="langs">${LANGS.map((l, i) => `<button data-a="lang" data-v="${i}" class="${l === cur ? 'on' : ''}">${LANG_NAMES[l]}</button>`).join('')}</div>
                 ${repo}
@@ -429,7 +433,9 @@ export class Hud {
       </div>`;
     }
     const lines = (isTouch() ? TOUCH_HELP_LINES : HELP_LINES).map((k) => (this.compact && k === 'help.events' ? 'help.dockEvents' : k));
-    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + lines.map((k) => `<div>${t(k)}</div>`).join('');
+    // 手机布局的“添加到主屏幕”在“更多”菜单里，平板放在帮助里，免得挤占顶栏
+    const install = this.compact ? '' : `<div class="install hidden" id="install-row"><button data-a="install" id="btn-install">${t('ui.install')}</button><span>${t('ui.installTitle')}</span></div>`;
+    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + lines.map((k) => `<div>${t(k)}</div>`).join('') + install;
     this.legendEl.innerHTML = `
       <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>${t('legend.trail')}</div>
       <div><i style="background:#3c96ff"></i>${t('legend.home')}</div>
@@ -529,6 +535,9 @@ export class Hud {
     if (sm) sm.textContent = `${c.speed}×`;
     document.body.classList.toggle('show-info', !!sel);
     document.getElementById('btn-background')!.classList.toggle('on', this.state.background && !BACKGROUND_LIMITED);
+    const canInstall = !!this.installer?.kind;
+    document.getElementById('btn-install')!.classList.toggle('hidden', !canInstall);
+    document.getElementById('install-row')?.classList.toggle('hidden', !canInstall);
     const ql = document.getElementById(this.compact ? 'quality-label' : 'btn-quality');
     if (ql) ql.textContent = t('ui.quality', { q: this.qualityLabel() });
     this.top.querySelectorAll<HTMLElement>('#quality-opts button').forEach((b) => b.classList.toggle('on', QUALITY_MODES[Number(b.dataset.v)] === this.quality?.mode));

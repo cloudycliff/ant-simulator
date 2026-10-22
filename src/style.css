@@ -105,7 +105,8 @@ button.on kbd {
   color: #c9b38f;
 }
 #topbar .clock {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   white-space: nowrap;
   display: flex;
   gap: 10px;
@@ -117,6 +118,9 @@ button.on kbd {
   font-size: 14px;
 }
 #topbar .clock #temp {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #b8ae9c;
 }
 #topbar .group {
@@ -222,6 +226,24 @@ button.on kbd {
   #topbar .title em {
     display: none;
   }
+}
+/* 再窄：GitHub 只留图标 */
+@media (max-width: 999px) {
+  #topbar .tb-row:not(.controls) .repo span {
+    display: none;
+  }
+}
+#help .install {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 230, 190, 0.1);
+}
+#help .install button {
+  flex: none;
+  white-space: nowrap;
 }
 /* 平板等触屏设备：按钮大一些，不显示快捷键角标 */
 @media (pointer: coarse) {

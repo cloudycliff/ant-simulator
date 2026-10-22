@@ -16,6 +16,7 @@ import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
 import { chooseLang, initLang } from './ui/lang';
 import { BACKGROUND_LIMITED, BackgroundRunner } from './ui/background';
 import { MOBILE } from './ui/device';
+import { Installer, registerServiceWorker } from './ui/install';
 import { QUALITY_LEVELS, QUALITY_MODES, Quality } from './render/quality';
 import { stampAt } from './sim/clock';
 import { loadWorld, saveProblem, saveWorld } from './world/save';
@@ -107,6 +108,10 @@ async function boot(): Promise<void> {
   });
   const hud = new Hud(world);
   hud.quality = quality;
+  const installer = new Installer();
+  hud.installer = installer;
+  installer.onChange = () => hud.refresh(selection, fps);
+  registerServiceWorker();
   quality.onDrop = () => hud.toast(t('toast.qualityDrop', { q: t(`quality.${QUALITY_LEVELS[quality.level]}`) }));
   hud.saveMeta = readMeta();
   const tools = new ToolController(world);
@@ -329,6 +334,10 @@ async function boot(): Promise<void> {
         hud.refresh(selection, fps);
         break;
       }
+      case 'install':
+        if (installer.kind === 'ios') hud.toast(t('toast.installIos'));
+        else void installer.install().then((ok) => ok && hud.toast(t('toast.installed')));
+        break;
       case 'langMenu':
         hud.toggleLangMenu();
         break;
