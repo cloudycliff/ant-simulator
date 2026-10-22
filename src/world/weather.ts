@@ -148,9 +148,9 @@ export class WeatherSystem {
       const depthK = Math.max(0, 1 - c.depth / W.floodDepth);
       c.wet = clamp(c.wet + (this.rain * runoff * open * W.floodRate * depthK - W.drainRate) * dt, 0, 1);
       if (before < W.floodedAt && c.wet >= W.floodedAt) {
-        w.colony.pushEvent(`雨水从入口灌进来，${c.name}进水了`);
+        w.colony.pushEvent(`雨水从入口灌进来，${c.name}进水了`, { kind: 'chamber', id: c.id });
         w.colony.updateClimate();
-      } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.colony.pushEvent(`${c.name}的积水渗干了`);
+      } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.colony.pushEvent(`${c.name}的积水渗干了`, { kind: 'chamber', id: c.id });
     }
   }
 
@@ -182,8 +182,8 @@ export class WeatherSystem {
     e.plug = clamp(e.plug + (job.open ? -1 : 1) * CONFIG.weather.plugPerLoad, 0, 1);
     if (e.plug > 0.999) e.plug = 1;
     if (e.plug < 0.001) e.plug = 0;
-    if (before < 1 && e.plug === 1) w.colony.pushEvent(`内务蚁用土粒封住了${e.name}`);
-    if (before > 0 && e.plug === 0) w.colony.pushEvent(`内务蚁清开了${e.name}，蚂蚁可以出巢了`);
+    if (before < 1 && e.plug === 1) w.colony.pushEvent(`内务蚁用土粒封住了${e.name}`, { kind: 'entrance', id: job.entrance });
+    if (before > 0 && e.plug === 0) w.colony.pushEvent(`内务蚁清开了${e.name}，蚂蚁可以出巢了`, { kind: 'entrance', id: job.entrance });
   }
 
   toSave(w: World): WeatherSave {

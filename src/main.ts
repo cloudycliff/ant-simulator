@@ -301,6 +301,18 @@ async function boot(): Promise<void> {
     applyView();
   };
   hud.onAction = action;
+  hud.onEvent = (e) => {
+    const sel: Selection | undefined = e.ref;
+    if (sel && selectionPos(sel)) {
+      select(sel);
+      flyToSelection();
+    } else if (e.at) {
+      select(null);
+      controller.flyTo(new THREE.Vector3(...e.at), 14);
+      if (sel) hud.toast('它已经不在了，跳到事件发生的位置');
+    }
+    hud.refresh(selection, fps);
+  };
 
   const useTool = (x: number, y: number) => {
     tools.hover(picker.groundPoint(x, y, groundPt));

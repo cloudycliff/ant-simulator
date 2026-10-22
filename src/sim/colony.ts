@@ -11,6 +11,20 @@ import { Item, type ItemSave, type ItemType } from './items';
 import { routineFor, shelter } from './routines';
 import { SpatialHash } from './spatial';
 
+/** 事件涉及的对象：界面上点击事件时选中它并飞过去 */
+export type EventRef = { kind: 'ant' | 'chamber' | 'entrance' | 'food' | 'plant' | 'predator' | 'placed'; id: number };
+
+export interface ColonyEvent {
+  t: string;
+  msg: string;
+  ref?: EventRef;
+  /** 事件发生的位置；对象已经不在时跳到这里 */
+  at?: [number, number, number];
+}
+
+/** 读档后狼蛛、蚁狮、食物源、玩家障碍物的编号会重新分配，存档里只留位置 */
+const UNSTABLE_REFS = new Set<EventRef['kind']>(['food', 'predator', 'placed']);
+
 export interface ColonyStats {
   eggsLaid: number;
   emerged: number;
@@ -55,7 +69,7 @@ export interface ColonySave {
   targets: RoleTargets;
   stats: ColonyStats;
   history: ColonySample[];
-  events: { t: string; msg: string }[];
+  events: ColonyEvent[];
   expansion: ExpansionSave;
 }
 
@@ -96,7 +110,7 @@ export class Colony {
   };
   history: ColonySample[] = [];
   /** 新出生/死亡等事件，供 UI 做提示 */
-  events: { t: string; msg: string }[] = [];
+  events: ColonyEvent[] = [];
   readonly spatial = new SpatialHash(1);
   private edgeGroups = new Map<number, Ant[]>();
   expansion: NestExpansion;
@@ -202,7 +216,7 @@ export class Colony {
       targets: { ...this.targets },
       stats: { ...this.stats },
       history: this.history.map((h) => ({ ...h, day: Math.round(h.day * 1e4) / 1e4, food: r2(h.food), liquid: r2(h.liquid) })),
-      events: this.events.slice(),
+      events: this.events.map((e) => (e.ref && UNSTABLE_REFS.has(e.ref.kind) ? { t: e.t, msg: e.msg, at: e.at } : e)),
       expansion: this.expansion.toSave(),
     };
   }
@@ -577,7 +591,7 @@ export class Colony {
     shell.claimedBy = -1;
     shell.wantsMove = false;
     this.stats.emerged++;
-    this.pushEvent(`新工蚁 #${ant.id} 羽化`);
+    this.pushEvent(`新工蚁 #${ant.id} 羽化`, { kind: 'ant', id: ant.id });
     return ant;
   }
 
@@ -610,9 +624,43 @@ export class Colony {
     else this.dropAtNode(it, ant.currentNode(this.w), ant.pos);
   }
 
-  pushEvent(msg: string): void {
-    this.events.unshift({ t: this.w.clock.stamp(), msg });
+  /** at 省略时取 ref 现在的位置 */
+  pushEvent(msg: string, ref?: EventRef, at?: { x: number; y: number; z: number }): void {
+    const p = at ?? (ref ? this.refPos(ref) : null);
+    this.events.unshift({ t: this.w.clock.stamp(), msg, ref, at: p ? [p.x, p.y, p.z] : undefined });
     if (this.events.length > 8) this.events.pop();
+  }
+
+  /** 事件对象现在的位置，不在了返回 null */
+  refPos(ref: EventRef): { x: number; y: number; z: number } | null {
+    const w = this.w;
+    const ground = (x: number, z: number, lift = 0) => ({ x, y: w.terrain.heightAt(x, z) + lift, z });
+    switch (ref.kind) {
+      case 'ant':
+        return this.antById(ref.id)?.pos ?? null;
+      case 'chamber':
+        return w.nest.chambers[ref.id]?.floor ?? null;
+      case 'entrance': {
+        const e = w.nest.entrances[ref.id];
+        return e ? ground(e.x, e.z) : null;
+      }
+      case 'food': {
+        const f = w.food.byId(ref.id);
+        return f ? { x: f.x, y: f.y, z: f.z } : null;
+      }
+      case 'plant': {
+        const p = w.veg.plants[ref.id];
+        return p ? { x: p.x, y: p.baseY + 4, z: p.z } : null;
+      }
+      case 'predator': {
+        const p = w.predators.byId(ref.id);
+        return p ? ground(p.x, p.z, 1) : null;
+      }
+      case 'placed': {
+        const p = w.veg.placedById(ref.id);
+        return p ? ground(p.x, p.z) : null;
+      }
+    }
   }
 
   update(dt: number): void {
@@ -823,8 +871,9 @@ export class Colony {
     this.pupaChamber = best.id;
     for (const arr of this.byChamber) for (const it of arr) if (it.type === 'pupa') it.wantsMove = it.chamber !== best.id;
     const t = this.w.chamberTemperature(best).toFixed(1);
-    if (flooded) this.pushEvent(`${cur.name}进水，保育蚁把蛹搬到${best.name}`);
-    else this.pushEvent(best.type === 'solar' ? `${best.name}升温到 ${t}°C，保育蚁开始把蛹搬上来` : `浅层降温，保育蚁把蛹搬回${best.name}（${t}°C）`);
+    const ref = { kind: 'chamber', id: best.id } as const;
+    if (flooded) this.pushEvent(`${cur.name}进水，保育蚁把蛹搬到${best.name}`, ref);
+    else this.pushEvent(best.type === 'solar' ? `${best.name}升温到 ${t}°C，保育蚁开始把蛹搬上来` : `浅层降温，保育蚁把蛹搬回${best.name}（${t}°C）`, ref);
   }
 
   // ---------------- 储食与幼体 ----------------
@@ -879,7 +928,7 @@ export class Colony {
       } else if (it.hunger > 3.5 && it.place === 'chamber') {
         it.type = 'waste';
         it.wantsMove = false;
-        this.pushEvent('一只幼虫因缺乏喂养死亡');
+        this.pushEvent('一只幼虫因缺乏喂养死亡', { kind: 'chamber', id: it.chamber }, it.pos);
       }
     } else if (it.type === 'pupa') {
       // 温暖处发育更快

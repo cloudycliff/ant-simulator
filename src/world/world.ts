@@ -100,7 +100,7 @@ export class World {
     if (!src) return { ok: false, msg: '无法在这里投放' };
     src.placed = true;
     const msg = `你在${this.describePlace(x, z)}投放了${info.name}`;
-    this.colony.pushEvent(msg);
+    this.colony.pushEvent(msg, { kind: 'food', id: src.id });
     return { ok: true, msg };
   }
 
@@ -113,9 +113,9 @@ export class World {
       if (err) return { ok: false, msg: err };
     }
     if (dry) return { ok: true, msg: '' };
-    this.veg.place(kind, x, z, yaw);
+    const p = this.veg.place(kind, x, z, yaw);
     const msg = `你在${this.describePlace(x, z)}放了一${kind === 'twig' ? '根' : '块'}${info.name}`;
-    this.colony.pushEvent(msg);
+    this.colony.pushEvent(msg, { kind: 'placed', id: p.id });
     return { ok: true, msg };
   }
 
@@ -141,20 +141,21 @@ export class World {
     if (dry) return { ok: true, msg: '' };
     this.water.pour(x, z, r);
     const msg = `你在${this.describePlace(x, z)}浇了${big ? '一大杯' : '一点'}水，冲掉了那里的信息素`;
-    this.colony.pushEvent(msg);
+    this.colony.pushEvent(msg, undefined, { x, y: this.terrain.heightAt(x, z), z });
     return { ok: true, msg };
   }
 
   placePredator(kind: PredatorKind, x: number, z: number, dry = false): ToolResult {
     const P = CONFIG.predators;
     const name = PREDATOR_INFO[kind].name;
+    let placed: Predator;
     if (kind === 'spider') {
       if (this.predators.spiders.length >= P.maxSpiders) return { ok: false, msg: '狼蛛已经够多了' };
       const err = this.checkSpot(x, z, 1, false);
       if (err) return { ok: false, msg: err };
       if (this.veg.obstacleAt(x, z, 1, true)) return { ok: false, msg: '这里被石块或植物占着' };
       if (dry) return { ok: true, msg: '' };
-      this.predators.addSpider(x, z, Math.atan2(-z, -x), true);
+      placed = this.predators.addSpider(x, z, Math.atan2(-z, -x), true);
     } else {
       if (this.predators.antlions.filter((p) => p.placed).length >= P.maxPlacedAntlions) return { ok: false, msg: '放入的蚁狮太多了，先移除一些' };
       const err = this.checkSpot(x, z, P.pitRadius, true);
@@ -162,10 +163,10 @@ export class World {
       if (this.predators.antlions.some((p) => Math.hypot(p.x - x, p.z - z) < P.pitRadius * 2.5)) return { ok: false, msg: '离另一个蚁狮陷阱太近' };
       if (this.water.at(x, z)) return { ok: false, msg: '蚁狮只在干燥的地面挖坑' };
       if (dry) return { ok: true, msg: '' };
-      this.predators.addAntlion(x, z, true);
+      placed = this.predators.addAntlion(x, z, true);
     }
     const msg = `你在${this.describePlace(x, z)}放入了一只${name}`;
-    this.colony.pushEvent(msg);
+    this.colony.pushEvent(msg, { kind: 'predator', id: placed.id });
     return { ok: true, msg };
   }
 
@@ -192,7 +193,7 @@ export class World {
   private dismissPredator(p: Predator): ToolResult {
     this.predators.remove(p);
     const msg = p instanceof Spider ? '赶走了狼蛛' : '填平了蚁狮的陷阱';
-    this.colony.pushEvent(msg);
+    this.colony.pushEvent(msg, undefined, { x: p.x, y: this.terrain.heightAt(p.x, p.z), z: p.z });
     return { ok: true, msg };
   }
 

@@ -3,7 +3,7 @@ import { CHAMBER_INFO } from '../nest/nest';
 import { FOOD_KIND_NAMES } from '../world/food';
 import { PREDATOR_INFO, Spider, type SpiderState } from '../world/predators';
 import { ITEM_NAMES } from '../sim/items';
-import type { ColonySample } from '../sim/colony';
+import type { ColonyEvent, ColonySample } from '../sim/colony';
 import { OBSTACLE_INFO } from '../world/vegetation';
 import type { World } from '../world/world';
 import type { Selection } from './picking';
@@ -180,6 +180,9 @@ export class Hud {
   private toastTimer = 0;
   private statsDrawn = -1;
   onAction: ((a: HudAction, arg?: number) => void) | null = null;
+  onEvent: ((e: ColonyEvent) => void) | null = null;
+  private shownEvents: ColonyEvent[] = [];
+  private eventsKey = '';
   state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false };
 
   constructor(private world: World) {
@@ -210,6 +213,7 @@ export class Hud {
       <div><kbd>W A S D</kbd> 移动　<kbd>Q</kbd>/<kbd>E</kbd> 下降/上升　<kbd>Shift</kbd> 加速</div>
       <div>左键拖拽 转视角　右键拖拽 平移　滚轮 推进/拉远</div>
       <div>左键单击 选择蚂蚁/房间/食物/植物　双击 飞到目标</div>
+      <div>点击左下角的事件 飞到事件发生的地方</div>
       <div><kbd>F</kbd> 跟随选中的蚂蚁　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续</div>
       <div><kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线</div>
       <div><kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水　<kbd>9</kbd> 天敌（重复按切换选项，<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）</div>`;
@@ -234,6 +238,14 @@ export class Hud {
     this.statsEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.toolEl.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.saveEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    // 列表随时会重写，等不到 click
+    this.eventsEl.addEventListener('pointerdown', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('[data-ev]');
+      if (!row || e.button !== 0) return;
+      e.stopPropagation();
+      const ev = this.shownEvents[Number(row.dataset.ev)];
+      if (ev) this.onEvent?.(ev);
+    });
   }
 
   /** 存档面板：按钮只在有无存档变化时重写，“多久之前”单独更新文字 */
@@ -305,7 +317,15 @@ export class Hud {
 
     this.renderColony();
     this.renderInfo(sel);
-    this.eventsEl.innerHTML = w.colony.events.map((e) => `<div><span>${e.t}</span>${esc(e.msg)}</div>`).join('');
+    const events = w.colony.events;
+    const key = events.map((e) => e.t + e.msg).join('|');
+    if (key !== this.eventsKey) {
+      this.eventsKey = key;
+      this.shownEvents = events.slice();
+      this.eventsEl.innerHTML = events
+        .map((e, i) => (e.at ? `<div class="go" data-ev="${i}" title="点击跳到事件发生的位置"><span>${e.t}</span>${esc(e.msg)}</div>` : `<div><span>${e.t}</span>${esc(e.msg)}</div>`))
+        .join('');
+    }
     this.layout();
   }
 

@@ -273,6 +273,14 @@ button.on kbd {
   color: #b8a88a;
   margin-right: 8px;
 }
+#events .go {
+  pointer-events: auto;
+  cursor: pointer;
+}
+#events .go:hover {
+  color: #ffd98a;
+  text-decoration: underline;
+}
 
 #help {
   bottom: 10px;

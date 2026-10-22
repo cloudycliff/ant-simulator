@@ -677,7 +677,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
     if (!found.discovered) {
       found.discovered = true;
       a.note(w, '发现一群蚜虫');
-      col.pushEvent(`${a.scout ? '侦察蚁' : '觅食蚁'} #${a.id} 发现了一群蚜虫`);
+      col.pushEvent(`${a.scout ? '侦察蚁' : '觅食蚁'} #${a.id} 发现了一群蚜虫`, { kind: 'plant', id: found.plant.index });
     }
     return yield* tendAphids(a, w, found, true);
   }
@@ -713,7 +713,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   a.layTrail = CONFIG.pheromone.depositFood * (0.5 + found.fraction) * (a.scout ? 1.3 : 1);
   if (isNew) {
     a.note(w, `发现新的食物源：${found.info.name}`);
-    col.pushEvent(`${a.scout ? '侦察蚁' : '觅食蚁'} #${a.id} 发现了${found.info.name}`);
+    col.pushEvent(`${a.scout ? '侦察蚁' : '觅食蚁'} #${a.id} 发现了${found.info.name}`, { kind: 'food', id: found.id });
   } else a.note(w, `从${found.info.name}获取食物`);
 
   a.activity = found.kind === 'sugar' ? '嗉囊装满甜液返巢，沿途释放路径信息素' : '携带食物返巢，沿途释放路径信息素';
