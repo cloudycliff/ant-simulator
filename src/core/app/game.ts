@@ -22,8 +22,10 @@ export interface GameModule<W extends Simulation<R>, R extends EntityRef, D exte
   /** 生成世界时显示的文字 */
   loading(): string;
   repoUrl?: string;
-  /** 视角（度）、近远裁剪面、开局的相机位置和注视点 */
-  camera: { fov: number; near: number; far: number; pose: [number, number, number, number, number, number] };
+  /** 能添加到主屏幕：注册离线缓存脚本（public/sw.js）、显示安装按钮。页面要有自己的清单 */
+  installable?: boolean;
+  /** 视角（度）、近远裁剪面、开局的相机位置和注视点；pose 可以按屏幕宽高比给（竖屏时退远些把场景装下） */
+  camera: { fov: number; near: number; far: number; pose: CameraPose | ((aspect: number) => CameraPose) };
   /** 创建世界之前读网址参数；返回 true 时不读存档、开新局 */
   configure?(params: URLSearchParams): boolean;
   create(seed: number): W;
@@ -41,6 +43,9 @@ export interface GameModule<W extends Simulation<R>, R extends EntityRef, D exte
   space(w: W): Space;
   mount(ctx: GameContext<W, R>): GameSession<R>;
 }
+
+/** 相机位置 x, y, z 和注视点 x, y, z */
+export type CameraPose = [number, number, number, number, number, number];
 
 /** 外壳交给游戏的东西 */
 export interface GameContext<W, R> {

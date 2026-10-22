@@ -412,7 +412,6 @@ export const en: Record<keyof typeof zh, Entry> = {
 
   // ---------------- Details panel ----------------
   'info.hint': 'Select an ant, a nest room (in x-ray mode), food or a plant to see details',
-  'info.flyNear': 'Fly closer',
   'info.state': 'State',
   'info.distance': 'From nest',
   'info.stone': 'Stone',
@@ -460,8 +459,6 @@ export const en: Record<keyof typeof zh, Entry> = {
   'info.herd': 'Herding',
   'info.herdVal': 'Tends a colony of about {n} aphids',
   'info.recent': 'Recent activity',
-  'info.follow': 'Follow',
-  'info.unfollow': 'Stop following',
   'info.eggs': 'Eggs',
   'info.larvae': 'Larvae',
   'info.larvaeVal': '{n} ({h} hungry)',

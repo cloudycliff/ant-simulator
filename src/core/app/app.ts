@@ -78,7 +78,7 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
   const space = game.space(world);
   const controller = new CameraController(camera, renderer.domElement, space);
   const pose = (p: number[]) => controller.setPose(new THREE.Vector3(p[0], p[1], p[2]), new THREE.Vector3(p[3], p[4], p[5]));
-  pose(C.pose);
+  pose(typeof C.pose === 'function' ? C.pose(camera.aspect) : C.pose);
   // 支持 ?cam=x,y,z,tx,ty,tz 指定初始视角，便于分享观察位置；否则恢复存档时的视角
   const camParam = params.get('cam')?.split(',').map(Number) ?? savedCamera;
   if (camParam?.length === 6 && camParam.every(Number.isFinite)) pose(camParam);
@@ -109,10 +109,12 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
     describeSave: S.describe,
   });
   shell.quality = quality;
-  const installer = new Installer();
-  shell.installer = installer;
-  installer.onChange = () => shell.refresh(selection, fps);
-  registerServiceWorker();
+  const installer = game.installable ? new Installer() : null;
+  if (installer) {
+    shell.installer = installer;
+    installer.onChange = () => shell.refresh(selection, fps);
+    registerServiceWorker();
+  }
   quality.onDrop = () => shell.toast(t('toast.qualityDrop', { q: t(`quality.${QUALITY_LEVELS[quality.level]}`) }));
   shell.saveMeta = S.slot.readMeta();
   if (tools) scene.add(tools.preview);
@@ -277,8 +279,8 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
           break;
         }
         case 'install':
-          if (installer.kind === 'ios') shell.toast(t('toast.installIos'));
-          else void installer.install().then((ok) => ok && shell.toast(t('toast.installed')));
+          if (installer?.kind === 'ios') shell.toast(t('toast.installIos'));
+          else void installer?.install().then((ok) => ok && shell.toast(t('toast.installed')));
           break;
         case 'langMenu':
           shell.toggleLangMenu();

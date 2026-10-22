@@ -7,7 +7,7 @@ import type { OutputAsset, OutputChunk } from 'rollup';
 const RELEASE_FILE = 'cyber-ant-farm.html';
 
 /** 把打包出的 JS 和 CSS 内联进 index.html：浏览器不允许从 file:// 加载外部模块脚本，内联后双击即可运行 */
-function singleFile(): Plugin {
+function singleFile(page: string, release: string | null): Plugin {
   let root = process.cwd();
   return {
     name: 'single-file',
@@ -17,11 +17,11 @@ function singleFile(): Plugin {
       root = config.root;
     },
     writeBundle(_, bundle) {
-      const html = bundle['index.html'] as OutputAsset | undefined;
-      if (html) writeFileSync(resolve(root, RELEASE_FILE), html.source);
+      const html = bundle[page] as OutputAsset | undefined;
+      if (html && release) writeFileSync(resolve(root, release), html.source);
     },
     generateBundle(_, bundle) {
-      const html = bundle['index.html'] as OutputAsset | undefined;
+      const html = bundle[page] as OutputAsset | undefined;
       if (!html) return;
       let src = String(html.source);
       for (const [name, file] of Object.entries(bundle)) {
@@ -47,16 +47,23 @@ function singleFile(): Plugin {
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-export default defineConfig({
-  base: './',
-  server: { port: 5173, open: false },
-  plugins: [singleFile()],
-  build: {
-    target: 'es2022',
-    chunkSizeWarningLimit: 1500,
-    modulePreload: false,
-    cssCodeSplit: false,
-    assetsInlineLimit: Number.MAX_SAFE_INTEGER,
-    rollupOptions: { output: { inlineDynamicImports: true } },
-  },
+// 每个游戏一个页面，各自构建成一个文件：vite build 是蚂蚁（index.html），vite build --mode aquarium 是鱼缸示例
+export default defineConfig(({ mode }) => {
+  const aquarium = mode === 'aquarium';
+  const page = aquarium ? 'aquarium.html' : 'index.html';
+  return {
+    base: './',
+    server: { port: 5173, open: false },
+    plugins: [singleFile(page, aquarium ? null : RELEASE_FILE)],
+    build: {
+      target: 'es2022',
+      chunkSizeWarningLimit: 1500,
+      modulePreload: false,
+      cssCodeSplit: false,
+      assetsInlineLimit: Number.MAX_SAFE_INTEGER,
+      // 第二个页面不能清空第一个页面的产物
+      emptyOutDir: !aquarium,
+      rollupOptions: { input: resolve(process.cwd(), page), output: { inlineDynamicImports: true } },
+    },
+  };
 });

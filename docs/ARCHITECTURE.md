@@ -3,11 +3,13 @@
 ## 目录结构
 
 ```
-index.html              页面骨架（各面板的容器）；Vite 的源码模板，不能直接双击运行
+index.html              蚂蚁游戏的页面骨架（各面板的容器）；Vite 的源码模板，不能直接双击运行
+aquarium.html           鱼缸示例的页面骨架（同样的容器，没有主屏幕清单）
 cyber-ant-farm.html     构建生成的单文件发布版，双击即可运行（不要手改）
-vite.config.ts          构建配置；singleFile 插件把产物内联成单个 HTML，并复制到根目录
+vite.config.ts          构建配置：默认构建 index.html，--mode aquarium 构建 aquarium.html；singleFile 插件把产物内联成单个 HTML，蚂蚁游戏的再复制到根目录
 src/
   main.ts               入口：把蚂蚁游戏模块交给 runApp
+  aquarium.ts           鱼缸示例的入口
   style.css             界面样式
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
   core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/layercheck.mjs）——
@@ -41,6 +43,7 @@ src/
     space/
       space.ts          Space：相机能去的范围、某处的表面高度、视线和表面的交点；相机、点选、工具都通过它
       heightfield.ts    HeightfieldSpace：一张高度场的地面（沿视线步进再二分求交点）
+      volume.ts         VolumeSpace：一个盒子（鱼缸、饲养箱）。从上方看点在顶面，隔着侧壁看点在底面，看向水中没碰到底面时取视线在盒中那段的中点
     ui/
       camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理；离地高度和活动范围取自 Space
       tools.ts          ToolController：当前工具与选项、放置预览圈（绿 / 红）、触屏先记下 pending 位置；工具做什么由游戏的 run 决定
@@ -90,10 +93,18 @@ src/
       info.ts           信息面板：10 类对象各一个（类型检查保证不漏）
       picking.ts        点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）
       tools.ts          干预工具的定义（名称、按键、选项）和执行（调用 World 的干预方法）
+  games/aquarium/       —— 鱼缸示例：检验框架边界的最小游戏（DECISIONS T-056）——
+    game.ts             aquariumGame：开局视角随屏幕比例退远、体积空间、喂食和敲玻璃两个工具、玻璃 / 气泡 / 饥饿着色三个视图开关、点选、面板内容
+    config.ts           鱼缸尺寸、灯的开关时刻、鱼食、三种鱼（霓虹灯鱼、神仙鱼、鼠鱼）的参数
+    tank.ts             Tank（继承 Simulation）：鱼群（对齐、聚拢、分离、找鱼食、水层、避开缸壁和石头）、鱼食（漂浮、下沉、沉底、变质）、开关灯和吃完等事件、每小时统计、存档
+    view.ts             TankView：房间、底沙、石头、水草（会摆动，可点选）、每种鱼一组实例化网格（尾巴摆动、饥饿着色）、鱼食、气泡、水和玻璃、灯光
+    i18n/               鱼缸的词典和改写的框架文字
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
   layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
-  coretest.ts           框架层单元测试：图上行走、地表转向与绕行、高度场求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
+  coretest.ts           框架层单元测试：图上行走、地表转向与绕行、高度场和体积空间求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
+  aquatest.ts           鱼缸示例的无界面检查：鱼不出缸、喂食后会吃、开关灯和吃完的事件、存档往返、同编号可重现、英文文字
+  aquashots.mjs         鱼缸示例的截图（桌面、手机）：白天、夜里、选中的鱼、饥饿着色、统计、英文、喂食、手机抽屉
   saveui.mjs            页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
   selecttest.mjs        页面里的选中、跟随、按 F 取消、飞到房间、点击事件飞过去
   simtest.ts            无界面模拟测试
@@ -102,7 +113,7 @@ scripts/
   defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
   weathertest.ts        天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
   perftest.ts           性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
-  i18ncheck.ts          界面文字检查：中英文占位符一致，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
+  i18ncheck.ts          界面文字检查：两个游戏和框架的中英文占位符一致，游戏的键不和框架重名，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
   extract-shots.mjs     从浏览器捕获结果中提取截图
   icons.mjs             从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
 docs/                   本文档目录
@@ -110,7 +121,7 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-055。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-056。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
 
 ### 游戏模块与界面外壳
 
@@ -126,6 +137,18 @@ docs/                   本文档目录
 信息面板是 `InfoPanels<R>`：实体的每一种 `kind` 一个函数，少登记一种时编译报错。外壳 `Shell`（`core/app/shell.ts`）保留原来的 DOM 结构和 id（`#colony` 是主面板，抽屉名仍叫 `colony`），浏览器测试不用改；`window.hud` 现在就是 `Shell`。框架代码只能用框架词典里的键，`i18ncheck` 会检查。
 
 配置也分两份：`src/core/config.ts` 的 `ENGINE` 是框架的（主循环、后台运行、画质、自动保存），`src/games/ant/config.ts` 的 `CONFIG` 是蚂蚁游戏的。
+
+### 第二个游戏：鱼缸示例
+
+`src/games/aquarium` 是用来检验框架边界的最小游戏（约 1200 行，含两份词典），页面是 `aquarium.html`，线上地址 `/aquarium.html`。它只用 `core`，没有改动蚂蚁游戏。和蚂蚁游戏不同的地方：
+
+- **空间**：`VolumeSpace`（盒子 + 底沙高度场）代替 `HeightfieldSpace`
+- **光照**：不用 `core/render/environment.ts`（那是户外的天空和太阳），鱼缸自己放一盏顶灯、一盏夜里的蓝光和半球光，`shadowLight` 交给外壳调阴影
+- **点选**：自己写，鱼和鱼食按屏幕距离，水草按射线
+- **不能添加到主屏幕**：`installable` 没设，外壳不注册离线缓存、不显示安装按钮
+- **开局视角**：`camera.pose` 是宽高比的函数，竖屏时退远把整个缸装下
+
+一个页面只加载一个游戏：两个游戏的词典有同名的键（`help.click` 等），同时登记会报错。`i18ncheck` 直接导入两份词典文件做静态检查，鱼缸的英文模拟文字在 `aquatest` 里查。
 
 ## 主循环
 

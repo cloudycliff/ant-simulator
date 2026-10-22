@@ -94,4 +94,7 @@ export const coreEn: Record<keyof typeof coreZh, Entry> = {
   'tool.tapHint': 'Tap the ground to choose a spot, then tap “Place here”',
   'tool.clickGround': 'Pick a spot on the ground',
   'info.deselect': 'Deselect',
+  'info.follow': 'Follow',
+  'info.unfollow': 'Stop following',
+  'info.flyNear': 'Fly closer',
 };

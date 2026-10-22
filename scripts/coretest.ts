@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { ENGINE } from '../src/core/config';
 import { L, registerDicts, tr } from '../src/core/i18n';
 import { HeightfieldSpace } from '../src/core/space/heightfield';
+import { VolumeSpace } from '../src/core/space/volume';
 import { SaveRegistry } from '../src/core/sim/saves';
 import { Simulation } from '../src/core/sim/simulation';
 import { GraphWalker, Routes, samplePolyline, type GraphEdge } from '../src/core/move/graph';
@@ -85,6 +86,22 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
   check('交点在可放置范围外时为 null', sp.raycast(new THREE.Ray(new THREE.Vector3(30, 40, 0), new THREE.Vector3(0, -1, 0)), out) === null);
   check('朝天的射线没有交点', sp.raycast(new THREE.Ray(new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, 1, 0)), out) === null);
   check('surfaceAt 就是高度场', sp.surfaceAt(6, 0) === 3);
+}
+
+// ---------------- 体积空间 ----------------
+{
+  const vol = new THREE.Box3(new THREE.Vector3(-10, 0, -5), new THREE.Vector3(10, 10, 5));
+  const cam = new THREE.Box3(new THREE.Vector3(-100, 0, -100), new THREE.Vector3(100, 100, 100));
+  const sp = new VolumeSpace(vol, (x) => 1 + x * 0.05, cam);
+  const out = new THREE.Vector3();
+  const cast = (o: number[], d: number[]) => sp.raycast(new THREE.Ray(new THREE.Vector3(...o), new THREE.Vector3(...d).normalize()), out);
+  check('从上方看落在顶面', !!cast([0, 20, 0], [0, -1, 0]) && near(out.y, 10) && near(out.x, 0));
+  check('顶面以外没有交点', cast([20, 20, 0], [0, -1, 0]) === null);
+  check('隔着侧壁看落在底面', !!cast([0, 8, -15], [0, -0.5, 1]) && near(out.y, 1) && near(out.z, -1), out.toArray());
+  check('在里面往下看落在底面', !!cast([4, 5, 0], [0, -1, 0]) && near(out.y, 1.2));
+  check('在里面往上看落在到顶面这段的中点', !!cast([0, 5, 0], [0, 1, 0]) && near(out.y, 7.5, 0.3), out.toArray());
+  check('隔着前后壁看水里落在盒中那段的中点', !!cast([3, 5, -15], [0, 0, 1]) && near(out.z, 0, 0.3) && near(out.y, 5) && near(out.x, 3), out.toArray());
+  check('盒子外的表面是盒底', sp.surfaceAt(0, 0) === 1 && sp.surfaceAt(50, 0) === 0);
 }
 
 // ---------------- 存档登记 ----------------

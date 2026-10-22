@@ -406,7 +406,6 @@ export const zh = {
 
   // ---------------- 详情面板 ----------------
   'info.hint': '点击蚂蚁、蚁穴房间（地下透视模式）、食物或植物查看详情',
-  'info.flyNear': '飞到附近',
   'info.state': '状态',
   'info.distance': '距蚁穴',
   'info.stone': '石块',
@@ -454,8 +453,6 @@ export const zh = {
   'info.herd': '放牧',
   'info.herdVal': '照料一群约 {n} 只的蚜虫',
   'info.recent': '近期行为',
-  'info.follow': '跟随观察',
-  'info.unfollow': '停止跟随',
   'info.eggs': '卵',
   'info.larvae': '幼虫',
   'info.larvaeVal': '{n}（饥饿 {h}）',

@@ -22,6 +22,7 @@ export const antGame: GameModule<World, GameRef, SaveData, AntSaveMeta> = {
   subtitle: () => t('app.subtitle'),
   loading: () => t('app.loading'),
   repoUrl: 'https://github.com/cloudycliff/ant-simulator',
+  installable: true,
   camera: { fov: 55, near: 0.05, far: 2500, pose: [16, 13, 22, 0, 0, 1] },
   // ?ants=工蚁数：新开局时的初始工蚁数（性能测试用），这时不读存档
   configure(params) {

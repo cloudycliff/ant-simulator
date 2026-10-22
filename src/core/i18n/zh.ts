@@ -93,4 +93,7 @@ export const coreZh = {
   'tool.tapHint': '点地面选好位置，再点“放在这里”',
   'tool.clickGround': '请点击地面',
   'info.deselect': '取消选择',
+  'info.follow': '跟随观察',
+  'info.unfollow': '停止跟随',
+  'info.flyNear': '飞到附近',
 };
