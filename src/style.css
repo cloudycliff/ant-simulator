@@ -104,6 +104,16 @@ button.on kbd {
 #topbar .perf.lag {
   color: #d9a35a;
 }
+#topbar .repo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #b8ae9c;
+  text-decoration: none;
+}
+#topbar .repo:hover {
+  color: #f2c98a;
+}
 
 #colony {
   top: 66px;

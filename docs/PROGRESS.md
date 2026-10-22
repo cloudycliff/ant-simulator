@@ -350,3 +350,16 @@
 **结果**
 - 浏览器中点击“觅食蚁 #849 发现了一群蚜虫”，相机飞到那株植物并打开蚜虫群面板
 - 存档往返后蚂蚁、房间的事件仍能选中对象，狼蛛、食物的事件只保留位置；`simtest`、`savetest`、`tooltest`、`defensetest`、`weathertest` 通过
+
+### 2026-10-22 · 部署到 Cloudflare
+
+**需求方反馈**：把游戏部署到 Cloudflare，网页顶部加 GitHub 项目链接
+
+**实现**
+- Cloudflare 后台的 Worker 项目 `cyber-ant` 连接 GitHub 仓库，推送到 `main` 自动构建发布；`wrangler.jsonc` 把 `dist` 作为静态网站发布（不写配置时 wrangler 会尝试自动配置，要求 Vite 6 以上而失败），`.node-version` 指定 Node 22
+- 顶栏最右侧加 GitHub 链接，新标签页打开
+- README 加在线试玩地址 https://cyber-ant.cloudycliff.workers.dev
+
+**结果**
+- 线上地址在 Chrome 中正常加载运行，控制台无报错
+- 网页版存档保存在玩家浏览器的 localStorage，与双击打开 HTML 的存档互不相通
