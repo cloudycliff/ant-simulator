@@ -65,21 +65,38 @@ button.on kbd {
   left: 10px;
   right: 10px;
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 14px 8px;
+  /* 语言菜单要盖住下方的面板 */
+  z-index: 6;
+}
+#topbar .tb-row {
+  display: flex;
   align-items: center;
   gap: 16px;
-  padding: 8px 14px;
+  min-height: 28px;
+}
+#topbar .tb-row.controls {
   flex-wrap: wrap;
+  gap: 6px 20px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 230, 190, 0.08);
 }
 #topbar .title {
+  flex: none;
   font-weight: 600;
   font-size: 15px;
   color: #f2c98a;
+  white-space: nowrap;
 }
 #topbar .title em {
   font-weight: 400;
   color: #c9b38f;
 }
 #topbar .clock {
+  flex: none;
+  white-space: nowrap;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -94,18 +111,83 @@ button.on kbd {
 }
 #topbar .group {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
-#topbar .perf {
-  margin-left: auto;
+#topbar .group .label {
+  margin-right: 4px;
+  font-size: 11px;
   color: #8f877a;
+}
+#topbar .help {
+  margin-left: auto;
+}
+/* 放不下时只截断性能数字，保证存档、语言和 GitHub 停在最右侧 */
+#topbar .perf {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+  color: #8f877a;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 #topbar .perf.lag {
   color: #d9a35a;
 }
+#topbar .meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#topbar .lang {
+  position: relative;
+}
+#topbar .lang > button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+#topbar .lang .caret {
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  border-bottom: 0;
+  opacity: 0.7;
+}
+#topbar .lang .menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(24, 21, 17, 0.97);
+  border: 1px solid rgba(255, 230, 190, 0.16);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+#topbar .lang .menu button {
+  text-align: left;
+  border-color: transparent;
+  background: transparent;
+}
+#topbar .lang .menu button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+#topbar .lang .menu button.on {
+  color: #f2c98a;
+  background: rgba(201, 130, 47, 0.25);
+}
 #topbar .repo {
   display: flex;
+  margin-left: 6px;
   align-items: center;
   gap: 5px;
   color: #b8ae9c;
@@ -113,6 +195,17 @@ button.on kbd {
 }
 #topbar .repo:hover {
   color: #f2c98a;
+}
+/* 窗口窄时去掉按钮上的快捷键角标（悬停提示和帮助面板里仍有），再窄去掉物种名 */
+@media (max-width: 1499px) {
+  #topbar kbd {
+    display: none;
+  }
+}
+@media (max-width: 1199px) {
+  #topbar .title em {
+    display: none;
+  }
 }
 
 #colony {

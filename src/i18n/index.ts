@@ -4,6 +4,8 @@ import { en } from './en';
 export type Lang = 'zh' | 'en';
 export const LANGS: Lang[] = ['zh', 'en'];
 export const LANG_TAGS: Record<Lang, string> = { zh: 'zh-CN', en: 'en' };
+/** 语言菜单里用各自语言的写法，看不懂当前界面的人也能找到自己的语言 */
+export const LANG_NAMES: Record<Lang, string> = { zh: '中文', en: 'English' };
 
 export type MsgKey = keyof typeof zh;
 export type Param = string | number | Text;

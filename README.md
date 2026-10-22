@@ -14,7 +14,7 @@
 - 会下雨：雨水冲淡信息素、积成水洼，觅食蚁回巢躲雨，内务蚁在雨前用土粒封住入口、雨后清开；入口没封好时浅层房间会进水，蛹被搬到深处
 - 玩家可以投放食物、放置石块和树枝路障、浇水或招来一场雨、放入或赶走天敌，观察蚁群如何应对
 - 自动存档，下次打开接着养
-- 中英文界面：第一次打开按浏览器语言自动选择，顶栏右侧的语言按钮随时切换（English UI is available: it is picked automatically for non-Chinese browsers, and the top-bar button switches language at any time）
+- 中英文界面：第一次打开按浏览器语言自动选择，顶栏右上角的语言菜单随时切换（English UI is available: it is picked automatically for non-Chinese browsers, and the language menu at the top right switches it at any time）
 
 当前进度：**第三阶段进行中**（干预工具、存档、天敌、警报与防御、天气已完成）。详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
@@ -57,7 +57,7 @@ Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：�
 | 投食 / 放障碍 / 浇水或下雨 / 天敌（再按一次切换选项） | `6` / `7` / `8` / `9` |
 | 旋转树枝路障 / 退出工具 | `R` / `Esc` |
 | 保存（每分钟和关闭页面时也会自动保存） | `Ctrl` + `S`；读取存档、重新开始在顶栏“存档”里 |
-| 切换中文 / 英文 | 顶栏右侧的语言按钮（中文界面显示“English”，会记住选择） |
+| 切换中文 / 英文 | 顶栏右上角带地球图标的语言菜单（会记住选择） |
 
 存档保存在浏览器本地（`localStorage`），换浏览器或清除网站数据后会丢失。直接双击 HTML 文件打开时，同一浏览器里所有本地 HTML 文件共用一份存储。
 

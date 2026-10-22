@@ -25,13 +25,14 @@ export function initLang(param: string | null): void {
   else applyLang((navigator.languages?.[0] ?? navigator.language ?? '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
 }
 
-/** 在中英文之间切换，并记住玩家的选择 */
-export function toggleLang(): void {
-  const l: Lang = getLang() === 'zh' ? 'en' : 'zh';
+/** 切换到指定语言，并记住玩家的选择；返回语言是否有变化 */
+export function chooseLang(l: Lang): boolean {
+  if (l === getLang()) return false;
   applyLang(l);
   try {
     localStorage.setItem(KEY, l);
   } catch {
     // 记不住也不影响本次切换
   }
+  return true;
 }

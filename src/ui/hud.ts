@@ -1,5 +1,5 @@
 import { CONFIG, ROLE_COLORS, ROLE_NAMES, type Role } from '../config';
-import { t, tr } from '../i18n';
+import { getLang, LANG_NAMES, LANGS, t, tr } from '../i18n';
 import { CHAMBER_INFO } from '../nest/nest';
 import { FOOD_KIND_NAMES } from '../world/food';
 import { PREDATOR_INFO, Spider } from '../world/predators';
@@ -33,9 +33,12 @@ export type HudAction =
   | 'saveNow'
   | 'loadSave'
   | 'newGame'
+  | 'langMenu'
   | 'lang';
 
 const SPEEDS = [1, 2, 5, 10, 20];
+const GLOBE =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.4"/><ellipse cx="8" cy="8" rx="2.7" ry="6.4"/><path d="M1.8 6h12.4M1.8 10h12.4"/></g></svg>';
 const REPO_URL = 'https://github.com/cloudycliff/ant-simulator';
 const HELP_LINES = ['help.move', 'help.mouse', 'help.click', 'help.events', 'help.follow', 'help.views', 'help.tools'] as const;
 
@@ -196,6 +199,9 @@ export class Hud {
       this.onAction?.(b.dataset.a as HudAction, b.dataset.v ? Number(b.dataset.v) : undefined);
     };
     this.top.addEventListener('click', handler);
+    window.addEventListener('pointerdown', (e) => {
+      if (!(e.target as HTMLElement).closest('#lang')) this.setLangMenu(false);
+    });
     this.infoEl.addEventListener('click', handler);
     this.helpEl.addEventListener('click', handler);
     this.toolEl.addEventListener('click', handler);
@@ -218,38 +224,62 @@ export class Hud {
   private renderStatic(): void {
     const sc = (key: string) => t('ui.shortcut', { key });
     const toggle = (a: string, label: string, key: string) => `<button data-a="${a}" id="btn-${a}" title="${sc(key)}">${label} <kbd>${key}</kbd></button>`;
+    const cur = getLang();
     this.top.innerHTML = `
-      <div class="title">${t('app.title')} <em>${t('app.subtitle')}</em></div>
-      <div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>
-      <div class="group" id="speeds">
-        <button data-a="pause" id="btn-pause" title="${sc(t('ui.space'))}">⏸</button>
-        ${SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('')}
-      </div>
-      <div class="group">
-        ${toggle('xray', t('ui.xray'), 'X')}
-        ${toggle('pheromone', t('ui.pheromone'), 'P')}
-        ${toggle('roleColors', t('ui.roleColors'), 'C')}
-        ${toggle('grass', t('ui.grass'), 'G')}
-        ${toggle('stats', t('ui.stats'), 'T')}
-        <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
-      </div>
-      <div class="group" id="tools">
-        ${TOOLS.map((d, i) => `<button data-a="tool" data-v="${i}" title="${t('ui.toolTitle', { key: d.key })}">${tr(d.name)} <kbd>${d.key}</kbd></button>`).join('')}
-      </div>
-      <div class="group">
-        <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
-        <button data-a="lang" id="btn-lang" title="${t('ui.langTitle')}">${t('ui.langSwitch')}</button>
-      </div>
-      <div class="perf" id="perf"></div>
-      <a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">
+      <div class="tb-row">
+        <div class="title">${t('app.title')} <em>${t('app.subtitle')}</em></div>
+        <div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>
+        <div class="perf" id="perf"></div>
+        <div class="meta">
+          <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
+          <div class="lang" id="lang">
+            <button data-a="langMenu" id="btn-lang" title="${t('ui.langTitle')}" aria-haspopup="menu" aria-expanded="false">${GLOBE}${LANG_NAMES[cur]}<i class="caret"></i></button>
+            <div class="menu hidden" id="lang-menu" role="menu">
+              ${LANGS.map((l, i) => `<button data-a="lang" data-v="${i}" role="menuitemradio" aria-checked="${l === cur}" class="${l === cur ? 'on' : ''}">${LANG_NAMES[l]}</button>`).join('')}
+            </div>
+          </div>
+          <a class="repo" href="${REPO_URL}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub
-      </a>`;
+            GitHub
+          </a>
+        </div>
+      </div>
+      <div class="tb-row controls">
+        <div class="group" id="speeds">
+          <span class="label">${t('ui.groupSpeed')}</span>
+          <button data-a="pause" id="btn-pause" title="${sc(t('ui.space'))}">⏸</button>
+          ${SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('')}
+        </div>
+        <div class="group">
+          <span class="label">${t('ui.groupView')}</span>
+          ${toggle('xray', t('ui.xray'), 'X')}
+          ${toggle('pheromone', t('ui.pheromone'), 'P')}
+          ${toggle('roleColors', t('ui.roleColors'), 'C')}
+          ${toggle('grass', t('ui.grass'), 'G')}
+          ${toggle('stats', t('ui.stats'), 'T')}
+        </div>
+        <div class="group" id="tools">
+          <span class="label">${t('ui.groupTools')}</span>
+          ${TOOLS.map((d, i) => `<button data-a="tool" data-v="${i}" title="${t('ui.toolTitle', { key: d.key })}">${tr(d.name)} <kbd>${d.key}</kbd></button>`).join('')}
+        </div>
+        <button data-a="help" class="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
+      </div>`;
     this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + HELP_LINES.map((k) => `<div>${t(k)}</div>`).join('');
     this.legendEl.innerHTML = `
       <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>${t('legend.trail')}</div>
       <div><i style="background:#3c96ff"></i>${t('legend.home')}</div>
       <div><i style="background:transparent;border:2px solid #ff4a3a;height:4px"></i>${t('legend.alarm')}</div>`;
+  }
+
+  setLangMenu(open: boolean): void {
+    const menu = document.getElementById('lang-menu');
+    if (!menu || menu.classList.contains('hidden') === !open) return;
+    menu.classList.toggle('hidden', !open);
+    document.getElementById('btn-lang')!.setAttribute('aria-expanded', String(open));
+  }
+
+  toggleLangMenu(): void {
+    this.setLangMenu(!!document.getElementById('lang-menu')?.classList.contains('hidden'));
   }
 
   /** 切换语言后重写所有界面文字，包括已经产生的事件和日志 */
@@ -372,6 +402,7 @@ export class Hud {
     const top = Math.round(this.top.getBoundingClientRect().bottom + 8);
     const H = window.innerHeight;
     this.colonyEl.style.top = this.infoEl.style.top = this.saveEl.style.top = `${top}px`;
+    this.toastEl.style.top = `${top + 4}px`;
     this.colonyEl.style.maxHeight = `${Math.max(160, H - top - this.eventsEl.offsetHeight - 20)}px`;
     const legend = this.state.pheromone ? this.legendEl.offsetHeight + 10 : 0;
     this.infoEl.style.maxHeight = `${Math.max(160, H - top - legend - 10)}px`;

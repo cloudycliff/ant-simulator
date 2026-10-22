@@ -51,7 +51,7 @@ src/
     tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法
     saveSlot.ts         存档在 localStorage 中的读写（完整存档 + 一份小摘要）
     lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
-    hud.ts              顶栏、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板
+    hud.ts              顶栏（上行状态与存档、语言、GitHub，下行速度、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板
 scripts/
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
@@ -159,7 +159,7 @@ requestAnimationFrame
 
 ### 界面文字（`src/i18n`）
 
-模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。切换语言时 `main.ts` 调用 `toggleLang` 和 `Hud.relocalize`。设计取舍见 DECISIONS T-040。
+模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`。增加语种：在 `Lang`、`LANGS`、`LANG_TAGS`、`LANG_NAMES` 里补上，新建一份词典并加进 `DICTS`，再改 `initLang` 的浏览器语言匹配。设计取舍见 DECISIONS T-040。
 
 ### 蚁穴生成（`Nest.generate`）
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm

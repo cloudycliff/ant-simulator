@@ -1,7 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import { CONFIG } from './config';
-import { t, tr } from './i18n';
+import { LANGS, t, tr } from './i18n';
 import { World } from './world/world';
 import { NestView } from './nest/nestView';
 import { RainView } from './render/rain';
@@ -13,7 +13,7 @@ import { Picker, type Selection } from './ui/picking';
 import { Hud, type HudAction } from './ui/hud';
 import { ToolController } from './ui/tools';
 import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
-import { initLang, toggleLang } from './ui/lang';
+import { chooseLang, initLang } from './ui/lang';
 import { loadWorld, saveProblem, saveWorld } from './world/save';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
@@ -301,8 +301,12 @@ async function boot(): Promise<void> {
         clearSave();
         reloadClean();
         break;
+      case 'langMenu':
+        hud.toggleLangMenu();
+        break;
       case 'lang':
-        toggleLang();
+        hud.setLangMenu(false);
+        if (!chooseLang(LANGS[v ?? 0] ?? 'zh')) break;
         hud.relocalize();
         hud.refresh(selection, fps);
         hud.toast(t('toast.lang'));
