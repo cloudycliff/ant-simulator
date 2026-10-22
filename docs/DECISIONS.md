@@ -456,3 +456,13 @@
 - **保留不变的**：DOM 的 id、`data-a` 动作名、底栏按钮顺序、抽屉名（主面板仍叫 `colony`、元素仍是 `#colony`），`window.hud` 等测试用的全局变量。浏览器测试一行没改
 - **没做的**：词典仍在导入游戏配置时登记（不放进 `GameModule`），因为无界面脚本不经过 `runApp` 也要用；`Picker` 仍是蚂蚁游戏的（蚂蚁按屏幕距离、其他按射线），等鱼缸示例看清共性再说
 - **结果**：`SIM_SEED=7` 跑 5 天模拟，输出与重构前逐行相同；界面截图与之前一致
+
+### T-055 运动方式拆成模块（框架重构第 7 步）
+- **问题**：蚂蚁的运动层（`ant.ts`，约 1000 行）里，一部分只和“在什么上面走”有关：隧道网络里一跳一跳走、站在圆管底部、地表限速转向、贴合坡面、绕开圆形障碍；另一部分是蚂蚁游戏的规则：蚁狮陷阱、水洼、信息素、觅食范围。白蚁、蜂巢这类游戏需要前一部分，不需要后一部分
+- **`core/move/graph.ts`**：`Routes`（Floyd 最短路，从 `Nest.computeRouting` 原样搬出）、`GraphWalker`（节点、边、出发端、沿边距离，`advance` 一次最多换三条边，返回到达 / 在边上 / 没有路 / 未走完）、`samplePolyline`、`tunnelFloor`。图只需要实现 `NavGraph` 的 `nextHop` 和 `edgeBetween`
+- **`core/move/surface.ts`**：`turnToward`、`alignToGround`、`Skirt`（原 `Ant.skirt` 和 `trackBlocked` 以及五个字段）
+- **蚂蚁游戏**：`Ant.walk` 是 `GraphWalker<NestEdge>`；`Ant.node`、`edgeFrom`、`edgeS` 去掉，`Ant.edge` 改成只读的取值器（`Colony.separate` 按边分组时用）。`Nest.nextHop` / `routeLength` / `sampleEdge` 转给 `Routes` 和 `samplePolyline`
+- **唯一的变化**：一步跨过节点时，步态相位原来按每段的剩余步长重复累加，现在按实际走过的距离算。只影响腿的摆动相位，模拟不读它
+- **没拆的**：房间地板上的漫步（`moveOnFloor`）、爬茎（`stepClimb`）、路径整合返巢、信息素跟随，都和蚂蚁的习性绑在一起，等真有第二个游戏用到再提
+- **测试**：`coretest` 新增 12 项：最短路、不连通、跨节点、到达时走过的距离、反向的沿边坐标、折线取点、限速转向跨过 ±π、绕行方向和被困反向
+- **结果**：`SIM_SEED=7` 跑 5 天模拟，输出与重构前逐行相同；`perftest` 耗时不变

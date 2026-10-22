@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
+import { Routes, samplePolyline } from '../../../core/move/graph';
 import { Rng } from '../../../core/util/random';
 import type { Terrain } from '../world/terrain';
 
@@ -125,8 +126,7 @@ export class Nest {
   /** 结构版本号：新增房间、隧道时递增 */
   rev = 0;
   surfaceY = 0;
-  private next: Int16Array = new Int16Array(0);
-  private distM: Float32Array = new Float32Array(0);
+  private routes = new Routes();
 
   constructor(private terrain: Terrain) {}
 
@@ -427,41 +427,15 @@ export class Nest {
   }
 
   private computeRouting(): void {
-    const n = this.nodes.length;
-    const dist = new Float32Array(n * n).fill(Infinity);
-    const next = new Int16Array(n * n).fill(-1);
-    for (let i = 0; i < n; i++) {
-      dist[i * n + i] = 0;
-      next[i * n + i] = i;
-    }
-    for (const e of this.edges) {
-      dist[e.a * n + e.b] = e.length;
-      dist[e.b * n + e.a] = e.length;
-      next[e.a * n + e.b] = e.b;
-      next[e.b * n + e.a] = e.a;
-    }
-    for (let k = 0; k < n; k++)
-      for (let i = 0; i < n; i++) {
-        const dik = dist[i * n + k];
-        if (dik === Infinity) continue;
-        for (let j = 0; j < n; j++) {
-          const v = dik + dist[k * n + j];
-          if (v < dist[i * n + j]) {
-            dist[i * n + j] = v;
-            next[i * n + j] = next[i * n + k];
-          }
-        }
-      }
-    this.next = next;
-    this.distM = dist;
+    this.routes.build(this.nodes.length, this.edges);
   }
 
   nextHop(from: number, to: number): number {
-    return this.next[from * this.nodes.length + to];
+    return this.routes.nextHop(from, to);
   }
 
   routeLength(from: number, to: number): number {
-    return this.distM[from * this.nodes.length + to];
+    return this.routes.length(from, to);
   }
 
   edgeBetween(a: number, b: number): NestEdge {
@@ -474,20 +448,7 @@ export class Nest {
 
   /** 沿边从 from 端走过 s 距离处的中心线位置与切线 */
   sampleEdge(e: NestEdge, from: number, s: number, outPos: THREE.Vector3, outTan: THREE.Vector3): void {
-    const d = from === e.a ? s : e.length - s;
-    const cum = e.cum;
-    let lo = 0;
-    let hi = cum.length - 1;
-    while (hi - lo > 1) {
-      const mid = (lo + hi) >> 1;
-      if (cum[mid] <= d) lo = mid;
-      else hi = mid;
-    }
-    const seg = cum[hi] - cum[lo] || 1;
-    const k = Math.min(1, Math.max(0, (d - cum[lo]) / seg));
-    outPos.copy(e.points[lo]).lerp(e.points[hi], k);
-    outTan.copy(e.points[hi]).sub(e.points[lo]).normalize();
-    if (from !== e.a) outTan.negate();
+    samplePolyline(e, from, s, outPos, outTan);
   }
 
   /** 指定类型的已完工房间 */

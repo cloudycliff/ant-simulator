@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { CONFIG, type Role } from '../config';
 import { asText, L, type Text } from '../../../core/i18n';
-import { clamp, wrapAngle } from '../../../core/util/math';
+import { GraphWalker, tunnelFloor } from '../../../core/move/graph';
+import { Skirt, alignToGround, turnToward } from '../../../core/move/surface';
+import { clamp } from '../../../core/util/math';
 import { rng } from '../../../core/util/random';
 import type { NestEdge } from '../nest/nest';
 import type { World } from '../world/world';
@@ -32,9 +34,7 @@ export interface LogEntry {
 const _c = new THREE.Vector3();
 const _t = new THREE.Vector3();
 const _f = new THREE.Vector3();
-const _l = new THREE.Vector3();
 const _n = new THREE.Vector3();
-const DOWN = new THREE.Vector3(0, -1, 0);
 
 let nextAntId = 1;
 
@@ -96,11 +96,9 @@ export class Ant {
   private memoryChecked = false;
 
   // 巢内运动
-  node = -1;
   room = -1;
-  edge: NestEdge | null = null;
-  private edgeFrom = -1;
-  private edgeS = 0;
+  /** 在隧道网络里的位置（房间里时 node 是 -1） */
+  readonly walk = new GraphWalker<NestEdge>();
   private lane = rng.range(-0.15, 0.75);
   /** 隧道里为避开同伴而偏离 lane 的横向距离（隧道半径的倍数） */
   private side = 0;
@@ -163,11 +161,7 @@ export class Ant {
   private tempK = 1;
   private tempAt = 0;
   private tempDomain: 'surface' | 'nest' = 'nest';
-  private avoidSign = 1;
-  private avoidT = 0;
-  private blockedT = 0;
-  private blockX = 0;
-  private blockZ = 0;
+  private skirtNav = new Skirt();
   nextContactAt = rng.range(0, 10);
   contacts = 0;
   shares = 0;
@@ -254,8 +248,8 @@ export class Ant {
       a.pos.set(s.p[0], s.p[1], s.p[2]);
     } else {
       a.domain = 'nest';
-      a.node = nest.nodes[s.node] ? s.node : nest.entrances[0].node;
-      a.pos.copy(nest.nodes[a.node].pos);
+      a.walk.at(nest.nodes[s.node] ? s.node : nest.entrances[0].node);
+      a.pos.copy(nest.nodes[a.walk.node].pos);
     }
     a.localTarget.copy(a.pos);
     a.navTarget.copy(a.pos);
@@ -296,8 +290,7 @@ export class Ant {
     const c = w.nest.chambers[chamber];
     this.domain = 'nest';
     this.room = chamber;
-    this.node = -1;
-    this.edge = null;
+    this.walk.at(-1);
     w.nest.randomFloorPoint(c, rng.next.bind(rng), this.pos);
     this.localTarget.copy(this.pos);
     this.navTarget.copy(this.pos);
@@ -307,22 +300,26 @@ export class Ant {
   placeOnSurface(x: number, z: number, w: World): void {
     this.domain = 'surface';
     this.room = -1;
-    this.edge = null;
+    this.walk.edge = null;
     this.pos.set(x, w.terrain.heightAt(x, z), z);
+  }
+
+  /** 正在走的隧道 */
+  get edge(): NestEdge | null {
+    return this.walk.edge;
   }
 
   /** 当前所在的蚁穴节点（用于寻路起点） */
   currentNode(w: World): number {
     if (this.room >= 0) return w.nest.chambers[this.room].door;
-    if (this.edge) return this.edgeS > this.edge.length / 2 ? (this.edge.a === this.edgeFrom ? this.edge.b : this.edge.a) : this.edgeFrom;
-    return this.node;
+    return this.walk.nearNode();
   }
 
   locationLabel(w: World): Text {
     if (this.domain === 'surface') return L('loc.surface');
     if (this.room >= 0) return w.nest.chambers[this.room].label;
     if (this.edge) return L(this.edge.isShaft ? 'loc.shaft' : 'loc.tunnel');
-    const n = w.nest.nodes[this.node];
+    const n = w.nest.nodes[this.walk.node];
     if (n?.kind === 'entrance') return L('loc.entrance');
     return L('loc.tunnel');
   }
@@ -473,51 +470,28 @@ export class Ant {
 
   private stepGoto(dt: number, w: World, target: number): boolean {
     const nest = w.nest;
-    let step = this.nestSpeed(w) * dt;
+    const step = this.nestSpeed(w) * dt;
     if (this.room >= 0) {
       const c = nest.chambers[this.room];
       if (!this.moveOnFloor(nest.nodes[c.door].pos, step, c.floor.y)) return false;
       this.room = -1;
-      this.node = c.door;
+      this.walk.node = c.door;
     }
-    for (let i = 0; i < 3; i++) {
-      if (this.edge) {
-        this.edgeS += step;
-        this.moving = true;
-        this.gait += step * 9;
-        if (this.edgeS < this.edge.length) {
-          this.placeOnEdge(w);
-          return false;
-        }
-        step = this.edgeS - this.edge.length;
-        this.node = this.edge.a === this.edgeFrom ? this.edge.b : this.edge.a;
-        this.edge = null;
-      }
-      if (this.node === target) {
-        this.navTarget.copy(nest.nodes[this.node].pos);
-        return true;
-      }
-      const nh = nest.nextHop(this.node, target);
-      if (nh < 0) return true;
-      this.edge = nest.edgeBetween(this.node, nh);
-      this.edgeFrom = this.node;
-      this.edgeS = 0;
+    const r = this.walk.advance(nest, step, target);
+    if (this.walk.moved) {
+      this.moving = true;
+      this.gait += this.walk.walked * 9;
     }
-    return false;
+    if (r === 'walking') this.placeOnEdge(w);
+    else if (r === 'arrived') this.navTarget.copy(nest.nodes[target].pos);
+    return r === 'arrived' || r === 'noRoute';
   }
 
   /** 沿隧道地面行走：位置贴近隧道底部，并按靠右通行偏移 */
   private placeOnEdge(w: World): void {
-    const e = this.edge!;
-    w.nest.sampleEdge(e, this.edgeFrom, this.edgeS, _c, _t);
-    _f.copy(DOWN).addScaledVector(_t, -DOWN.dot(_t));
-    if (_f.lengthSq() < 0.04) _f.set(1, 0, 0).cross(_t);
-    _f.normalize();
-    _l.crossVectors(_t, _f).normalize();
-    this.navTarget
-      .copy(_c)
-      .addScaledVector(_f, e.radius * 0.66)
-      .addScaledVector(_l, this.laneOffset() * e.radius);
+    const e = this.walk.edge!;
+    w.nest.sampleEdge(e, this.walk.from, this.walk.s, _c, _t);
+    tunnelFloor(_c, _t, e.radius, this.laneOffset(), this.navTarget, _f);
     this.fwd.lerp(_t, 0.35).normalize();
     this.up.lerp(_f.negate(), 0.25).normalize();
   }
@@ -545,19 +519,17 @@ export class Ant {
 
   /** 在隧道里时写入 sepS（从 edge.a 量起的沿边坐标）和 sepLat（不随行进方向翻转的横向坐标） */
   measureTunnel(): void {
-    const e = this.edge!;
-    const dir = this.edgeFrom === e.a ? 1 : -1;
-    this.sepS = dir > 0 ? this.edgeS : e.length - this.edgeS;
-    this.sepLat = dir * this.laneOffset() * e.radius;
+    const e = this.walk.edge!;
+    this.sepS = this.walk.along();
+    this.sepLat = this.walk.dir() * this.laneOffset() * e.radius;
     this.sepPush = 0;
   }
 
   /** 按 sepPush（横向坐标上的推力）往旁边让；没有推力时慢慢回到自己的 lane */
   shiftSide(dt: number): void {
-    const e = this.edge!;
+    const e = this.walk.edge!;
     if (this.sepPush !== 0) {
-      const dir = this.edgeFrom === e.a ? 1 : -1;
-      this.side = clamp(this.side + (dir * this.sepPush * 0.5) / e.radius, -0.8, 0.8);
+      this.side = clamp(this.side + (this.walk.dir() * this.sepPush * 0.5) / e.radius, -0.8, 0.8);
     } else this.side -= this.side * Math.min(1, dt * 0.5);
   }
 
@@ -622,7 +594,7 @@ export class Ant {
     if (this.room !== cmd.chamber) {
       if (!this.stepGoto(dt, w, c.door)) return false;
       this.room = cmd.chamber;
-      this.node = -1;
+      this.walk.node = -1;
       first = true;
     }
     if (first) {
@@ -689,41 +661,12 @@ export class Ant {
 
   // ---------------- 地表运动 ----------------
 
-  /**
-   * 沿障碍物边缘绕行。绕行方向（顺/逆时针）会保持一段时间，否则在凹角处每步重新选择会来回摆动、原地打转；
-   * 长时间没有离开原地时换一个方向。
-   */
   private skirt(cx: number, cz: number): void {
-    const radial = Math.atan2(this.pos.z - cz, this.pos.x - cx);
-    if (this.avoidT <= 0) {
-      this.avoidSign = Math.abs(wrapAngle(radial + Math.PI / 2 - this.heading)) < Math.PI / 2 ? 1 : -1;
-      this.blockX = this.pos.x;
-      this.blockZ = this.pos.z;
-      this.blockedT = 0;
-    }
-    this.avoidT = 1.5;
-    if (this.blockedT > 3) {
-      this.avoidSign = -this.avoidSign;
-      this.blockedT = 0;
-    }
-    this.heading = radial + (this.avoidSign * Math.PI) / 2;
-  }
-
-  /** 绕行期间按真实时间累计“没走出 3 cm”的时长 */
-  private trackBlocked(dt: number): void {
-    if (this.avoidT <= 0) return;
-    if (Math.hypot(this.pos.x - this.blockX, this.pos.z - this.blockZ) > 3) {
-      this.blockX = this.pos.x;
-      this.blockZ = this.pos.z;
-      this.blockedT = 0;
-    } else this.blockedT += dt;
+    this.heading = this.skirtNav.steer(this.pos.x, this.pos.z, this.heading, cx, cz);
   }
 
   private surfaceMove(dt: number, w: World, desired: number | null, turnRate = 5, speedMul = 1): void {
-    if (desired !== null) {
-      const d = wrapAngle(desired - this.heading);
-      this.heading += clamp(d, -turnRate * dt, turnRate * dt);
-    }
+    if (desired !== null) this.heading = turnToward(this.heading, desired, turnRate, dt);
     const wetHere = w.water.at(this.pos.x, this.pos.z);
     const pit = w.predators.pitAt(this.pos.x, this.pos.z);
     let pdx = 0;
@@ -753,8 +696,7 @@ export class Ant {
     let nx = this.pos.x + Math.cos(this.heading) * step - pdx * pull;
     let nz = this.pos.z + Math.sin(this.heading) * step - pdz * pull;
     // 水洼是软障碍：先沿边缘绕行，被挡住几秒（目标在水里、或水洼盖住入口）就蹚水过去
-    this.trackBlocked(dt);
-    this.avoidT -= dt;
+    this.skirtNav.track(this.pos.x, this.pos.z, dt);
     const pd = wetHere ? null : w.water.at(nx, nz);
     if (pd && this.wadeT < 4) {
       this.wadeT += dt;
@@ -799,10 +741,7 @@ export class Ant {
     this.pos.set(nx, w.terrain.heightAt(nx, nz) + w.predators.liftAt(nx, nz), nz);
     w.pheromone.depositHome(nx, nz, CONFIG.pheromone.depositHome * dt);
     w.terrain.normalAt(nx, nz, _n);
-    this.up.lerp(_n, 0.2).normalize();
-    _f.set(Math.cos(this.heading), 0, Math.sin(this.heading));
-    _f.addScaledVector(this.up, -_f.dot(this.up)).normalize();
-    this.fwd.copy(_f);
+    alignToGround(this.up, this.fwd, this.heading, _n);
     this.moving = true;
     this.gait += step * 9;
   }
@@ -820,9 +759,8 @@ export class Ant {
     const d = Math.hypot(dx, dz);
     if (d < 0.9) {
       this.domain = 'nest';
-      this.node = ent.node;
+      this.walk.at(ent.node);
       this.room = -1;
-      this.edge = null;
       this.navTarget.copy(this.pos);
       return true;
     }

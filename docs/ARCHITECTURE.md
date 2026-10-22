@@ -35,6 +35,9 @@ src/
       environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗；光照强度由游戏传入
       rain.ts           雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
       quality.ts        画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
+    move/               运动方式，不依赖 DOM
+      graph.ts          图上行走：Routes（所有节点对的最短路）、GraphWalker（在哪条边上、走了多远、一跳一跳走向目标）、折线边取点、圆管隧道底部的落脚点
+      surface.ts        地表运动：限速转向、贴合地面、Skirt（沿圆形障碍绕行，被困时反向）
     space/
       space.ts          Space：相机能去的范围、某处的表面高度、视线和表面的交点；相机、点选、工具都通过它
       heightfield.ts    HeightfieldSpace：一张高度场的地面（沿视线步进再二分求交点）
@@ -90,7 +93,7 @@ src/
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
   layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
-  coretest.ts           框架层单元测试：高度场求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
+  coretest.ts           框架层单元测试：图上行走、地表转向与绕行、高度场求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
   saveui.mjs            页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
   selecttest.mjs        页面里的选中、跟随、按 F 取消、飞到房间、点击事件飞过去
   simtest.ts            无界面模拟测试
@@ -107,7 +110,7 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-054。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-055。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
 
 ### 游戏模块与界面外壳
 
@@ -184,6 +187,8 @@ requestAnimationFrame
 | `climb {x, z, angle, r, top, stay}` | 走到植物茎秆旁，沿茎秆爬到 `top` 高度停留 `stay` 秒，再爬下来 |
 | `wait {time}` | 原地停留 |
 
+和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`，再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则仍写在 `Ant.surfaceMove` 里。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
+
 **行为层**（`routines.ts`）。每个职别一个入口协程，按优先级（带随机性）选择一项任务：
 
 | 职别 | 任务优先级 |
@@ -245,7 +250,7 @@ requestAnimationFrame
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm
 - 房间按 `specs` 表挂在分岔点上（类型、所在分岔点、方向角、距离、尺寸）。房间是底部被压平的椭球，门开在地板边缘、朝向分岔点。最后一行是第一个分岔点旁、大石块下的向阳育幼室
 - 侧入口接到第二个分岔点；另有 3 条盲端隧道作为挖掘工作面（`DigFace`，开局已挖出一段，之后会继续延长）
-- 用 Floyd 算法算出所有节点对之间的下一跳（`nextHop`）；节点增减或移动后重算
+- 用 Floyd 算法算出所有节点对之间的下一跳（`nextHop`，`core/move/graph.ts` 的 `Routes`）；节点增减或移动后重算
 - 生成后，`World` 把距离半径大于 3 的石块 3 cm 以内的房间标记为 `underStone`
 
 ## 渲染层要点

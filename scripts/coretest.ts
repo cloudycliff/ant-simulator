@@ -1,5 +1,5 @@
 /**
- * 框架层的单元测试，不依赖任何游戏：空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
+ * 框架层的单元测试，不依赖任何游戏：图上行走、地表转向与绕行、空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
  * npx tsx scripts/coretest.ts
  */
 import * as THREE from 'three';
@@ -8,6 +8,8 @@ import { L, registerDicts, tr } from '../src/core/i18n';
 import { HeightfieldSpace } from '../src/core/space/heightfield';
 import { SaveRegistry } from '../src/core/sim/saves';
 import { Simulation } from '../src/core/sim/simulation';
+import { GraphWalker, Routes, samplePolyline, type GraphEdge } from '../src/core/move/graph';
+import { Skirt, turnToward } from '../src/core/move/surface';
 
 let failed = 0;
 const check = (name: string, ok: boolean, info?: unknown) => {
@@ -15,6 +17,58 @@ const check = (name: string, ok: boolean, info?: unknown) => {
   console.log(`${ok ? '通过' : '失败'}  ${name}`, info ?? '');
 };
 const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
+
+// ---------------- 图上行走 ----------------
+{
+  // 0 -2- 1 -3- 2 -1- 3，另有一条更长的 0-2 捷径；4 不连通
+  const edges: GraphEdge[] = [
+    { a: 0, b: 1, length: 2 },
+    { a: 1, b: 2, length: 3 },
+    { a: 2, b: 3, length: 1 },
+    { a: 0, b: 2, length: 6 },
+  ];
+  const routes = new Routes();
+  routes.build(5, edges);
+  check('最短路经过 1 而不是捷径', routes.nextHop(0, 2) === 1 && routes.length(0, 2) === 5);
+  check('不连通时下一跳是 -1', routes.nextHop(0, 4) === -1);
+  const g = {
+    nextHop: (a: number, b: number) => routes.nextHop(a, b),
+    edgeBetween: (a: number, b: number) => edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a))!,
+  };
+  const w = new GraphWalker<GraphEdge>();
+  w.at(0);
+  const r1 = w.advance(g, 1.5, 3);
+  check('走到第一条边的中段', r1 === 'walking' && w.edge === edges[0] && w.s === 1.5 && w.nearNode() === 1 && w.along() === 1.5 && w.dir() === 1);
+  const r2 = w.advance(g, 4, 3);
+  check('一步跨过两个节点', r2 === 'walking' && w.edge === edges[2] && near(w.s, 0.5, 1e-9) && near(w.walked, 4, 1e-9), { r2, s: w.s, walked: w.walked });
+  const r3 = w.advance(g, 2, 3);
+  check('到达后走过的距离只算到终点', r3 === 'arrived' && w.node === 3 && w.edge === null && near(w.walked, 0.5, 1e-9));
+  check('反向走时沿边坐标从 a 端量', w.advance(g, 0.25, 2) === 'walking' && w.dir() === -1 && w.along() === 0.75);
+  w.at(4);
+  check('没有路', w.advance(g, 1, 0) === 'noRoute' && !w.moved);
+  const pe = { a: 0, b: 1, length: 4, points: [new THREE.Vector3(0, 0, 0), new THREE.Vector3(2, 0, 0), new THREE.Vector3(2, 0, 2)], cum: [0, 2, 4] };
+  const p = new THREE.Vector3();
+  const t = new THREE.Vector3();
+  samplePolyline(pe, 1, 1, p, t);
+  check('从 b 端取折线上的点和切线', near(p.x, 2) && near(p.z, 1) && near(t.z, -1), [p.toArray(), t.toArray()]);
+}
+
+// ---------------- 地表转向与绕行 ----------------
+{
+  check('转向受角速度限制', near(turnToward(0, 1, 2, 0.1), 0.2));
+  check('转向走近的一侧（跨过 ±π）', turnToward(3, -3, 10, 1) > 3);
+  const s = new Skirt();
+  const h1 = s.steer(-1, 0, 0, 0, 0);
+  check('绕行方向和障碍相切', near(Math.abs(Math.cos(h1)), 0, 1e-9));
+  let h = h1;
+  let flipped = -1;
+  for (let i = 0; i < 40; i++) {
+    s.track(-1, 0, 0.1);
+    h = s.steer(-1, 0, h, 0, 0);
+    if (flipped < 0 && near(Math.cos(h - h1), -1, 1e-9)) flipped = i;
+  }
+  check('一直走不出去时约 3 秒后换方向', flipped >= 29 && flipped <= 31, flipped);
+}
 
 // ---------------- 高度场空间 ----------------
 {
