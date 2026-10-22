@@ -13,7 +13,7 @@
 - 画质默认“自动”（电脑高、手机中，持续卡顿时降档），可手动选高 / 中 / 低 / 省电；帧率最高 60，暂停不操作时降到 15（DECISIONS T-047）
 - 网页版可以添加到手机主屏幕，像应用一样打开，断网也能玩（DECISIONS T-048）
 - 手机和平板可以用地图式手势操作（DECISIONS T-044）；手机上（横竖屏）换成一行顶栏 + 底栏 + 抽屉的布局，平板沿用桌面布局并加大按钮（DECISIONS T-045）
-- 代码量：`src/` 下约 12100 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 1150 行。`src/core` 是可复用的框架层，`src/games/ant` 是蚂蚁游戏（DECISIONS T-049，框架重构进行中）
+- 代码量：`src/` 下约 12650 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 1340 行。`src/core` 是可复用的框架层（约 3000 行），`src/games/ant` 是蚂蚁游戏（DECISIONS T-049，框架重构进行中）
 - 构建：`npm run build` 通过，游戏是单个 `dist/index.html`（约 790 KB），双击即可运行；`dist/` 里另有网页版用的清单、离线缓存脚本和图标
 - 性能：1000 只蚂蚁每个模拟步约 0.35 ms，3000 只约 1.7 ms（含蚂蚁避让）；无头 Chrome 中 3000 只保持 60 FPS（DECISIONS T-031、T-032）
 
