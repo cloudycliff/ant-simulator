@@ -7,17 +7,7 @@ import { dirname, join, relative, resolve } from 'node:path';
  * 还没拆开的依赖，格式“导入方 -> 被导入方”（相对 src）。拆掉一项就从这里删掉一项；
  * 列着却已经不存在的项也会报错，免得名单只增不减
  */
-const PENDING = [
-  'core/i18n/index.ts -> games/ant/i18n/en.ts',
-  'core/i18n/index.ts -> games/ant/i18n/zh.ts',
-  'core/platform/background.ts -> games/ant/config.ts',
-  'core/platform/saveSlot.ts -> games/ant/world/save.ts',
-  'core/render/environment.ts -> games/ant/config.ts',
-  'core/render/quality.ts -> games/ant/config.ts',
-  'core/render/rain.ts -> games/ant/world/weather.ts',
-  'core/sim/clock.ts -> games/ant/config.ts',
-  'core/sim/spatial.ts -> games/ant/sim/ant.ts',
-];
+const PENDING = [];
 
 const SRC = resolve('src');
 const files = [];

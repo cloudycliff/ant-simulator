@@ -11,14 +11,22 @@
 
 ## 参数一览
 
+### `src/core/config.ts` 中的框架参数
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| `loop.fixedStep` | 1/30 | 模拟固定步长（秒） |
+| `loop.maxStepsPerFrame / frameBudgetMs` | 24 / 10 | 每帧最多补算的模拟步数；每帧模拟最多占用的毫秒数，超出就降低实际倍速 |
+| `background.tickMs / cpuShare / maxBudgetMs` | 100 / 0.4 / 1000 | 页面隐藏时的后台节拍；后台模拟最多占用的时间比例，单次节拍最多算多少毫秒 |
+| `render.*` | 见 DECISIONS T-047 | 画质档位、自动降档、帧率上限 |
+| `save.autosaveSec` | 60 | 自动保存间隔（现实秒数）；切到后台和关闭页面时也会保存 |
+
 ### `src/games/ant/config.ts` 中的参数
 
 | 参数 | 值 | 说明 |
 |---|---|---|
 | `time.dayLength` | 600 | 一个游戏日对应的模拟秒数 |
 | `time.startHour` | 7.5 | 开局时刻 |
-| `time.maxStepsPerFrame / frameBudgetMs` | 24 / 10 | 每帧最多补算的模拟步数；每帧模拟最多占用的毫秒数，超出就降低实际倍速 |
-| `time.backgroundTickMs / backgroundCpuShare / backgroundMaxBudgetMs` | 100 / 0.4 / 1000 | 页面隐藏时的后台节拍；后台模拟最多占用的时间比例，单次节拍最多算多少毫秒 |
 | `light.sun / hemiDay / hemiNight / moon` | 3.2 / 1.15 / 0.95 / 2.4 | 阳光、白天和夜间的天空环境光、月光强度（原为 2.8 / 1.0 / 0.55 / 1.3） |
 | `light.surfaceLamp / xrayLamp` | 5 / 12 | 跟随相机的观察灯：夜间地表（冷色，白天为 0）；透视地下（暖色） |
 | `colony.initialWorkers` | 1000 | 初始工蚁数 |
@@ -65,7 +73,6 @@
 | `intervention.waterRadius` | 4 / 8 | 一点水、一大杯水形成的水洼半径（cm）；倒在已有水洼上会合并成更大的一片 |
 | `intervention.waterDays` | 0.25 | 水洼在约 20°C 时完全蒸发所需的游戏日；越冷越慢（见下表） |
 | `intervention.washTrail / washHome` | 0.05 / 0.3 | 浇水时浇到的地方信息素保留的比例（路径 / 足迹） |
-| `save.autosaveSec` | 60 | 自动保存间隔（现实秒数）；切到后台和关闭页面时也会保存 |
 | `predators.spiderPerDay / maxNaturalSpiders` | 1.2 / 2 | 平均每天游荡进来的狼蛛数、同时存在的自然狼蛛上限 |
 | `predators.spiderStayDays / spiderMeals` | 0.4–0.8 / 3 | 狼蛛停留的游戏日；吃够 3 只提前离开（玩家放入的不限时，吃够也会离开） |
 | `predators.spiderSense / spiderTrailTurn` | 7 / 1.5 | 发现蚂蚁的距离（cm）；游荡时朝足迹浓的一侧转向的角速度（rad/s） |

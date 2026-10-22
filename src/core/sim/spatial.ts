@@ -1,13 +1,17 @@
-import type { Ant } from '../../games/ant/sim/ant';
+/** 能放进空间哈希的对象 */
+export interface Located {
+  readonly pos: { readonly x: number; readonly y: number; readonly z: number };
+  readonly alive: boolean;
+}
 
-/** 三维均匀网格空间哈希（数组链表），每个模拟步重建，用于查找邻近的蚂蚁。 */
-export class SpatialHash {
+/** 三维均匀网格空间哈希（数组链表），每个模拟步重建，用于查找邻近的个体。 */
+export class SpatialHash<T extends Located> {
   private readonly mask: number;
   private head: Int32Array;
   private next = new Int32Array(0);
   private seen = new Int32Array(0);
   private stamp = 0;
-  private list: Ant[] = [];
+  private list: T[] = [];
 
   constructor(private readonly cell = 2, bits = 13) {
     this.mask = (1 << bits) - 1;
@@ -18,7 +22,7 @@ export class SpatialHash {
     return (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) & this.mask;
   }
 
-  rebuild(ants: Ant[]): void {
+  rebuild(ants: readonly T[]): void {
     const n = ants.length;
     this.list.length = 0;
     for (let i = 0; i < n; i++) this.list.push(ants[i]);
@@ -36,8 +40,8 @@ export class SpatialHash {
     }
   }
 
-  /** 把半径 r 内的蚂蚁写入 out（不含 self），按插入顺序 */
-  near(x: number, y: number, z: number, r: number, out: Ant[], self?: Ant): Ant[] {
+  /** 把半径 r 内的个体写入 out（不含 self），按插入顺序 */
+  near(x: number, y: number, z: number, r: number, out: T[], self?: T): T[] {
     out.length = 0;
     const c = this.cell;
     const st = ++this.stamp;

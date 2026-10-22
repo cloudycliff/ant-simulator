@@ -1,4 +1,4 @@
-import { getLang, LANG_TAGS, LANGS, setLang, t, type Lang } from '../i18n';
+import { getLang, LANG_TAGS, LANGS, setLang, type Lang } from '../i18n';
 
 const KEY = 'cyber-ant-lang';
 
@@ -9,7 +9,6 @@ function isLang(x: string | null): x is Lang {
 function applyLang(l: Lang): void {
   setLang(l);
   document.documentElement.lang = LANG_TAGS[l];
-  document.title = t('app.title');
 }
 
 /** 语言的优先级：网址里的 ?lang=，玩家上次手动选的，浏览器的首选语言（中文以外都用英文） */

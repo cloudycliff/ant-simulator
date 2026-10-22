@@ -2,11 +2,9 @@ import type { Entry } from '../../../core/i18n';
 
 /** 中文是键的来源：新增文字先加在这里，en.ts 缺键时编译报错 */
 export const zh = {
-  raw: '{s}',
   'app.title': '赛博养蚂蚁',
   'app.subtitle': '黑毛蚁 Lasius niger',
   'app.loading': '正在生成蚁穴与觅食环境…',
-  'time.stamp': '第{day}天 {time}',
 
   // ---------------- 职别 ----------------
   'role.queen': '蚁后',
@@ -338,8 +336,6 @@ export const zh = {
   'save.incompatible': '存档来自不兼容的旧版本',
   'save.seedMismatch': '世界种子与存档不同',
   'save.noQueen': '存档里没有蚁后',
-  'save.quota': '浏览器存储空间不足',
-  'save.denied': '浏览器禁止了本地存储',
   'save.title': '存档',
   'save.buttonTitle': '保存、读取存档或重新开始',
   'save.where': '保存在本浏览器里；每分钟和关闭页面时自动保存',

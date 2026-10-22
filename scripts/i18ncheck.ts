@@ -2,21 +2,32 @@
  * 界面文字检查：中英文词典的占位符是否一致；跑一段英文模拟，看蚂蚁的行为、日志和事件里有没有漏翻的中文或没替换的 {参数}。
  * npx tsx scripts/i18ncheck.ts [模拟秒数，默认 600]
  */
+import { coreEn } from '../src/core/i18n/en';
+import { coreZh } from '../src/core/i18n/zh';
 import { en } from '../src/games/ant/i18n/en';
 import { zh } from '../src/games/ant/i18n/zh';
-import { setLang, t, tr, type MsgKey } from '../src/core/i18n';
+import { setLang, t, tr, type Entry } from '../src/core/i18n';
 import { World } from '../src/games/ant/world/world';
 
 const holes = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 const problems: string[] = [];
-for (const k of Object.keys(zh) as MsgKey[]) {
-  const a = zh[k];
-  const b = en[k];
-  if (typeof b === 'string' && holes(a) !== holes(b)) problems.push(`${k}: 中文 {${holes(a)}} 英文 {${holes(b)}}`);
-  if (typeof b === 'function') {
-    const p = Object.fromEntries(holes(a).split(',').filter(Boolean).map((n) => [n, n === 'n' ? 2 : 'x']));
-    const s = b(p);
-    if (/undefined|\{\w+\}/.test(s)) problems.push(`${k}: 英文函数输出 "${s}"`);
+let keys = 0;
+const pairs: [Record<string, Entry>, Record<string, Entry>][] = [
+  [coreZh, coreEn],
+  [zh, en],
+];
+for (const [zd, ed] of pairs) {
+  for (const k of Object.keys(zd)) {
+    keys++;
+    const a = zd[k];
+    const b = ed[k];
+    if (typeof a !== 'string') continue;
+    if (typeof b === 'string' && holes(a) !== holes(b)) problems.push(`${k}: 中文 {${holes(a)}} 英文 {${holes(b)}}`);
+    if (typeof b === 'function') {
+      const p = Object.fromEntries(holes(a).split(',').filter(Boolean).map((n) => [n, n === 'n' ? 2 : 'x']));
+      const s = b(p);
+      if (/undefined|\{\w+\}/.test(s)) problems.push(`${k}: 英文函数输出 "${s}"`);
+    }
   }
 }
 
@@ -40,6 +51,6 @@ for (const s of texts) {
   seen.add(s);
   if (/[\u4e00-\u9fff]|undefined|\{\w+\}|\[object/.test(s)) problems.push(`模拟文字: "${s}"`);
 }
-console.log(`词典 ${Object.keys(zh).length} 条，模拟中出现 ${seen.size} 种英文文字`);
+console.log(`词典 ${keys} 条，模拟中出现 ${seen.size} 种英文文字`);
 console.log(problems.length ? problems.join('\n') : '检查通过');
 if (problems.length) process.exitCode = 1;

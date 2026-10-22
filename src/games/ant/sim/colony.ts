@@ -113,7 +113,7 @@ export class Colony {
   history: ColonySample[] = [];
   /** 新出生/死亡等事件，供 UI 做提示 */
   events: ColonyEvent[] = [];
-  readonly spatial = new SpatialHash(1);
+  readonly spatial = new SpatialHash<Ant>(1);
   private edgeGroups = new Map<number, Ant[]>();
   expansion: NestExpansion;
 

@@ -1,5 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
+import { ENGINE } from './core/config';
 import { CONFIG } from './games/ant/config';
 import { LANGS, t, tr } from './core/i18n';
 import { World } from './games/ant/world/world';
@@ -12,20 +13,19 @@ import { CameraController } from './core/ui/camera';
 import { Picker, type Selection } from './games/ant/ui/picking';
 import { Hud, type HudAction } from './games/ant/ui/hud';
 import { ToolController } from './games/ant/ui/tools';
-import { clearSave, readMeta, readSave, writeSave } from './core/platform/saveSlot';
 import { chooseLang, initLang } from './core/platform/lang';
 import { BACKGROUND_LIMITED, BackgroundRunner } from './core/platform/background';
 import { MOBILE } from './core/platform/device';
 import { Installer, registerServiceWorker } from './core/platform/install';
 import { QUALITY_LEVELS, QUALITY_MODES, Quality } from './core/render/quality';
-import { stampAt } from './core/sim/clock';
-import { loadWorld, saveProblem, saveWorld } from './games/ant/world/save';
+import { loadWorld, saveMeta, saveProblem, saveSlot, saveWorld } from './games/ant/world/save';
 
 const SPEED_KEYS: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 10, Digit5: 20 };
 
 async function boot(): Promise<void> {
   // ?lang=zh 或 ?lang=en 指定界面语言（截图用），不会被记住
   initLang(new URLSearchParams(location.search).get('lang'));
+  document.title = t('app.title');
   const loading = document.getElementById('loading');
   if (loading) loading.textContent = t('app.loading');
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
@@ -55,7 +55,7 @@ async function boot(): Promise<void> {
   let world: World;
   let loadMsg = '';
   let savedCamera: number[] | undefined;
-  const saved = params.get('new') === '1' || antsParam > 0 ? null : readSave();
+  const saved = params.get('new') === '1' || antsParam > 0 ? null : saveSlot.read();
   const problem = saved ? saveProblem(saved) : null;
   if (saved && !problem) {
     try {
@@ -74,7 +74,8 @@ async function boot(): Promise<void> {
   }
   // ?skip=秒数：开局先在后台快进模拟，便于直接观察扩建等慢过程
   const skip = Math.min(20000, Number(params.get('skip')) || 0);
-  for (let t = 0; t < skip; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
+  const chunk = ENGINE.loop.fixedStep * ENGINE.loop.maxStepsPerFrame;
+  for (let t = 0; t < skip; t += chunk) world.advance(chunk);
   scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group, world.predators.group, world.alarm.group);
 
   const nestView = new NestView(world.nest, world.terrain);
@@ -90,7 +91,7 @@ async function boot(): Promise<void> {
   scene.add(antView.workers, antView.workersLow, antView.queens, antView.marker);
   const itemView = new ItemView(world);
   scene.add(itemView.group);
-  const env = new Environment(scene);
+  const env = new Environment(scene, CONFIG.light);
   const quality = new Quality(renderer, env.sun, MOBILE);
 
   const controller = new CameraController(camera, renderer.domElement, (x, z) => world.terrain.heightAt(x, z));
@@ -113,7 +114,7 @@ async function boot(): Promise<void> {
   installer.onChange = () => hud.refresh(selection, fps);
   registerServiceWorker();
   quality.onDrop = () => hud.toast(t('toast.qualityDrop', { q: t(`quality.${QUALITY_LEVELS[quality.level]}`) }));
-  hud.saveMeta = readMeta();
+  hud.saveMeta = saveSlot.readMeta();
   const tools = new ToolController(world);
   hud.tools = tools;
   scene.add(tools.preview);
@@ -217,8 +218,8 @@ async function boot(): Promise<void> {
     camera.getWorldDirection(camDir);
     const target = camera.position.clone().addScaledVector(camDir, 10);
     d.camera = [...camera.position.toArray(), ...target.toArray()].map((n) => Math.round(n * 100) / 100);
-    const err = writeSave(d);
-    hud.saveMeta = readMeta();
+    const err = saveSlot.write(d, saveMeta(d));
+    hud.saveMeta = saveSlot.readMeta();
     if (manual) hud.toast(err ? t('toast.saveFailed', { err }) : t('toast.saved', { stamp: tr(world.clock.stamp()) }));
     else if (err && !autosaveWarned) {
       autosaveWarned = true;
@@ -305,17 +306,17 @@ async function boot(): Promise<void> {
       }
       case 'savePanel':
         hud.toggleSave();
-        hud.saveMeta = readMeta();
+        hud.saveMeta = saveSlot.readMeta();
         break;
       case 'saveNow':
         save(true);
         break;
       case 'loadSave':
-        if (readMeta()) reloadClean();
+        if (saveSlot.readMeta()) reloadClean();
         break;
       case 'newGame':
         if (!confirm(t('toast.confirmNew'))) break;
-        clearSave();
+        saveSlot.clear();
         reloadClean();
         break;
       case 'background':
@@ -344,6 +345,7 @@ async function boot(): Promise<void> {
       case 'lang':
         hud.setLangMenu(false);
         if (!chooseLang(LANGS[v ?? 0] ?? 'zh')) break;
+        document.title = t('app.title');
         hud.relocalize();
         hud.refresh(selection, fps);
         hud.toast(t('toast.lang'));
@@ -461,7 +463,7 @@ async function boot(): Promise<void> {
   if (params.has('rain')) {
     world.callRain();
     const secs = Math.min(2000, Number(params.get('rain')) || 0);
-    for (let t = 0; t < secs; t += CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame) world.advance(CONFIG.time.fixedStep * CONFIG.time.maxStepsPerFrame);
+    for (let t = 0; t < secs; t += chunk) world.advance(chunk);
   }
   const selParam = params.get('select')?.split(':');
   if (selParam?.length === 2) {
@@ -498,7 +500,7 @@ async function boot(): Promise<void> {
   let time = 0;
   const autosave = (dt: number) => {
     autosaveTimer += dt;
-    if (autosaveTimer > CONFIG.save.autosaveSec) {
+    if (autosaveTimer > ENGINE.save.autosaveSec) {
       autosaveTimer = 0;
       save(false);
     }
@@ -508,8 +510,8 @@ async function boot(): Promise<void> {
   let awayFrom = -1;
   const background = new BackgroundRunner((dt) => {
     if (awayFrom < 0) awayFrom = world.clock.seconds;
-    const T = CONFIG.time;
-    world.advance(dt, Math.min(T.backgroundMaxBudgetMs, dt * 1000 * T.backgroundCpuShare), Infinity);
+    const B = ENGINE.background;
+    world.advance(dt, Math.min(B.maxBudgetMs, dt * 1000 * B.cpuShare), Infinity);
     autosave(dt);
   });
   hud.state.background = background.enabled;
@@ -520,7 +522,7 @@ async function boot(): Promise<void> {
       return;
     }
     const awayMin = (Date.now() - hiddenAt) / 60000;
-    if (awayFrom >= 0 && world.clock.seconds - awayFrom > 30) hud.toast(t('toast.bgResumed', { from: stampAt(awayFrom), to: world.clock.stamp() }));
+    if (awayFrom >= 0 && world.clock.seconds - awayFrom > 30) hud.toast(t('toast.bgResumed', { from: world.clock.stampAt(awayFrom), to: world.clock.stamp() }));
     else if (BACKGROUND_LIMITED && !world.clock.paused && awayMin >= 1) hud.toast(t('toast.bgFrozen', { n: Math.round(awayMin) }));
     awayFrom = -1;
     hud.refresh(selection, fps);
@@ -537,7 +539,7 @@ async function boot(): Promise<void> {
     fps += (1 / Math.max(dt, 1e-4) - fps) * 0.05;
 
     const t0 = performance.now();
-    world.advance(dt, CONFIG.time.frameBudgetMs);
+    world.advance(dt, ENGINE.loop.frameBudgetMs);
     const t1 = performance.now();
     controller.update(dt);
 
@@ -573,7 +575,7 @@ async function boot(): Promise<void> {
     antView.update(time, camera.position);
     itemView.update();
     env.update(world.clock, camera, focus, xrayOn(), world.weather.cloud);
-    rain.sync(dt, camera, focus, world.weather, (x, z) => world.terrain.heightAt(x, z));
+    rain.sync(dt, camera, focus, world.weather.rain, (x, z) => world.terrain.heightAt(x, z));
     terrainMat.color.setScalar(1 - 0.28 * world.weather.wetness);
     terrainMat.roughness = 0.97 - 0.3 * world.weather.wetness;
 

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { CONFIG } from '../../games/ant/config';
 import type { SimClock } from '../sim/clock';
 import { TAU, clamp } from '../util/math';
 
@@ -16,6 +15,18 @@ const MOONLIGHT = new THREE.Color(0xa8bcf0);
 const LAMP_WARM = new THREE.Color(0xffe2b8);
 const LAMP_COOL = new THREE.Color(0xdde6ff);
 
+/** 光照强度（three.js 单位） */
+export interface LightLevels {
+  sun: number;
+  hemiDay: number;
+  hemiNight: number;
+  moon: number;
+  /** 夜间地表跟随相机的观察灯 */
+  surfaceLamp: number;
+  /** 透视地下时跟随相机的观察灯 */
+  xrayLamp: number;
+}
+
 export class Environment {
   sun: THREE.DirectionalLight;
   moon: THREE.DirectionalLight;
@@ -30,7 +41,10 @@ export class Environment {
   private tmpBottom = new THREE.Color();
   private tmpCloud = new THREE.Color();
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly levels: LightLevels,
+  ) {
     this.sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -126,7 +140,7 @@ export class Environment {
     this.stars.position.copy(camera.position);
     (this.stars.material as THREE.PointsMaterial).opacity = clamp(1 - day * 1.6, 0, 1) * (1 - cloud);
 
-    const L = CONFIG.light;
+    const L = this.levels;
     this.sun.intensity = L.sun * clamp(elev * 3, 0, 1) * (1 - 0.75 * cloud);
     this.sun.color.setHSL(0.09, 0.6 * dusk + 0.2, 0.75 + 0.2 * (1 - dusk));
     this.sun.position.copy(focus).addScaledVector(dir, 200);

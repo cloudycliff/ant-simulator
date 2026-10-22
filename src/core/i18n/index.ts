@@ -1,5 +1,5 @@
-import { zh } from '../../games/ant/i18n/zh';
-import { en } from '../../games/ant/i18n/en';
+import { coreEn } from './en';
+import { coreZh } from './zh';
 
 export type Lang = 'zh' | 'en';
 export const LANGS: Lang[] = ['zh', 'en'];
@@ -7,7 +7,12 @@ export const LANG_TAGS: Record<Lang, string> = { zh: 'zh-CN', en: 'en' };
 /** 语言菜单里用各自语言的写法，看不懂当前界面的人也能找到自己的语言 */
 export const LANG_NAMES: Record<Lang, string> = { zh: '中文', en: 'English' };
 
-export type MsgKey = keyof typeof zh;
+/**
+ * 所有词条的键。这里只有框架的键，游戏用声明合并补上自己的，并在启动前 registerDicts：
+ * declare module '…/core/i18n' { interface Messages extends Record<keyof typeof zh, true> {} }
+ */
+export interface Messages extends Record<keyof typeof coreZh, true> {}
+export type MsgKey = keyof Messages;
 export type Param = string | number | Text;
 
 /**
@@ -22,8 +27,18 @@ export interface Text {
 /** 字符串里的 {name} 换成参数；需要按数量变形（英文单复数）时写成函数 */
 export type Entry = string | ((p: Record<string, string | number>) => string);
 
-const DICTS: Record<Lang, Record<MsgKey, Entry>> = { zh, en };
+const DICTS: Record<Lang, Record<string, Entry>> = { zh: { ...coreZh }, en: { ...coreEn } };
 let current: Lang = 'zh';
+
+/** 登记游戏的词典，要在第一次翻译之前；和已有的键重名时报错 */
+export function registerDicts(d: Record<Lang, Record<string, Entry>>): void {
+  for (const l of LANGS) {
+    for (const k in d[l]) {
+      if (k in DICTS[l]) throw new Error(`i18n: duplicate key ${k}`);
+      DICTS[l][k] = d[l][k];
+    }
+  }
+}
 
 export function getLang(): Lang {
   return current;
@@ -38,7 +53,7 @@ export function L(k: MsgKey, p?: Record<string, Param>): Text {
 }
 
 export function t(k: MsgKey, p?: Readonly<Record<string, Param>>): string {
-  const e = DICTS[current][k] ?? zh[k] ?? k;
+  const e = DICTS[current][k] ?? DICTS.zh[k] ?? k;
   let r: Record<string, string | number> | undefined;
   if (p) {
     r = {};

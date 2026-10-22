@@ -1,6 +1,4 @@
 import * as THREE from 'three';
-import type { WeatherSystem } from '../../games/ant/world/weather';
-
 const COUNT = 2400;
 const SPLASHES = 480;
 const RING_SEGS = 8;
@@ -42,8 +40,8 @@ export class RainView {
     this.splashes.visible = false;
   }
 
-  sync(dt: number, camera: THREE.Camera, focus: THREE.Vector3, weather: WeatherSystem, heightAt: (x: number, z: number) => number): void {
-    const rain = weather.rain;
+  /** rain：雨势 0..1 */
+  sync(dt: number, camera: THREE.Camera, focus: THREE.Vector3, rain: number, heightAt: (x: number, z: number) => number): void {
     this.lines.visible = rain > 0.02;
     this.syncSplashes(dt, camera, focus, rain, heightAt);
     if (!this.lines.visible) return;

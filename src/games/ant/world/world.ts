@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { ENGINE } from '../../../core/config';
 import { L, type MsgKey, type Text } from '../../../core/i18n';
 import { TAU } from '../../../core/util/math';
 import { Rng } from '../../../core/util/random';
@@ -28,7 +29,7 @@ const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
 export class World {
   readonly rng: Rng;
-  readonly clock = new SimClock();
+  readonly clock = new SimClock(CONFIG.time.dayLength, CONFIG.time.startHour);
   readonly terrain: Terrain;
   readonly nest: Nest;
   readonly veg: Vegetation;
@@ -218,10 +219,10 @@ export class World {
    * 推进真实时间 realDt 秒（内部乘以倍速）。一帧内模拟耗时超过 budgetMs 就停下，
    * 丢掉没来得及算的时间，这时实际倍速低于设定倍速（见 effectiveSpeed）。
    */
-  advance(realDt: number, budgetMs = Infinity, maxSteps = CONFIG.time.maxStepsPerFrame): void {
+  advance(realDt: number, budgetMs = Infinity, maxSteps = ENGINE.loop.maxStepsPerFrame): void {
     this.lastSteps = 0;
     if (this.clock.paused) return;
-    const step = CONFIG.time.fixedStep;
+    const step = ENGINE.loop.fixedStep;
     this.acc += Math.min(realDt * this.clock.speed, step * maxSteps);
     const start = performance.now();
     while (this.acc >= step) {

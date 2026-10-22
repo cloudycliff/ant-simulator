@@ -3,14 +3,14 @@ import { getLang, LANG_NAMES, LANGS, t, tr } from '../../../core/i18n';
 import { CHAMBER_INFO } from '../nest/nest';
 import { FOOD_KIND_NAMES } from '../world/food';
 import { PREDATOR_INFO, Spider } from '../world/predators';
-import { stampAt } from '../../../core/sim/clock';
+import type { SimClock } from '../../../core/sim/clock';
 import { ITEM_NAMES } from '../sim/items';
 import type { ColonyEvent, ColonySample } from '../sim/colony';
 import { OBSTACLE_INFO } from '../world/vegetation';
 import type { World } from '../world/world';
 import type { Selection } from './picking';
 import { TOOLS, type ToolController } from './tools';
-import type { SaveMeta } from '../../../core/platform/saveSlot';
+import type { AntSaveMeta } from '../world/save';
 import { BACKGROUND_LIMITED } from '../../../core/platform/background';
 import { QUALITY_LEVELS, QUALITY_MODES, type Quality } from '../../../core/render/quality';
 import type { Installer } from '../../../core/platform/install';
@@ -84,8 +84,8 @@ function cap(s: string): string {
 }
 
 /** 事件和日志的时刻：新记录是模拟秒数，旧存档里是拼好的中文 */
-function when(x: number | string): string {
-  return typeof x === 'number' ? tr(stampAt(x)) : x;
+function when(clock: SimClock, x: number | string): string {
+  return typeof x === 'number' ? tr(clock.stampAt(x)) : x;
 }
 
 function agoText(ms: number): string {
@@ -211,7 +211,7 @@ export class Hud {
   private dockEl = document.getElementById('dock')!;
   private saveKey = '';
   saveOpen = false;
-  saveMeta: SaveMeta | null = null;
+  saveMeta: AntSaveMeta | null = null;
   private toastTimer = 0;
   private statsDrawn = -1;
   onAction: ((a: HudAction, arg?: number) => void) | null = null;
@@ -484,7 +484,7 @@ export class Hud {
         </div>`;
     }
     document.getElementById('save-status')!.textContent = m
-      ? t('save.status', { stamp: m.seconds !== undefined ? tr(stampAt(m.seconds)) : (m.stamp ?? ''), n: m.ants, ago: agoText(Date.now() - m.savedAt) })
+      ? t('save.status', { stamp: m.seconds !== undefined ? tr(this.world.clock.stampAt(m.seconds)) : (m.stamp ?? ''), n: m.ants, ago: agoText(Date.now() - m.savedAt) })
       : t('save.none');
   }
 
@@ -556,7 +556,7 @@ export class Hud {
     this.renderColony();
     this.renderInfo(sel);
     const events = w.colony.events;
-    const texts = events.map((e) => `<span>${when(e.t)}</span>${esc(tr(e.msg))}`);
+    const texts = events.map((e) => `<span>${when(this.world.clock, e.t)}</span>${esc(tr(e.msg))}`);
     const key = texts.join('|');
     if (key !== this.eventsKey) {
       this.eventsKey = key;
@@ -773,7 +773,7 @@ export class Hud {
       carry = tr(it.type === 'food' ? FOOD_KIND_NAMES[it.foodKind] : ITEM_NAMES[it.type]);
     }
     const depth = a.domain === 'nest' ? t('info.depth', { n: a.depth(w).toFixed(0) }) : a.climbing ? t('info.onStem') : '';
-    const logs = a.log.map((l) => `<li><span>${when(l.t)}</span>${esc(tr(l.msg))}</li>`).join('') || `<li>${t('info.noLog')}</li>`;
+    const logs = a.log.map((l) => `<li><span>${when(this.world.clock, l.t)}</span>${esc(tr(l.msg))}</li>`).join('') || `<li>${t('info.noLog')}</li>`;
     const following = this.state.following;
     const herd = a.herd >= 0 ? w.aphids.byId(a.herd) : undefined;
     return `

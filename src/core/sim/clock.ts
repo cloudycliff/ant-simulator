@@ -1,20 +1,18 @@
-import { CONFIG } from '../../games/ant/config';
 import { L, type Text } from '../i18n';
 import { TAU } from '../util/math';
 
-const START_OFFSET = (CONFIG.time.startHour / 24) * CONFIG.time.dayLength;
-
-/** 模拟秒数对应的游戏时刻，如“第3天 14:20” */
-export function stampAt(seconds: number): Text {
-  const days = (seconds + START_OFFSET) / CONFIG.time.dayLength;
-  const h = (days % 1) * 24;
-  const hh = Math.floor(h);
-  const mm = Math.floor((h - hh) * 60);
-  return L('time.stamp', { day: Math.floor(days) + 1, time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` });
-}
-
 /** 模拟时钟：游戏日、昼夜与土壤温湿度模型。 */
 export class SimClock {
+  private readonly startOffset: number;
+
+  /** dayLength：一个游戏日的模拟秒数；startHour：第 0 秒是第一天的几点 */
+  constructor(
+    readonly dayLength: number,
+    startHour: number,
+  ) {
+    this.startOffset = (startHour / 24) * dayLength;
+  }
+
   /** 自模拟开始以来的模拟秒数 */
   seconds = 0;
   speed = 1;
@@ -25,7 +23,11 @@ export class SimClock {
   groundWet = 0;
 
   get totalDays(): number {
-    return (this.seconds + START_OFFSET) / CONFIG.time.dayLength;
+    return this.daysAt(this.seconds);
+  }
+
+  private daysAt(seconds: number): number {
+    return (seconds + this.startOffset) / this.dayLength;
   }
 
   get day(): number {
@@ -54,7 +56,16 @@ export class SimClock {
   }
 
   stamp(): Text {
-    return stampAt(this.seconds);
+    return this.stampAt(this.seconds);
+  }
+
+  /** 模拟秒数对应的游戏时刻，如“第3天 14:20” */
+  stampAt(seconds: number): Text {
+    const days = this.daysAt(seconds);
+    const h = (days % 1) * 24;
+    const hh = Math.floor(h);
+    const mm = Math.floor((h - hh) * 60);
+    return L('time.stamp', { day: Math.floor(days) + 1, time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` });
   }
 
   /**

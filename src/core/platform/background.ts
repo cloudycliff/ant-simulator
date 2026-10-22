@@ -1,4 +1,4 @@
-import { CONFIG } from '../../games/ant/config';
+import { ENGINE } from '../config';
 import { MOBILE } from './device';
 
 const KEY = 'cyber-ant-background';
@@ -57,7 +57,7 @@ export class BackgroundRunner {
 
   private start(): void {
     this.last = performance.now();
-    const ms = CONFIG.time.backgroundTickMs;
+    const ms = ENGINE.background.tickMs;
     try {
       this.workerUrl = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${ms});`], { type: 'text/javascript' }));
       this.worker = new Worker(this.workerUrl);
@@ -70,7 +70,7 @@ export class BackgroundRunner {
 
   private fallback(): void {
     this.stopWorker();
-    if (this.running && !this.timer) this.timer = window.setInterval(this.tick, CONFIG.time.backgroundTickMs);
+    if (this.running && !this.timer) this.timer = window.setInterval(this.tick, ENGINE.background.tickMs);
   }
 
   private stopWorker(): void {

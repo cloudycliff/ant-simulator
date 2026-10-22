@@ -7,12 +7,12 @@
 
 ## 约定
 - 代码注释用中文；标识符用英文
-- 分层：`src/core` 是可复用的框架层，`src/games/ant` 是蚂蚁游戏的内容。`core` 不能导入 `games/`，跑 `node scripts/layercheck.mjs` 检查（DECISIONS T-049）。只有蚂蚁用得上的东西放进 `games/ant`
-- 界面文字不直接写在代码里：中文写进 `src/games/ant/i18n/zh.ts`（键以它为准），英文写进 `src/games/ant/i18n/en.ts`，两边都要有。界面用 `t(键, 参数)` 取文字；模拟层用 `L(键, 参数)` 记下延迟翻译的 `Text`，显示时再 `tr()`（DECISIONS T-040）。改了词典跑 `npx tsx scripts/i18ncheck.ts`
+- 分层：`src/core` 是可复用的框架层，`src/games/ant` 是蚂蚁游戏的内容。`core` 不能导入 `games/`，跑 `node scripts/layercheck.mjs` 检查（DECISIONS T-049）。只有蚂蚁用得上的东西放进 `games/ant`。框架需要游戏的数值或类型时，由游戏传进去（构造参数、泛型），框架不读游戏的配置
+- 界面文字不直接写在代码里：中文写进 `src/games/ant/i18n/zh.ts`（键以它为准），英文写进 `src/games/ant/i18n/en.ts`，两边都要有；只有框架代码用的文字写进 `src/core/i18n/` 的两份词典。界面用 `t(键, 参数)` 取文字；模拟层用 `L(键, 参数)` 记下延迟翻译的 `Text`，显示时再 `tr()`（DECISIONS T-040）。改了词典跑 `npx tsx scripts/i18ncheck.ts`
 - 注释只写代码本身表达不了的约束，不写“下一行做什么”
 - 模拟层（`src/core/sim`、`src/games/ant/sim`、`src/games/ant/world`、`src/games/ant/nest/nest.ts`）不能依赖 WebGL 或 DOM，要能在 Node 中运行 `scripts/simtest.ts`
 - 物品位置变化必须通过 `Colony` 的方法，不要直接改 `Item.place`
-- 数值优先放进 `src/games/ant/config.ts`；写在代码里的数值要同步登记到 `docs/BALANCE.md`
+- 数值优先放进 `src/games/ant/config.ts`（主循环、后台运行、画质、自动保存这类框架数值在 `src/core/config.ts`）；写在代码里的数值要同步登记到 `docs/BALANCE.md`
 
 ## 完成一轮开发后
 1. `npm run build` 必须通过；它会更新根目录的 `cyber-ant-farm.html`（双击即可运行的发布文件），提交时一并提交

@@ -3,6 +3,7 @@
  * npx tsx scripts/perftest.ts [工蚁数，默认 3000] [模拟秒数，默认 300]
  */
 import { tr } from '../src/core/i18n';
+import { ENGINE } from '../src/core/config';
 import { CONFIG } from '../src/games/ant/config';
 import { World } from '../src/games/ant/world/world';
 
@@ -39,7 +40,7 @@ function overlaps(): string {
   return `重叠 地表 ${n.surface} / 巢内 ${n.nest}`;
 }
 
-const step = CONFIG.time.fixedStep;
+const step = ENGINE.loop.fixedStep;
 const steps = Math.round(secs / step);
 let worst = 0;
 const s0 = performance.now();

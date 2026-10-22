@@ -1,4 +1,5 @@
-import type { Entry, MsgKey } from '../../../core/i18n';
+import type { Entry } from '../../../core/i18n';
+import type { zh } from './zh';
 
 const pl = (n: unknown, one: string, many: string) => (Number(n) === 1 ? one : many);
 const cap = (s: unknown) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
@@ -6,12 +7,10 @@ const an = (s: unknown) => (/^[aeiou]/i.test(String(s)) ? 'an' : 'a');
 /** 不可数的食物（糖水、果汁、一把种子）前面用 some */
 const some = (s: unknown) => (/water|juice|seeds/.test(String(s)) ? 'some' : an(s));
 
-export const en: Record<MsgKey, Entry> = {
-  raw: '{s}',
+export const en: Record<keyof typeof zh, Entry> = {
   'app.title': 'Cyber Ant Farm',
   'app.subtitle': 'Black garden ant · Lasius niger',
   'app.loading': 'Generating the nest and foraging grounds…',
-  'time.stamp': 'Day {day} {time}',
 
   // ---------------- Roles ----------------
   'role.queen': 'queen',
@@ -343,8 +342,6 @@ export const en: Record<MsgKey, Entry> = {
   'save.incompatible': 'The save is from an incompatible older version',
   'save.seedMismatch': "The world seed doesn't match the save",
   'save.noQueen': 'The save has no queen',
-  'save.quota': 'Browser storage is full',
-  'save.denied': 'The browser blocked local storage',
   'save.title': 'Save',
   'save.buttonTitle': 'Save, load, or start over',
   'save.where': 'Saved in this browser, automatically every minute and when you close the page',

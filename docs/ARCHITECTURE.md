@@ -11,30 +11,33 @@ src/
   style.css             界面样式
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
   core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/layercheck.mjs）——
+    config.ts           ENGINE：主循环步长与帧预算、后台运行、画质档位与帧率、自动保存间隔
     util/
       random.ts         Rng（可设种子的随机数）、Noise2D（梯度噪声、分形噪声）；`rng` 为运行时共享实例
       math.ts           clamp / lerp / smoothstep / wrapAngle 等
     i18n/
-      index.ts          Text（延迟翻译的文字）、L / t / tr、当前语言
+      index.ts          Text（延迟翻译的文字）、L / t / tr、当前语言；Messages（所有键，游戏用声明合并补充）、registerDicts
+      zh.ts / en.ts     框架自己用到的几条文字（时刻、存档失败的原因）
     platform/
       device.ts         识别手机和平板的浏览器
       install.ts        添加到主屏幕（安卓弹安装框、iOS 给提示）；注册离线缓存脚本
       background.ts     后台运行：页面隐藏时用 Worker 节拍继续推进模拟
       lang.ts           选择界面语言（网址参数、上次的选择、浏览器语言）与切换
-      saveSlot.ts       存档在 localStorage 中的读写（完整存档 + 一份小摘要）
+      saveSlot.ts       SaveSlot：localStorage 里的一个存档位（完整存档 + 一份小摘要），存档和摘要的类型由游戏给出
     sim/                不依赖 WebGL 和 DOM
-      clock.ts          SimClock：游戏日、时刻、昼夜、土壤温湿度模型
-      spatial.ts        SpatialHash：每步重建的均匀网格，用于近邻查询
+      clock.ts          SimClock：游戏日、时刻、昼夜、土壤温湿度模型；一天多长、几点开局由游戏传入
+      spatial.ts        SpatialHash：每步重建的均匀网格，用于近邻查询；放什么由游戏定（有 pos 和 alive 即可）
     render/
-      environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
+      environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗；光照强度由游戏传入
       rain.ts           雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
       quality.ts        画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
     ui/
       camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理
   games/ant/            —— 蚂蚁游戏的内容 ——
-    config.ts           配置与常量（职别名称、颜色）；调参优先改这里
+    config.ts           配置与常量（职别名称、颜色）；调参优先改这里。导入它时顺带登记游戏的词典
     i18n/
-      zh.ts             中文词典，也是所有键的来源
+      index.ts          把游戏的键并进 Messages，登记词典
+      zh.ts             中文词典，也是游戏所有键的来源
       en.ts             英文词典（单复数等写成函数）
     sim/                —— 模拟层，不依赖 WebGL ——
       ant.ts            Ant：个体状态 + 运动层（执行指令）
@@ -52,7 +55,7 @@ src/
       alarm.ts          警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
       weather.ts        天气：晴 / 转阴 / 下雨的阶段与雨势、云量、地面湿润度；积水洼、浅层房间进水；入口封堵任务的分配
       water.ts          玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
-      save.ts           存档：组装各子系统的 toSave / restore，版本与种子检查
+      save.ts           存档：组装各子系统的 toSave / restore，版本与种子检查；蚂蚁游戏的存档位和摘要
       pheromone.ts      信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
     nest/
       nest.ts           蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
@@ -66,7 +69,8 @@ src/
       tools.ts          干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法；触屏先记下 pending 位置，确认后再放
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
-  layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts；还没拆开的依赖列在 PENDING 里
+  layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
+  saveui.mjs            页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
   savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
@@ -81,7 +85,9 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。目前还有几处框架代码读蚂蚁游戏的配置、词典和类型，列在脚本的 `PENDING` 里，分步拆掉；拆掉一处就删掉一行，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049、T-050。
+
+配置也分两份：`src/core/config.ts` 的 `ENGINE` 是框架的（主循环、后台运行、画质、自动保存），`src/games/ant/config.ts` 的 `CONFIG` 是蚂蚁游戏的。
 
 ## 主循环
 
@@ -174,11 +180,11 @@ requestAnimationFrame
 
 ### 存档（`world/save.ts`）
 
-页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
+页面启动时 `main.ts` 先 `new World()`，有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
 
 ### 主循环与后台运行
 
-页面可见时 `requestAnimationFrame` 每帧调用 `world.advance(dt, frameBudgetMs)`，然后同步视图、渲染。页面隐藏时浏览器不再调用 `requestAnimationFrame`，开启了后台运行的话由 `BackgroundRunner` 接手：Worker 每 100 ms 发一次消息，主线程只推进模拟和自动保存，不同步视图也不渲染；视图都是对照当前状态同步的，回到页面后第一帧就能跟上。设计取舍见 DECISIONS T-042。手机和平板的浏览器会冻结后台页面（`BACKGROUND_LIMITED`），那里开关只给说明（T-046）。
+页面可见时 `requestAnimationFrame` 每帧调用 `world.advance(dt, ENGINE.loop.frameBudgetMs)`，然后同步视图、渲染。页面隐藏时浏览器不再调用 `requestAnimationFrame`，开启了后台运行的话由 `BackgroundRunner` 接手：Worker 每 100 ms 发一次消息，主线程只推进模拟和自动保存，不同步视图也不渲染；视图都是对照当前状态同步的，回到页面后第一帧就能跟上。设计取舍见 DECISIONS T-042。手机和平板的浏览器会冻结后台页面（`BACKGROUND_LIMITED`），那里开关只给说明（T-046）。
 
 每帧开头先问 `Quality.frame`：超过帧率上限（平时 60，省电 30，暂停 2 秒没操作 15）就跳过这一帧，什么都不做；`last` 只在真正画的帧更新，所以模拟时间不受影响。“自动”档统计满帧率时段的平均帧率，连续两个 3 秒都低于 40 就降一档。设计取舍见 DECISIONS T-047。
 
@@ -192,7 +198,11 @@ requestAnimationFrame
 
 ### 界面文字（`src/core/i18n` 与 `src/games/ant/i18n`）
 
-模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`。增加语种：在 `Lang`、`LANGS`、`LANG_TAGS`、`LANG_NAMES` 里补上，新建一份词典并加进 `DICTS`，再改 `initLang` 的浏览器语言匹配。设计取舍见 DECISIONS T-040。
+模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`，并更新页面标题。
+
+词典分两份：框架自己用到的几条在 `src/core/i18n/zh.ts`、`en.ts`，蚂蚁游戏的在 `src/games/ant/i18n/`。所有键的类型是 `Messages`：框架只放自己的键，游戏在 `games/ant/i18n/index.ts` 里用声明合并（`declare module` + `interface Messages extends Record<keyof typeof zh, true>`）补上自己的，所以 `L` / `t` 照样能检查键写没写错；同一个文件在模块加载时调用 `registerDicts` 把两种语言的词典并进去，键和框架重名时报错。`games/ant/config.ts` 导入它，游戏的任何模块都会先读配置，所以第一次翻译之前词典一定已经登记。
+
+增加语种：在 `Lang`、`LANGS`、`LANG_TAGS`、`LANG_NAMES` 里补上，框架和游戏各新建一份词典（`registerDicts` 的参数要求每种语言都有），再改 `initLang` 的浏览器语言匹配。设计取舍见 DECISIONS T-040、T-050。
 
 ### 蚁穴生成（`Nest.generate`）
 - 主竖井从主入口出发，经过 7 个分岔点向下蜿蜒，深度分别为 6、9、21、34、48、62、76 cm
@@ -236,7 +246,7 @@ requestAnimationFrame
 
 **新增一种物品**：在 `items.ts` 的 `ItemType`、`ITEM_NAMES` 和 `itemView.ts` 的图层中补充。
 
-**新增界面文字**：先在 `zh.ts` 加键，再在 `en.ts` 加英文（不加会编译报错）。英文名词小写，需要单复数时写成函数；然后跑 `npx tsx scripts/i18ncheck.ts`。
+**新增界面文字**：先在 `games/ant/i18n/zh.ts` 加键，再在 `en.ts` 加英文（不加会编译报错）；只有框架代码用的文字加在 `core/i18n/` 里。英文名词小写，需要单复数时写成函数；然后跑 `npx tsx scripts/i18ncheck.ts`。
 
 ## 验证工具
 
@@ -281,6 +291,7 @@ npx tsx -e "import { World } from './src/games/ant/world/world'; const w = new W
 node scripts/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置、底栏与菜单、转横屏
 node scripts/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置；窗口变窄切到手机布局再切回
 node scripts/pwatest.mjs     # 先 npm run build：清单、图标、安装条件、离线缓存、断网刷新、主屏幕入口、双击打开的单文件
+node scripts/saveui.mjs      # 存档：Ctrl+S 保存、重新打开后恢复种子、蚂蚁数、房间数和时间；中英文页面标题
 node scripts/qualitytest.mjs # 画质：桌面和手机的默认档位、暂停降帧与操作唤醒、省电、人为卡顿后自动降档、选择记住
 node scripts/layoutshots.mjs [phone pad-land ant …] [--en]   # 手机 / 平板 / 桌面、横竖屏 × 几个场景的截图，存到 shots/layout/
 ```

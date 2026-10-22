@@ -1,4 +1,5 @@
 import { L, t, tr, type Text } from '../../../core/i18n';
+import { SaveSlot, type SaveMeta } from '../../../core/platform/saveSlot';
 import type { NestSave } from '../nest/nest';
 import type { ColonySave } from '../sim/colony';
 import type { PlaceableObstacle } from './vegetation';
@@ -54,6 +55,16 @@ export function saveWorld(w: World, savedAt: number): SaveData {
     predators: w.predators.toSave(),
     weather: w.weather.toSave(w),
   };
+}
+
+export interface AntSaveMeta extends SaveMeta {
+  ants: number;
+}
+
+export const saveSlot = new SaveSlot<SaveData, AntSaveMeta>('cyber-ant-save');
+
+export function saveMeta(d: SaveData): AntSaveMeta {
+  return { savedAt: d.savedAt, seconds: Math.round(d.clock.seconds), ants: d.colony.ants.length };
 }
 
 /** 存档不能用于当前版本时返回原因 */

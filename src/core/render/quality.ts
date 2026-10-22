@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import { CONFIG } from '../../games/ant/config';
+import { ENGINE } from '../config';
 
 export const QUALITY_MODES = ['auto', 'high', 'medium', 'low', 'saver'] as const;
 export type QualityMode = (typeof QUALITY_MODES)[number];
@@ -13,7 +13,7 @@ const KEY = 'cyber-ant-quality';
  */
 export class Quality {
   mode: QualityMode = 'auto';
-  /** 当前档位，下标对应 CONFIG.render.levels，0 最高 */
+  /** 当前档位，下标对应 ENGINE.render.levels，0 最高 */
   level = 0;
   /** 上一帧是否因为暂停没操作而降了帧率 */
   idle = false;
@@ -31,7 +31,7 @@ export class Quality {
     private sun: THREE.DirectionalLight,
     mobile: boolean,
   ) {
-    this.startLevel = mobile ? CONFIG.render.mobileLevel : 0;
+    this.startLevel = mobile ? ENGINE.render.mobileLevel : 0;
     try {
       const m = localStorage.getItem(KEY) as QualityMode | null;
       if (m && QUALITY_MODES.includes(m)) this.mode = m;
@@ -58,7 +58,7 @@ export class Quality {
 
   /** 每次 requestAnimationFrame 调用；返回 false 时这一帧什么都不做 */
   frame(now: number, paused: boolean): boolean {
-    const R = CONFIG.render;
+    const R = ENGINE.render;
     const idle = paused && now - this.lastInput > R.idleAfterSec * 1000;
     this.idle = idle;
     const cap = idle ? R.idleFps : this.mode === 'saver' ? R.saverFps : R.maxFps;
@@ -95,11 +95,11 @@ export class Quality {
 
   private levelOf(mode: QualityMode): number {
     if (mode === 'auto') return this.startLevel;
-    return mode === 'saver' ? CONFIG.render.levels.length - 1 : QUALITY_LEVELS.indexOf(mode);
+    return mode === 'saver' ? ENGINE.render.levels.length - 1 : QUALITY_LEVELS.indexOf(mode);
   }
 
   private apply(): void {
-    const L = CONFIG.render.levels[this.level];
+    const L = ENGINE.render.levels[this.level];
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, L.pixelRatio));
     const s = this.sun.shadow;
     if (s.mapSize.x === L.shadowMap) return;
