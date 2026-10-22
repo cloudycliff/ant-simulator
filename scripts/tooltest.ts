@@ -1,6 +1,6 @@
 /** 干预工具的无界面回归测试：npx tsx scripts/tooltest.ts */
-import { tr } from '../src/i18n';
-import { World, type ToolResult } from '../src/world/world';
+import { tr } from '../src/core/i18n';
+import { World, type ToolResult } from '../src/games/ant/world/world';
 
 const w = new World();
 const step = 1 / 30;

@@ -11,7 +11,7 @@
 
 ## 参数一览
 
-### `src/config.ts` 中的参数
+### `src/games/ant/config.ts` 中的参数
 
 | 参数 | 值 | 说明 |
 |---|---|---|

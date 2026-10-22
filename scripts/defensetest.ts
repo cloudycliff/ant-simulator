@@ -2,9 +2,9 @@
  * 防御测试：在蚂蚁来往多的地方和巢口附近各放一只狼蛛，观察警报、围攻、驱赶和入口警戒。
  * npx tsx scripts/defensetest.ts [热身秒数，默认 500]
  */
-import { tr } from '../src/i18n';
-import { CONFIG } from '../src/config';
-import { World } from '../src/world/world';
+import { tr } from '../src/core/i18n';
+import { CONFIG } from '../src/games/ant/config';
+import { World } from '../src/games/ant/world/world';
 
 const warm = Number(process.argv[2] ?? 500);
 const w = new World();

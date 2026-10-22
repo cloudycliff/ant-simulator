@@ -1,8 +1,13 @@
-/** 无界面运行模拟，检查行为循环与性能：npx tsx scripts/simtest.ts [模拟秒数] */
-import { tr } from '../src/i18n';
-import { World } from '../src/world/world';
+/**
+ * 无界面运行模拟，检查行为循环与性能：npx tsx scripts/simtest.ts [模拟秒数]
+ * 设了环境变量 SIM_SEED 时结果可复现，重构前后可以逐行对比
+ */
+import { tr } from '../src/core/i18n';
+import { rng } from '../src/core/util/random';
+import { World } from '../src/games/ant/world/world';
 
 const total = Number(process.argv[2] ?? 1200);
+if (process.env.SIM_SEED) rng.reseed(Number(process.env.SIM_SEED));
 const t0 = performance.now();
 const world = new World();
 console.log(`init ${(performance.now() - t0).toFixed(0)} ms, ants=${world.colony.ants.length}, chambers=${world.nest.chambers.length}, nodes=${world.nest.nodes.length}`);

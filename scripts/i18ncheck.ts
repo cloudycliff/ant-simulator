@@ -2,10 +2,10 @@
  * 界面文字检查：中英文词典的占位符是否一致；跑一段英文模拟，看蚂蚁的行为、日志和事件里有没有漏翻的中文或没替换的 {参数}。
  * npx tsx scripts/i18ncheck.ts [模拟秒数，默认 600]
  */
-import { en } from '../src/i18n/en';
-import { zh } from '../src/i18n/zh';
-import { setLang, t, tr, type MsgKey } from '../src/i18n';
-import { World } from '../src/world/world';
+import { en } from '../src/games/ant/i18n/en';
+import { zh } from '../src/games/ant/i18n/zh';
+import { setLang, t, tr, type MsgKey } from '../src/core/i18n';
+import { World } from '../src/games/ant/world/world';
 
 const holes = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 const problems: string[] = [];

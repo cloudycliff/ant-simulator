@@ -8,57 +8,65 @@ cyber-ant-farm.html     构建生成的单文件发布版，双击即可运行�
 vite.config.ts          构建配置；singleFile 插件把产物内联成单个 HTML，并复制到根目录
 src/
   main.ts               入口：创建渲染器、场景、各视图，处理按键与选择，驱动主循环
-  config.ts             全局配置与常量（职别名称、颜色）；调参优先改这里
-  i18n/
-    index.ts            Text（延迟翻译的文字）、L / t / tr、当前语言
-    zh.ts               中文词典，也是所有键的来源
-    en.ts               英文词典（单复数等写成函数）
   style.css             界面样式
-  util/
-    random.ts           Rng（可设种子的随机数）、Noise2D（梯度噪声、分形噪声）；`rng` 为运行时共享实例
-    math.ts             clamp / lerp / smoothstep / wrapAngle 等
-  sim/                  —— 模拟层，不依赖 WebGL ——
-    clock.ts            SimClock：游戏日、时刻、昼夜、土壤温湿度模型
-    ant.ts              Ant：个体状态 + 运动层（执行指令）
-    routines.ts         行为层：各职别的任务协程
-    colony.ts           Colony：种群、物品、幼体发育、食物储备、死亡、分工评估、接触、蛹的温度调节、统计历史
-    items.ts            Item：卵/幼虫/蛹/食物/垃圾/土粒/尸体
-    spatial.ts          SpatialHash：每步重建的均匀网格，用于蚂蚁之间的近邻查询
-    expansion.ts        NestExpansion：拥挤度、规划新房间、分配挖掘工作面、推进隧道和房间的挖掘
-  world/
-    world.ts            World：组装所有模拟子系统，按固定步长推进；房间温度（含石块加温）
-    terrain.ts          解析式高度场、蚁丘、草被密度、地形网格
-    vegetation.ts       草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
-    food.ts             食物源类型、生成、网格
-    aphids.ts           蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
-    predators.ts        天敌：狼蛛（游荡、扑击、进食、离开的状态机）与蚁狮陷阱（松沙区、坑底捕食）；网格与存档
-    alarm.ts            警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
-    weather.ts          天气：晴 / 转阴 / 下雨的阶段与雨势、云量、地面湿润度；积水洼、浅层房间进水；入口封堵任务的分配
-    water.ts            玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
-    save.ts             存档：组装各子系统的 toSave / restore，版本与种子检查
-    pheromone.ts        信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
-  nest/
-    nest.ts             蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
-    nestView.ts         蚁穴网格：背面渲染的房间与隧道、土壤剖面墙、入口洞口与土塞、房间积水；每帧 sync 跟随蚁穴变化
-  render/
-    antView.ts          蚂蚁几何体、步态着色器、实例化更新、选中标记
-    itemView.ts         物品的实例化渲染
-    environment.ts      天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
-    rain.ts             雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
-    quality.ts          画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
-  ui/
-    camera.ts           自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理
-    picking.ts          点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 用解析高度场求鼠标下的地面点
-    tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法；触屏先记下 pending 位置，确认后再放
-    saveSlot.ts         存档在 localStorage 中的读写（完整存档 + 一份小摘要）
-    lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
-    background.ts       后台运行：页面隐藏时用 Worker 节拍继续推进模拟
-    device.ts           识别手机和平板的浏览器
-    install.ts          添加到主屏幕（安卓弹安装框、iOS 给提示）；注册离线缓存脚本
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
+  core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/layercheck.mjs）——
+    util/
+      random.ts         Rng（可设种子的随机数）、Noise2D（梯度噪声、分形噪声）；`rng` 为运行时共享实例
+      math.ts           clamp / lerp / smoothstep / wrapAngle 等
+    i18n/
+      index.ts          Text（延迟翻译的文字）、L / t / tr、当前语言
+    platform/
+      device.ts         识别手机和平板的浏览器
+      install.ts        添加到主屏幕（安卓弹安装框、iOS 给提示）；注册离线缓存脚本
+      background.ts     后台运行：页面隐藏时用 Worker 节拍继续推进模拟
+      lang.ts           选择界面语言（网址参数、上次的选择、浏览器语言）与切换
+      saveSlot.ts       存档在 localStorage 中的读写（完整存档 + 一份小摘要）
+    sim/                不依赖 WebGL 和 DOM
+      clock.ts          SimClock：游戏日、时刻、昼夜、土壤温湿度模型
+      spatial.ts        SpatialHash：每步重建的均匀网格，用于近邻查询
+    render/
+      environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
+      rain.ts           雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
+      quality.ts        画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
+    ui/
+      camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理
+  games/ant/            —— 蚂蚁游戏的内容 ——
+    config.ts           配置与常量（职别名称、颜色）；调参优先改这里
+    i18n/
+      zh.ts             中文词典，也是所有键的来源
+      en.ts             英文词典（单复数等写成函数）
+    sim/                —— 模拟层，不依赖 WebGL ——
+      ant.ts            Ant：个体状态 + 运动层（执行指令）
+      routines.ts       行为层：各职别的任务协程
+      colony.ts         Colony：种群、物品、幼体发育、食物储备、死亡、分工评估、接触、蛹的温度调节、统计历史
+      items.ts          Item：卵/幼虫/蛹/食物/垃圾/土粒/尸体
+      expansion.ts      NestExpansion：拥挤度、规划新房间、分配挖掘工作面、推进隧道和房间的挖掘
+    world/
+      world.ts          World：组装所有模拟子系统，按固定步长推进；房间温度（含石块加温）
+      terrain.ts        解析式高度场、蚁丘、草被密度、地形网格
+      vegetation.ts     草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
+      food.ts           食物源类型、生成、网格
+      aphids.ts         蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
+      predators.ts      天敌：狼蛛（游荡、扑击、进食、离开的状态机）与蚁狮陷阱（松沙区、坑底捕食）；网格与存档
+      alarm.ts          警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
+      weather.ts        天气：晴 / 转阴 / 下雨的阶段与雨势、云量、地面湿润度；积水洼、浅层房间进水；入口封堵任务的分配
+      water.ts          玩家浇出的水洼：贴地网格、蒸发收缩、冲刷信息素；同时登记为“软”避障圆
+      save.ts           存档：组装各子系统的 toSave / restore，版本与种子检查
+      pheromone.ts      信息素网格（路径 + 领地足迹两个通道）与热力图叠加层
+    nest/
+      nest.ts           蚁穴数据：节点、隧道、房间、入口、挖掘工作面；程序化生成；寻路；扩建用的几何操作
+      nestView.ts       蚁穴网格：背面渲染的房间与隧道、土壤剖面墙、入口洞口与土塞、房间积水；每帧 sync 跟随蚁穴变化
+    render/
+      antView.ts        蚂蚁几何体、步态着色器、实例化更新、选中标记
+      itemView.ts       物品的实例化渲染
+    ui/
+      hud.ts            顶栏（上行状态与画质、帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
+      picking.ts        点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 用解析高度场求鼠标下的地面点
+      tools.ts          干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法；触屏先记下 pending 位置，确认后再放
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
-    hud.ts              顶栏（上行状态与画质、帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
 scripts/
+  layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts；还没拆开的依赖列在 PENDING 里
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
   savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
@@ -70,6 +78,10 @@ scripts/
   icons.mjs             从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
 docs/                   本文档目录
 ```
+
+## 分层
+
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。目前还有几处框架代码读蚂蚁游戏的配置、词典和类型，列在脚本的 `PENDING` 里，分步拆掉；拆掉一处就删掉一行，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049。
 
 ## 主循环
 
@@ -178,7 +190,7 @@ requestAnimationFrame
 
 界面有两种布局：宽小于 700 或高小于 500 时 `Hud.updateMode` 给 `body` 加上 `compact`（横屏再加 `land`），`renderStatic` 改写成一行顶栏 + 底栏（`#dock`）+ 视图和工具两个选择面板（`#views`、`#toolbox`）；窗口尺寸变化时重新判断并重写界面。手机布局里各面板是“抽屉”，`Hud.sheet` 记着当前打开的那个，`body` 上的 `sheet-*`、`sheet-open`、`show-info`、`tooling` 决定谁显示，位置全部由 CSS 按 `--top`、`--dock`、`--rail` 等变量排（`Hud.layout` 每次刷新时写入）。统计、存档、帮助在手机布局里跟着抽屉开关。设计取舍见 DECISIONS T-045。
 
-### 界面文字（`src/i18n`）
+### 界面文字（`src/core/i18n` 与 `src/games/ant/i18n`）
 
 模拟层产生的文字（`Ant.activity`、`Ant.log`、`Colony.events`、`ToolResult.msg`、房间和入口的 `label`、天气的 `label`、死因）都是 `Text`：只有键和参数，由界面用 `tr()` 按当前语言翻译。界面自己的文字直接用 `t(键, 参数)`。语言列表是 `LANGS`，菜单里的语言名在 `LANG_NAMES`；在语言菜单里选中后 `main.ts` 调用 `chooseLang` 和 `Hud.relocalize`。增加语种：在 `Lang`、`LANGS`、`LANG_TAGS`、`LANG_NAMES` 里补上，新建一份词典并加进 `DICTS`，再改 `initLang` 的浏览器语言匹配。设计取舍见 DECISIONS T-040。
 
@@ -234,6 +246,8 @@ npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 ```
 每 1/8 进度输出一次：人口、巢外数量、储食室与社会胃、幼体数、各职别实际/目标人数、蛹的位置、拥挤度、房间数、扩建进度、每个蚜虫群（数量、`*` 表示已被发现、积存蜜露）、两种信息素总量、累计统计、平均每步耗时，以及当前最常见的 12 种行为。第一行的每步耗时包含 JIT 预热，偏高属于正常。
 
+模拟随机数默认用当前时间做种子，每次结果不同。设环境变量 `SIM_SEED`（如 `$env:SIM_SEED=7`）后结果可复现，除了耗时以外逐行相同，重构前后可以直接对比输出。
+
 在 PowerShell 里重定向输出会变成 UTF-16 乱码，用 `cmd /c "npx tsx scripts/simtest.ts 6000 > shots\simtest.txt"` 保留 UTF-8。
 
 ### 截图验证
@@ -259,7 +273,7 @@ npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 
 房间坐标由地图种子决定（`new World()` 用默认种子 `CONFIG.seed`）。改动生成代码后，可以用下面的命令重新打印：
 ```
-npx tsx -e "import { World } from './src/world/world'; const w = new World(); for (const c of w.nest.chambers) console.log(c.id, c.name, c.floor.toArray().map(v=>v.toFixed(1)).join(','))"
+npx tsx -e "import { World } from './src/games/ant/world/world'; const w = new World(); for (const c of w.nest.chambers) console.log(c.id, c.name, c.floor.toArray().map(v=>v.toFixed(1)).join(','))"
 ```
 
 ### 触屏与鼠标操作、各种屏幕的截图

@@ -31,6 +31,7 @@ npx tsx scripts/defensetest.ts    # 放入狼蛛，观察警报、围攻与入�
 npx tsx scripts/weathertest.ts    # 招来一场雨，观察躲雨、封堵入口与进水
 npx tsx scripts/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查
+node scripts/layercheck.mjs       # 依赖方向检查：框架层 src/core 不能导入游戏 src/games
 ```
 
 ### 不用服务器直接打开

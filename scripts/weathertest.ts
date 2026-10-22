@@ -2,9 +2,9 @@
  * 天气测试：热身后招来一场雨，观察觅食蚁返巢、入口封堵、信息素冲刷、浅层房间进水和雨后重开。
  * npx tsx scripts/weathertest.ts [热身秒数，默认 300] [观察秒数，默认 600]
  */
-import { tr } from '../src/i18n';
-import { CONFIG } from '../src/config';
-import { World } from '../src/world/world';
+import { tr } from '../src/core/i18n';
+import { CONFIG } from '../src/games/ant/config';
+import { World } from '../src/games/ant/world/world';
 
 const warm = Number(process.argv[2] ?? 300);
 const secs = Number(process.argv[3] ?? 600);
