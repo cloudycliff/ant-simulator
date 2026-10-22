@@ -35,6 +35,10 @@ npx tsx scripts/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 - 这个文件由 `npm run build` 生成（内容与 `dist/index.html` 相同），改了代码后要重新构建才会更新
 - 根目录的 `index.html` 是给 Vite 用的源码模板，引用的是 TypeScript 源码，不能直接双击运行
 
+### 部署到 Cloudflare Pages
+
+在 Cloudflare 后台连接这个 GitHub 仓库，构建命令 `npm run build`，输出目录 `dist`，Node 版本由 `.node-version` 指定。之后每次推送到 `main` 都会自动重新部署。网页版的存档保存在该网址下的浏览器本地，和双击打开 HTML 文件的存档互不相通。
+
 ## 操作
 
 | 操作 | 按键 |
