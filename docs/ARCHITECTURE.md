@@ -45,6 +45,7 @@ src/
     itemView.ts         物品的实例化渲染
     environment.ts      天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
     rain.ts             雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
+    quality.ts          画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
   ui/
     camera.ts           自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理
     picking.ts          点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 用解析高度场求鼠标下的地面点
@@ -52,7 +53,8 @@ src/
     saveSlot.ts         存档在 localStorage 中的读写（完整存档 + 一份小摘要）
     lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
     background.ts       后台运行：页面隐藏时用 Worker 节拍继续推进模拟
-    hud.ts              顶栏（上行状态与帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
+    device.ts           识别手机和平板的浏览器
+    hud.ts              顶栏（上行状态与画质、帮助、存档、语言、GitHub，下行速度与后台运行、视图、工具）、蚁群概况、信息面板、事件列表、帮助、统计曲线、信息素图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
 scripts/
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
@@ -162,6 +164,8 @@ requestAnimationFrame
 
 页面可见时 `requestAnimationFrame` 每帧调用 `world.advance(dt, frameBudgetMs)`，然后同步视图、渲染。页面隐藏时浏览器不再调用 `requestAnimationFrame`，开启了后台运行的话由 `BackgroundRunner` 接手：Worker 每 100 ms 发一次消息，主线程只推进模拟和自动保存，不同步视图也不渲染；视图都是对照当前状态同步的，回到页面后第一帧就能跟上。设计取舍见 DECISIONS T-042。手机和平板的浏览器会冻结后台页面（`BACKGROUND_LIMITED`），那里开关只给说明（T-046）。
 
+每帧开头先问 `Quality.frame`：超过帧率上限（平时 60，省电 30，暂停 2 秒没操作 15）就跳过这一帧，什么都不做；`last` 只在真正画的帧更新，所以模拟时间不受影响。“自动”档统计满帧率时段的平均帧率，连续两个 3 秒都低于 40 就降一档。设计取舍见 DECISIONS T-047。
+
 ### 界面布局：桌面与手机
 
 界面有两种布局：宽小于 700 或高小于 500 时 `Hud.updateMode` 给 `body` 加上 `compact`（横屏再加 `land`），`renderStatic` 改写成一行顶栏 + 底栏（`#dock`）+ 视图和工具两个选择面板（`#views`、`#toolbox`）；窗口尺寸变化时重新判断并重写界面。手机布局里各面板是“抽屉”，`Hud.sheet` 记着当前打开的那个，`body` 上的 `sheet-*`、`sheet-open`、`show-info`、`tooling` 决定谁显示，位置全部由 CSS 按 `--top`、`--dock`、`--rail` 等变量排（`Hud.layout` 每次刷新时写入）。统计、存档、帮助在手机布局里跟着抽屉开关。设计取舍见 DECISIONS T-045。
@@ -254,6 +258,7 @@ npx tsx -e "import { World } from './src/world/world'; const w = new World(); fo
 ```
 node scripts/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置、底栏与菜单、转横屏
 node scripts/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置；窗口变窄切到手机布局再切回
+node scripts/qualitytest.mjs # 画质：桌面和手机的默认档位、暂停降帧与操作唤醒、省电、人为卡顿后自动降档、选择记住
 node scripts/layoutshots.mjs [phone pad-land ant …] [--en]   # 手机 / 平板 / 桌面、横竖屏 × 几个场景的截图，存到 shots/layout/
 ```
-需要先 `npm run dev`。脚本直接启动无头 Chrome（共用 `scripts/cdp.mjs`），通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller`、`window.hud` 判断结果。截图脚本还会列出超出屏幕的面板。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。
+需要先 `npm run dev`。脚本直接启动无头 Chrome（共用 `scripts/cdp.mjs`），通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller`、`window.hud`、`window.quality`、`window.renderer` 判断结果；手机浏览器用 `Emulation.setUserAgentOverride` 伪装。截图脚本还会列出超出屏幕的面板。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。

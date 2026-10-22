@@ -15,6 +15,8 @@ import { ToolController } from './ui/tools';
 import { clearSave, readMeta, readSave, writeSave } from './ui/saveSlot';
 import { chooseLang, initLang } from './ui/lang';
 import { BACKGROUND_LIMITED, BackgroundRunner } from './ui/background';
+import { MOBILE } from './ui/device';
+import { QUALITY_LEVELS, QUALITY_MODES, Quality } from './render/quality';
 import { stampAt } from './sim/clock';
 import { loadWorld, saveProblem, saveWorld } from './world/save';
 
@@ -28,7 +30,6 @@ async function boot(): Promise<void> {
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -89,6 +90,7 @@ async function boot(): Promise<void> {
   const itemView = new ItemView(world);
   scene.add(itemView.group);
   const env = new Environment(scene);
+  const quality = new Quality(renderer, env.sun, MOBILE);
 
   const controller = new CameraController(camera, renderer.domElement, (x, z) => world.terrain.heightAt(x, z));
   controller.setPose(new THREE.Vector3(16, 13, 22), new THREE.Vector3(0, 0, 1));
@@ -104,6 +106,8 @@ async function boot(): Promise<void> {
     terrain: world.terrain.mesh,
   });
   const hud = new Hud(world);
+  hud.quality = quality;
+  quality.onDrop = () => hud.toast(t('toast.qualityDrop', { q: t(`quality.${QUALITY_LEVELS[quality.level]}`) }));
   hud.saveMeta = readMeta();
   const tools = new ToolController(world);
   hud.tools = tools;
@@ -318,6 +322,13 @@ async function boot(): Promise<void> {
         hud.state.background = background.enabled;
         hud.toast(t(background.enabled ? 'toast.bgOn' : 'toast.bgOff'));
         break;
+      case 'quality': {
+        const mode = QUALITY_MODES[v ?? (QUALITY_MODES.indexOf(quality.mode) + 1) % QUALITY_MODES.length];
+        quality.setMode(mode);
+        hud.toast(t('toast.quality', { q: hud.qualityLabel() }));
+        hud.refresh(selection, fps);
+        break;
+      }
       case 'langMenu':
         hud.toggleLangMenu();
         break;
@@ -507,6 +518,10 @@ async function boot(): Promise<void> {
   });
 
   const frame = (now: number) => {
+    if (!quality.frame(now, world.clock.paused)) {
+      requestAnimationFrame(frame);
+      return;
+    }
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     time += dt;
@@ -577,7 +592,7 @@ async function boot(): Promise<void> {
   hud.refresh(selection, fps);
   requestAnimationFrame(frame);
 
-  Object.assign(window, { world, camera, controller, hud });
+  Object.assign(window, { world, camera, controller, hud, quality, renderer });
 }
 
 boot();

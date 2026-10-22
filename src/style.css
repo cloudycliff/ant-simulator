@@ -710,9 +710,15 @@ body.compact #topbar .clock #temp {
   font-size: 11px;
   color: #8f877a;
 }
-.pop .langs {
+.pop .langs,
+.pop .opts {
   display: flex;
   gap: 4px;
+}
+.pop .opts button {
+  flex: 1;
+  padding: 8px 0;
+  white-space: nowrap;
 }
 .pop .langs button {
   flex: 1;

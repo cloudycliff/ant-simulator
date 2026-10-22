@@ -12,6 +12,7 @@ import type { Selection } from './picking';
 import { TOOLS, type ToolController } from './tools';
 import type { SaveMeta } from './saveSlot';
 import { BACKGROUND_LIMITED } from './background';
+import { QUALITY_LEVELS, QUALITY_MODES, type Quality } from '../render/quality';
 
 export type HudAction =
   | 'pause'
@@ -38,6 +39,7 @@ export type HudAction =
   | 'newGame'
   | 'langMenu'
   | 'background'
+  | 'quality'
   | 'lang'
   | 'sheet'
   | 'menu';
@@ -199,6 +201,7 @@ export class Hud {
   private toolEl = document.getElementById('tool')!;
   private toolKey = '';
   tools: ToolController | null = null;
+  quality: Quality | null = null;
   private saveEl = document.getElementById('save')!;
   private viewsEl = document.getElementById('views')!;
   private toolboxEl = document.getElementById('toolbox')!;
@@ -320,6 +323,14 @@ export class Hud {
     this.top.querySelectorAll<HTMLElement>('[data-a="menu"]').forEach((b, k) => b.classList.toggle('on', k === i));
   }
 
+  /** “自动”后面带上当前实际的档位 */
+  qualityLabel(): string {
+    const q = this.quality;
+    if (!q) return '';
+    if (q.mode !== 'auto') return t(`quality.${q.mode}`);
+    return t('ui.qualityAuto', { q: t(`quality.${QUALITY_LEVELS[q.level]}`) });
+  }
+
   toggleStats(): void {
     if (this.compact) return this.toggleSheet('stats');
     this.state.stats = !this.state.stats;
@@ -358,6 +369,8 @@ export class Hud {
               <button data-a="menu" data-v="1" title="${t('ui.more')}" aria-label="${t('ui.more')}">${ICON.more}</button>
               <div class="pop hidden">
                 <div class="perf" id="perf"></div>
+                <div class="label" id="quality-label"></div>
+                <div class="opts" id="quality-opts">${QUALITY_MODES.map((m, i) => `<button data-a="quality" data-v="${i}">${t(`quality.${m}`)}</button>`).join('')}</div>
                 <button data-a="help">${t('ui.help')}</button>
                 <button data-a="savePanel" id="btn-save">${t('save.title')}</button>
                 <div class="label">${GLOBE}${t('ui.language')}</div>
@@ -385,6 +398,7 @@ export class Hud {
         ${title}${clock}
         <div class="perf" id="perf"></div>
         <div class="meta">
+          <button data-a="quality" id="btn-quality" title="${t('ui.qualityTitle')}"></button>
           <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
           <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
           <div class="lang" id="lang">
@@ -503,7 +517,8 @@ export class Hud {
     pe.textContent =
       t('ui.perf', { fps: Math.round(fps), n: w.colony.ants.length }) +
       (perf ? t('ui.perfTimes', { sim: perf.sim.toFixed(1), view: (perf.views + perf.render).toFixed(1) }) : '') +
-      (lagging ? t('ui.perfLag', { x: w.effectiveSpeed.toFixed(1) }) : '');
+      (lagging ? t('ui.perfLag', { x: w.effectiveSpeed.toFixed(1) }) : '') +
+      (this.quality?.idle ? t('ui.perfIdle') : '');
     pe.classList.toggle('lag', lagging);
     if (perf) pe.title = t('ui.perfTitle', { sim: perf.sim.toFixed(2), views: perf.views.toFixed(2), render: perf.render.toFixed(2) });
     this.top.querySelectorAll<HTMLButtonElement>('[data-a="speed"]').forEach((b) => {
@@ -514,6 +529,9 @@ export class Hud {
     if (sm) sm.textContent = `${c.speed}×`;
     document.body.classList.toggle('show-info', !!sel);
     document.getElementById('btn-background')!.classList.toggle('on', this.state.background && !BACKGROUND_LIMITED);
+    const ql = document.getElementById(this.compact ? 'quality-label' : 'btn-quality');
+    if (ql) ql.textContent = t('ui.quality', { q: this.qualityLabel() });
+    this.top.querySelectorAll<HTMLElement>('#quality-opts button').forEach((b) => b.classList.toggle('on', QUALITY_MODES[Number(b.dataset.v)] === this.quality?.mode));
     const s = this.state;
     document.getElementById('btn-xray')!.classList.toggle('on', s.xray || s.forcedXray);
     document.getElementById('btn-pheromone')!.classList.toggle('on', s.pheromone);
