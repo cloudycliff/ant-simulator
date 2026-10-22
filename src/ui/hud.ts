@@ -27,6 +27,8 @@ export type HudAction =
   | 'tool'
   | 'toolopt'
   | 'toolexit'
+  | 'toolPlace'
+  | 'toolRotate'
   | 'removePlaced'
   | 'removePredator'
   | 'savePanel'
@@ -42,6 +44,8 @@ const GLOBE =
   '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.4"/><ellipse cx="8" cy="8" rx="2.7" ry="6.4"/><path d="M1.8 6h12.4M1.8 10h12.4"/></g></svg>';
 const REPO_URL = 'https://github.com/cloudycliff/ant-simulator';
 const HELP_LINES = ['help.move', 'help.mouse', 'help.click', 'help.events', 'help.follow', 'help.views', 'help.tools'] as const;
+const TOUCH_HELP_LINES = ['help.touchMove', 'help.touchTap', 'help.events', 'help.touchTools'] as const;
+const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
 function bar(v: number, color: string): string {
   const p = Math.round(Math.max(0, Math.min(1, v)) * 100);
@@ -266,7 +270,7 @@ export class Hud {
           ${TOOLS.map((d, i) => `<button data-a="tool" data-v="${i}" title="${t('ui.toolTitle', { key: d.key })}">${tr(d.name)} <kbd>${d.key}</kbd></button>`).join('')}
         </div>
       </div>`;
-    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + HELP_LINES.map((k) => `<div>${t(k)}</div>`).join('');
+    this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + (isTouch() ? TOUCH_HELP_LINES : HELP_LINES).map((k) => `<div>${t(k)}</div>`).join('');
     this.legendEl.innerHTML = `
       <div><i style="background:linear-gradient(90deg,#ff7a2a,#fff07a)"></i>${t('legend.trail')}</div>
       <div><i style="background:#3c96ff"></i>${t('legend.home')}</div>
@@ -386,19 +390,25 @@ export class Hud {
     const active = tc?.active ?? -1;
     this.top.querySelectorAll<HTMLButtonElement>('[data-a="tool"]').forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === active));
     document.body.classList.toggle('tooling', active >= 0);
-    const key = tc && active >= 0 ? `${active}:${tc.option[active]}` : '';
+    const key = tc && active >= 0 ? `${active}:${tc.option[active]}:${tc.pending ? 1 : 0}` : '';
     if (key === this.toolKey) return;
     this.toolKey = key;
     this.toolEl.classList.toggle('hidden', !key);
     if (!tc || !key) return;
     const d = TOOLS[active];
     const cur = tc.option[active];
+    const touch = isTouch();
+    const actions = [
+      d.options[cur].len ? `<button data-a="toolRotate">${t('tool.rotate')} <kbd>R</kbd></button>` : '',
+      tc.pending ? `<button data-a="toolPlace" class="place">${t('tool.place')}</button>` : touch ? `<span class="tap">${t('tool.tapHint')}</span>` : '',
+    ].join('');
     this.toolEl.innerHTML = `
       <div class="head"><b>${tr(d.name)}</b><span>${tr(d.hint)}</span></div>
       <div class="opts">
         ${d.options.map((o, i) => `<button data-a="toolopt" data-v="${i}" class="${i === cur ? 'on' : ''}">${cap(tr(o.label))}</button>`).join('')}
         <button data-a="toolexit" class="exit">${t('tool.exit')} <kbd>Esc</kbd></button>
-      </div>`;
+      </div>
+      ${actions ? `<div class="opts acts">${actions}</div>` : ''}`;
   }
 
   private layout(): void {

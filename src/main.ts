@@ -109,7 +109,11 @@ async function boot(): Promise<void> {
   hud.tools = tools;
   scene.add(tools.preview);
   let mouse: { x: number; y: number } | null = null;
-  renderer.domElement.addEventListener('pointermove', (e) => (mouse = { x: e.clientX, y: e.clientY }));
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'touch') mouse = { x: e.clientX, y: e.clientY };
+  });
+  // iOS Safari 不认 touch-action 时仍会整页缩放
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
   renderer.domElement.addEventListener('pointerleave', () => (mouse = null));
   const groundPt = new THREE.Vector3();
 
@@ -276,6 +280,12 @@ async function boot(): Promise<void> {
       case 'toolexit':
         tools.exit();
         break;
+      case 'toolPlace':
+        if (tools.pending && applyTool(tools.pending)) tools.pending = null;
+        break;
+      case 'toolRotate':
+        tools.rotate();
+        break;
       case 'removePlaced': {
         const r = world.removePlacedById(v ?? -1);
         if (r.msg) hud.toast(tr(r.msg));
@@ -337,23 +347,31 @@ async function boot(): Promise<void> {
     hud.refresh(selection, fps);
   };
 
-  const useTool = (x: number, y: number) => {
-    tools.hover(picker.groundPoint(x, y, groundPt));
+  const applyTool = (p: THREE.Vector3 | null): boolean => {
+    tools.hover(p);
     const r = tools.apply();
     if (r.msg) hud.toast(tr(r.msg));
     if (r.ok) {
       hud.refresh(selection, fps);
       if (hud.state.pheromone) world.pheromone.refreshTexture();
     }
+    return r.ok;
   };
+  const TOUCH_PICK_PX = 32;
 
-  controller.onClick = (x, y) => {
-    if (tools.active >= 0) return useTool(x, y);
-    select(picker.pick(x, y, xrayOn()));
+  controller.onClick = (x, y, touch) => {
+    if (tools.active >= 0) {
+      if (!touch) return void applyTool(picker.groundPoint(x, y, groundPt));
+      tools.pending = picker.groundPoint(x, y)?.clone() ?? null;
+      if (!tools.pending) hud.toast(t('tool.clickGround'));
+      hud.renderTool();
+      return;
+    }
+    select(picker.pick(x, y, xrayOn(), touch ? TOUCH_PICK_PX : undefined));
   };
-  controller.onDoubleClick = (x, y) => {
+  controller.onDoubleClick = (x, y, touch) => {
     if (tools.active >= 0) return;
-    const s = picker.pick(x, y, xrayOn());
+    const s = picker.pick(x, y, xrayOn(), touch ? TOUCH_PICK_PX : undefined);
     if (s) {
       select(s);
       flyToSelection();
@@ -512,7 +530,7 @@ async function boot(): Promise<void> {
       focus.y = world.terrain.heightAt(focus.x, focus.z);
     }
 
-    if (tools.active >= 0) tools.hover(mouse ? picker.groundPoint(mouse.x, mouse.y, groundPt) : null);
+    if (tools.active >= 0) tools.hover(tools.pending ?? (mouse ? picker.groundPoint(mouse.x, mouse.y, groundPt) : null));
     world.veg.update(dt, world.weather.rain);
     world.aphids.sync();
     world.predators.sync(time);
@@ -549,7 +567,7 @@ async function boot(): Promise<void> {
   hud.refresh(selection, fps);
   requestAnimationFrame(frame);
 
-  (window as unknown as { world: World }).world = world;
+  Object.assign(window, { world, camera, controller });
 }
 
 boot();

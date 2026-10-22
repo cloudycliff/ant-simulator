@@ -74,7 +74,8 @@ export class Picker {
     return null;
   }
 
-  pick(clientX: number, clientY: number, xray: boolean): Selection | null {
+  /** tolerance：蚂蚁的点选容差（像素），手指点选时放宽 */
+  pick(clientX: number, clientY: number, xray: boolean, tolerance = 16): Selection | null {
     const rect = this.dom.getBoundingClientRect();
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
@@ -89,7 +90,7 @@ export class Picker {
       const px = (_v.x * 0.5 + 0.5) * rect.width;
       const py = (-_v.y * 0.5 + 0.5) * rect.height;
       const d = Math.hypot(px - sx, py - sy);
-      if (d > 16) continue;
+      if (d > tolerance) continue;
       const camD = a.pos.distanceTo(this.camera.position);
       const score = d + camD * 0.02;
       if (score < bestScore) {
@@ -120,8 +121,8 @@ export class Picker {
     if (bestAnt >= 0) {
       const a = this.world.colony.antById(bestAnt)!;
       const antDist = a.pos.distanceTo(this.camera.position);
-      // 点在房间内部时优先选中蚂蚁；地表物体比蚂蚁更近时选物体
-      if (!hitSel || hitSel.kind === 'chamber' || antDist < hitDist + 2) return { kind: 'ant', id: bestAnt };
+      // 点在房间内部或垃圾堆上时优先选中蚂蚁（这两种范围大，很少需要专门点）；其他地表物体比蚂蚁更近时选物体
+      if (!hitSel || hitSel.kind === 'chamber' || hitSel.kind === 'midden' || antDist < hitDist + 2) return { kind: 'ant', id: bestAnt };
     }
     return hitSel;
   }

@@ -66,6 +66,8 @@ export class ToolController {
   active = -1;
   option = TOOLS.map(() => 0);
   yaw = 0;
+  /** 触屏上点地面先选好的位置，确认后才放下（手指没有悬停，看不到预览） */
+  pending: THREE.Vector3 | null = null;
   readonly preview = new THREE.Group();
   private ring: THREE.Mesh;
   private stick: THREE.Mesh;
@@ -93,7 +95,10 @@ export class ToolController {
   /** 选择工具；再次选择同一工具时切换到下一个选项 */
   select(i: number): void {
     if (this.active === i) this.option[i] = (this.option[i] + 1) % TOOLS[i].options.length;
-    else this.active = i;
+    else {
+      this.active = i;
+      this.pending = null;
+    }
   }
 
   setOption(i: number): void {
@@ -102,6 +107,7 @@ export class ToolController {
 
   exit(): void {
     this.active = -1;
+    this.pending = null;
     this.preview.visible = false;
   }
 

@@ -46,9 +46,9 @@ src/
     environment.ts      天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗
     rain.ts             雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
   ui/
-    camera.ts           自由飞行 / 跟随相机、平滑飞向目标
-    picking.ts          点选（蚂蚁屏幕空间 + 物体射线）；groundPoint 用解析高度场求鼠标下的地面点
-    tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法
+    camera.ts           自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理
+    picking.ts          点选（蚂蚁屏幕空间 + 物体射线，容差可调，触屏 32 像素）；groundPoint 用解析高度场求鼠标下的地面点
+    tools.ts            干预工具：当前工具与选项、放置预览圈（绿 / 红）、点击时调用 World 的干预方法；触屏先记下 pending 位置，确认后再放
     saveSlot.ts         存档在 localStorage 中的读写（完整存档 + 一份小摘要）
     lang.ts             选择界面语言（网址参数、上次的选择、浏览器语言）与切换
     background.ts       后台运行：页面隐藏时用 Worker 节拍继续推进模拟
@@ -245,3 +245,10 @@ npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
 ```
 npx tsx -e "import { World } from './src/world/world'; const w = new World(); for (const c of w.nest.chambers) console.log(c.id, c.name, c.floor.toArray().map(v=>v.toFixed(1)).join(','))"
 ```
+
+### 触屏与鼠标操作
+```
+node scripts/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置
+node scripts/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置
+```
+需要先 `npm run dev`。脚本直接启动无头 Chrome，通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller` 判断结果。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。

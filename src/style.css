@@ -12,6 +12,16 @@ body {
   font-size: 13px;
   user-select: none;
 }
+/* 屏蔽浏览器的双击缩放和下拉刷新；画布上的手势全部由相机处理 */
+html,
+body {
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#app canvas {
+  touch-action: none;
+}
 #app,
 #app canvas {
   position: fixed;
@@ -431,6 +441,13 @@ html:lang(en) #events {
   padding: 8px 12px 10px;
   max-width: 620px;
 }
+@media (max-width: 1039px) {
+  #tool {
+    left: 50%;
+    width: max-content;
+    max-width: calc(100vw - 20px);
+  }
+}
 #tool .head {
   display: flex;
   gap: 10px;
@@ -451,6 +468,20 @@ html:lang(en) #events {
 }
 #tool .opts .exit {
   margin-left: auto;
+}
+#tool .acts {
+  margin-top: 6px;
+  align-items: center;
+}
+#tool .acts .place {
+  background: #c9822f;
+  border-color: #e9a34f;
+  color: #fff;
+  padding: 6px 16px;
+}
+#tool .acts .tap {
+  font-size: 12px;
+  color: #b8ae9c;
 }
 #save {
   right: 10px;
