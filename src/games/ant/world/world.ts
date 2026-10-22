@@ -5,9 +5,10 @@ import { TAU } from '../../../core/util/math';
 import { Rng } from '../../../core/util/random';
 import { Nest, type Chamber } from '../nest/nest';
 import type { Ant } from '../sim/ant';
-import { Colony, type EventRef } from '../sim/colony';
+import { Colony } from '../sim/colony';
 import { AlarmField } from './alarm';
 import { AphidManager } from './aphids';
+import { defineEntities, type GameRef } from './entities';
 import { FoodManager, SOURCE_INFO, type FoodSourceType } from './food';
 import { PheromoneField } from './pheromone';
 import { PREDATOR_INFO, PredatorManager, Spider, type Predator, type PredatorKind } from './predators';
@@ -27,7 +28,7 @@ const fail = (k: MsgKey): ToolResult => ({ ok: false, msg: L(k) });
 const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 'dir.7'] as const;
 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
-export class World extends Simulation<EventRef> {
+export class World extends Simulation<GameRef> {
   readonly rng: Rng;
   readonly soil: Soil;
   readonly terrain: Terrain;
@@ -66,7 +67,7 @@ export class World extends Simulation<EventRef> {
     this.weather = new WeatherSystem(this.rng);
     this.colony = new Colony(this);
     this.colony.init();
-    this.events.locate = (r) => this.colony.refPos(r);
+    defineEntities(this);
 
     this.addSystem('weather', (dt) => this.weather.update(dt, this));
     this.addSystem('colony', (dt) => this.colony.update(dt));

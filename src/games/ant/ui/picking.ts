@@ -1,19 +1,8 @@
 import * as THREE from 'three';
 import type { Space } from '../../../core/space/space';
 import type { AntView } from '../render/antView';
+import type { GameRef } from '../world/entities';
 import type { World } from '../world/world';
-
-export type Selection =
-  | { kind: 'ant'; id: number }
-  | { kind: 'chamber'; id: number }
-  | { kind: 'food'; id: number }
-  | { kind: 'entrance'; id: number }
-  | { kind: 'midden' }
-  | { kind: 'stone' }
-  | { kind: 'plant'; id: number }
-  | { kind: 'placed'; id: number }
-  | { kind: 'puddle'; id: number }
-  | { kind: 'predator'; id: number };
 
 const _v = new THREE.Vector3();
 
@@ -47,7 +36,7 @@ export class Picker {
   }
 
   /** tolerance：蚂蚁的点选容差（像素），手指点选时放宽 */
-  pick(clientX: number, clientY: number, xray: boolean, tolerance = 16): Selection | null {
+  pick(clientX: number, clientY: number, xray: boolean, tolerance = 16): GameRef | null {
     const rect = this.dom.getBoundingClientRect();
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
@@ -79,13 +68,13 @@ export class Picker {
     if (xray) objects.push(...this.targets.chambers);
     else objects.push(this.targets.terrain);
     const hits = this.ray.intersectObjects(objects, true);
-    let hitSel: Selection | null = null;
+    let hitSel: GameRef | null = null;
     let hitDist = Infinity;
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
       while (o && !o.userData.pick && o.name !== 'terrain') o = o.parent;
       if (!o || o.name === 'terrain') break;
-      hitSel = o.userData.pick as Selection;
+      hitSel = o.userData.pick as GameRef;
       hitDist = h.distance;
       break;
     }

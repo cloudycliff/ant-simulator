@@ -1,5 +1,6 @@
 import { ENGINE } from '../config';
 import { SimClock } from './clock';
+import { EntityRegistry, type EntityRef } from './entities';
 import { EventLog } from './events';
 import { SaveRegistry } from './saves';
 
@@ -10,13 +11,14 @@ export interface SimSystem {
 }
 
 /**
- * 模拟内核：时钟、按固定步长依次推进的子系统、存档的各部分、最近事件。
+ * 模拟内核：时钟、按固定步长依次推进的子系统、存档的各部分、实体注册表、最近事件。
  * 游戏的世界继承它，在构造时登记自己的子系统和存档部分。不依赖渲染和 DOM
  */
-export class Simulation<R = unknown> {
+export class Simulation<R extends EntityRef = EntityRef> {
   readonly clock: SimClock;
   readonly systems: SimSystem[] = [];
   readonly saves = new SaveRegistry();
+  readonly entities = new EntityRegistry<R>();
   readonly events: EventLog<R>;
   private acc = 0;
   /** 最近一帧实际执行的模拟步数（性能面板用） */
@@ -27,6 +29,7 @@ export class Simulation<R = unknown> {
   constructor(dayLength: number, startHour: number) {
     this.clock = new SimClock(dayLength, startHour);
     this.events = new EventLog<R>(this.clock);
+    this.events.locate = (r) => this.entities.pos(r);
     this.saves.add(
       'clock',
       () => ({ seconds: this.clock.seconds, speed: this.clock.speed }),

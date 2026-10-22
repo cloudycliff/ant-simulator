@@ -1,5 +1,5 @@
 /**
- * 框架层的单元测试，不依赖任何游戏：空间求交、存档登记、事件记录、模拟内核、词典登记。
+ * 框架层的单元测试，不依赖任何游戏：空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
  * npx tsx scripts/coretest.ts
  */
 import * as THREE from 'three';
@@ -62,7 +62,8 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
 
 // ---------------- 模拟内核与事件 ----------------
 {
-  const sim = new Simulation<{ id: number }>(600, 6);
+  type Ref = { kind: 'bug'; id: number } | { kind: 'rock' };
+  const sim = new Simulation<Ref>(600, 6);
   const seen: string[] = [];
   sim.addSystem('first', () => seen.push('1'));
   sim.addSystem('second', () => seen.push('2'));
@@ -78,13 +79,24 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
   sim.advance(1, Infinity, 5);
   check('每帧最多 maxSteps 步', sim.lastSteps === 5, sim.lastSteps);
 
-  sim.events.locate = (r) => (r.id === 1 ? { x: 1, y: 2, z: 3 } : null);
-  for (let i = 0; i < 12; i++) sim.events.push(L('raw', { s: `e${i}` }), { id: i % 3 });
+  const bug = { x: 1, y: 2, z: 3 };
+  sim.entities.define('bug', { pos: (r) => (r.id === 1 ? bug : null), viewDistance: 5, follow: true, unstable: true });
+  sim.entities.define('rock', {});
+  check('实体：位置、观察距离、能否跟随', sim.entities.pos({ kind: 'bug', id: 1 }) === bug && sim.entities.viewDistance({ kind: 'bug', id: 1 }) === 5 && sim.entities.canFollow({ kind: 'bug', id: 0 }));
+  check('实体：没给的项取默认值', sim.entities.pos({ kind: 'rock' }) === null && sim.entities.viewDistance({ kind: 'rock' }) === sim.entities.defaultViewDistance && !sim.entities.canFollow({ kind: 'rock' }) && sim.entities.stable({ kind: 'rock' }));
+  let dup = false;
+  try {
+    sim.entities.define('rock', {});
+  } catch {
+    dup = true;
+  }
+  check('实体类型重复登记时报错', dup);
+  for (let i = 0; i < 12; i++) sim.events.push(L('raw', { s: `e${i}` }), i % 3 === 2 ? { kind: 'rock' } : { kind: 'bug', id: i % 3 });
   const e = sim.events.entries;
   check('事件最多 8 条，新的在前', e.length === 8 && tr(e[0].msg) === 'e11', e.map((x) => tr(x.msg)).join(' '));
-  check('省略位置时取对象现在的位置', e.find((x) => x.ref?.id === 1)?.at?.join(',') === '1,2,3');
-  const s = sim.events.toSave((r) => r.id !== 2);
-  check('不稳定的对象存档时只留位置', s.every((x) => x.ref?.id !== 2) && s.length === 8);
+  check('省略位置时取实体注册表里的位置', e.find((x) => x.ref?.kind === 'bug' && x.ref.id === 1)?.at?.join(',') === '1,2,3');
+  const s = sim.events.toSave((r) => sim.entities.stable(r));
+  check('不稳定的对象存档时只留位置', s.every((x) => x.ref?.kind !== 'bug') && s.some((x) => x.ref?.kind === 'rock') && s.length === 8);
   sim.events.restore([{ t: '第1天 08:00', msg: '旧存档里拼好的文字' }]);
   check('读旧格式的事件', tr(sim.events.entries[0].msg) === '旧存档里拼好的文字');
   const saved = sim.saves.save() as { clock: { seconds: number; speed: number } };

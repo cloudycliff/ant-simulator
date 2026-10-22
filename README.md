@@ -86,7 +86,7 @@ Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：�
 | 参数 | 作用 |
 |---|---|
 | `?cam=x,y,z,tx,ty,tz` | 初始相机位置和注视点 |
-| `?select=ant:1`、`chamber:4` 或 `plant:0` | 开局选中对象（`ant:1` 是蚁后，`plant:0` 是第一株蚜虫寄主植物） |
+| `?select=类型:编号` | 开局选中对象，类型见 `src/games/ant/world/entities.ts`，如 `ant:1`（蚁后）、`chamber:4`、`plant:0`（第一株蚜虫寄主植物）、`entrance:0` |
 | `&follow=1` / `&fly=1` | 配合 `select`：跟随 / 飞到选中对象 |
 | `?hour=21.5` | 快进到下一个指定时刻 |
 | `?skip=1500` | 开局先在后台快进模拟若干秒（上限 20000），用来直接观察扩建等慢过程 |

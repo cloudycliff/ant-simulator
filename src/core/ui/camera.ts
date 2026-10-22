@@ -31,7 +31,7 @@ export class CameraController {
   private followDist = 7;
   private followTheta = 0.6;
   private followPhi = 0.9;
-  private getFollow: (() => THREE.Vector3 | null) | null = null;
+  private getFollow: (() => THREE.Vector3Like | null) | null = null;
   private fly: { from: THREE.Vector3; to: THREE.Vector3; look: THREE.Vector3; t: number; fromQ: THREE.Quaternion; toQ: THREE.Quaternion } | null = null;
   /** touch：这次点击来自手指，点选时放宽容差 */
   onClick: ((x: number, y: number, touch: boolean) => void) | null = null;
@@ -281,7 +281,7 @@ export class CameraController {
     this.camera.position.addScaledVector(fwd, -s);
   }
 
-  follow(getter: () => THREE.Vector3 | null): void {
+  follow(getter: () => THREE.Vector3Like | null): void {
     const p = getter();
     if (!p) return;
     this.getFollow = getter;
@@ -302,8 +302,9 @@ export class CameraController {
   }
 
   /** 平滑飞到能看到目标的位置 */
-  flyTo(target: THREE.Vector3, dist: number): void {
+  flyTo(at: THREE.Vector3Like, dist: number): void {
     this.stopFollow();
+    const target = new THREE.Vector3().copy(at);
     const dir = this.camera.position.clone().sub(target);
     dir.y = Math.max(dir.y, 0.2);
     dir.normalize();

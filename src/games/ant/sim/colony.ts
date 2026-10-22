@@ -12,12 +12,7 @@ import { Item, type ItemSave, type ItemType } from './items';
 import { routineFor, shelter } from './routines';
 import { SpatialHash } from '../../../core/sim/spatial';
 import type { SimEventSave } from '../../../core/sim/events';
-
-/** 事件涉及的对象：界面上点击事件时选中它并飞过去 */
-export type EventRef = { kind: 'ant' | 'chamber' | 'entrance' | 'food' | 'plant' | 'predator' | 'placed'; id: number };
-
-/** 读档后狼蛛、蚁狮、食物源、玩家障碍物的编号会重新分配，存档里只留位置 */
-const UNSTABLE_REFS = new Set<EventRef['kind']>(['food', 'predator', 'placed']);
+import type { GameRef } from '../world/entities';
 
 export interface ColonyStats {
   eggsLaid: number;
@@ -64,7 +59,7 @@ export interface ColonySave {
   stats: ColonyStats;
   history: ColonySample[];
   /** 事件记录在 World.events，存档格式里放在蚁群下面 */
-  events: SimEventSave<EventRef>[];
+  events: SimEventSave<GameRef>[];
   expansion: ExpansionSave;
 }
 
@@ -209,7 +204,7 @@ export class Colony {
       targets: { ...this.targets },
       stats: { ...this.stats },
       history: this.history.map((h) => ({ ...h, day: Math.round(h.day * 1e4) / 1e4, food: r2(h.food), liquid: r2(h.liquid) })),
-      events: this.w.events.toSave((r) => !UNSTABLE_REFS.has(r.kind)),
+      events: this.w.events.toSave((r) => this.w.entities.stable(r)),
       expansion: this.expansion.toSave(),
     };
   }
@@ -615,38 +610,6 @@ export class Colony {
     if (ant.domain === 'surface') this.dropOnSurface(it, ant.pos.x, ant.pos.z);
     else if (ant.room >= 0) this.addToChamber(it, this.w.nest.chambers[ant.room], ant.pos);
     else this.dropAtNode(it, ant.currentNode(this.w), ant.pos);
-  }
-
-  /** 事件对象现在的位置，不在了返回 null */
-  refPos(ref: EventRef): { x: number; y: number; z: number } | null {
-    const w = this.w;
-    const ground = (x: number, z: number, lift = 0) => ({ x, y: w.terrain.heightAt(x, z) + lift, z });
-    switch (ref.kind) {
-      case 'ant':
-        return this.antById(ref.id)?.pos ?? null;
-      case 'chamber':
-        return w.nest.chambers[ref.id]?.floor ?? null;
-      case 'entrance': {
-        const e = w.nest.entrances[ref.id];
-        return e ? ground(e.x, e.z) : null;
-      }
-      case 'food': {
-        const f = w.food.byId(ref.id);
-        return f ? { x: f.x, y: f.y, z: f.z } : null;
-      }
-      case 'plant': {
-        const p = w.veg.plants[ref.id];
-        return p ? { x: p.x, y: p.baseY + 4, z: p.z } : null;
-      }
-      case 'predator': {
-        const p = w.predators.byId(ref.id);
-        return p ? ground(p.x, p.z, 1) : null;
-      }
-      case 'placed': {
-        const p = w.veg.placedById(ref.id);
-        return p ? ground(p.x, p.z) : null;
-      }
-    }
   }
 
   update(dt: number): void {

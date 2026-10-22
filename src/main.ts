@@ -10,7 +10,8 @@ import { AntView } from './games/ant/render/antView';
 import { ItemView } from './games/ant/render/itemView';
 import { Environment } from './core/render/environment';
 import { CameraController } from './core/ui/camera';
-import { Picker, type Selection } from './games/ant/ui/picking';
+import { Picker } from './games/ant/ui/picking';
+import type { GameRef } from './games/ant/world/entities';
 import { Hud, type HudAction } from './games/ant/ui/hud';
 import { ToolController } from './games/ant/ui/tools';
 import { chooseLang, initLang } from './core/platform/lang';
@@ -129,7 +130,7 @@ async function boot(): Promise<void> {
   renderer.domElement.addEventListener('pointerleave', () => (mouse = null));
   const groundPt = new THREE.Vector3();
 
-  let selection: Selection | null = null;
+  let selection: GameRef | null = null;
   let xrayApplied: boolean | null = null;
 
   const xrayOn = () => hud.state.xray || hud.state.forcedXray;
@@ -148,52 +149,18 @@ async function boot(): Promise<void> {
     antView.roleColors = hud.state.roleColors;
   };
 
-  const selectionPos = (sel: Selection | null): THREE.Vector3 | null => {
-    if (!sel) return null;
-    switch (sel.kind) {
-      case 'ant':
-        return world.colony.antById(sel.id)?.pos.clone() ?? null;
-      case 'chamber':
-        return world.nest.chambers[sel.id].floor.clone();
-      case 'food': {
-        const f = world.food.byId(sel.id);
-        return f ? new THREE.Vector3(f.x, f.y, f.z) : null;
-      }
-      case 'entrance': {
-        const e = world.nest.entrances[sel.id];
-        return new THREE.Vector3(e.x, world.terrain.heightAt(e.x, e.z), e.z);
-      }
-      case 'midden': {
-        const m = world.colony.midden;
-        return new THREE.Vector3(m.x, world.terrain.heightAt(m.x, m.z), m.z);
-      }
-      case 'plant': {
-        const p = world.veg.plants[sel.id];
-        const ac = world.aphids.byPlant(sel.id);
-        return p ? new THREE.Vector3(p.x, ac ? ac.bandLo : p.baseY + 4, p.z) : null;
-      }
-      case 'predator': {
-        const p = world.predators.byId(sel.id);
-        return p ? new THREE.Vector3(p.x, world.terrain.heightAt(p.x, p.z) + 1, p.z) : null;
-      }
-      default:
-        return null;
-    }
-  };
-
-  const select = (sel: Selection | null) => {
+  const select = (sel: GameRef | null) => {
     selection = sel;
     antView.selectedId = sel?.kind === 'ant' ? sel.id : -1;
     nestView.highlightChamber(sel?.kind === 'chamber' ? sel.id : null);
-    if (controller.mode === 'follow' && sel?.kind !== 'ant') controller.stopFollow();
+    if (controller.mode === 'follow' && !(sel && world.entities.canFollow(sel))) controller.stopFollow();
     if (sel && hud.compact) hud.hideHelp();
   };
 
   const flyToSelection = () => {
-    const p = selectionPos(selection);
-    if (!p || !selection) return;
-    const dist = selection.kind === 'ant' ? 6 : selection.kind === 'chamber' ? 26 : 14;
-    controller.flyTo(p, dist);
+    if (!selection) return;
+    const p = world.entities.pos(selection);
+    if (p) controller.flyTo(p, world.entities.viewDistance(selection));
   };
 
   const toggleFollow = () => {
@@ -201,12 +168,12 @@ async function boot(): Promise<void> {
       controller.stopFollow();
       return;
     }
-    if (selection?.kind !== 'ant') {
+    const sel = selection;
+    if (!sel || !world.entities.canFollow(sel)) {
       hud.toast(t('toast.selectAntFirst'));
       return;
     }
-    const id = selection.id;
-    controller.follow(() => world.colony.antById(id)?.pos ?? null);
+    controller.follow(() => world.entities.pos(sel));
     hud.toast(t('toast.following'));
   };
 
@@ -359,13 +326,13 @@ async function boot(): Promise<void> {
   };
   hud.onAction = action;
   hud.onEvent = (e) => {
-    const sel: Selection | undefined = e.ref;
-    if (sel && selectionPos(sel)) {
+    const sel = e.ref;
+    if (sel && world.entities.pos(sel)) {
       select(sel);
       flyToSelection();
     } else if (e.at) {
       select(null);
-      controller.flyTo(new THREE.Vector3(...e.at), 14);
+      controller.flyTo(new THREE.Vector3(...e.at), world.entities.defaultViewDistance);
       if (sel) hud.toast(t('toast.eventGone'));
     }
     hud.refresh(selection, fps);
@@ -469,10 +436,8 @@ async function boot(): Promise<void> {
   }
   const selParam = params.get('select')?.split(':');
   if (selParam?.length === 2) {
-    const id = Number(selParam[1]);
-    if (selParam[0] === 'ant' && world.colony.antById(id)) select({ kind: 'ant', id });
-    if (selParam[0] === 'chamber' && world.nest.chambers[id]) select({ kind: 'chamber', id });
-    if (selParam[0] === 'plant' && world.veg.plants[id]) select({ kind: 'plant', id });
+    const ref = { kind: selParam[0], id: Number(selParam[1]) } as GameRef;
+    if (world.entities.has(ref.kind) && world.entities.pos(ref)) select(ref);
     if (params.get('follow') === '1') toggleFollow();
     else if (params.get('fly') === '1') flyToSelection();
   }
@@ -558,10 +523,9 @@ async function boot(): Promise<void> {
     }
     hud.state.following = controller.mode === 'follow';
 
-    if (controller.mode === 'follow' && selection?.kind === 'ant') {
-      const a = world.colony.antById(selection.id);
-      if (a) focus.copy(a.pos);
-    } else {
+    const followed = controller.mode === 'follow' && selection ? world.entities.pos(selection) : null;
+    if (followed) focus.copy(followed);
+    else {
       camera.getWorldDirection(fwd);
       const h = Math.max(4, cp.y - space.surfaceAt(cp.x, cp.z));
       focus.copy(cp).addScaledVector(fwd, Math.min(60, h * 1.6));

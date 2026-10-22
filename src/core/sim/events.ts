@@ -21,7 +21,7 @@ export type SimEventSave<R> = Omit<SimEvent<R>, 'msg'> & { msg: Text | string };
 /** 最近事件，新的在前 */
 export class EventLog<R> {
   entries: SimEvent<R>[] = [];
-  /** 事件对象现在的位置，不在了返回 null；由游戏提供 */
+  /** 事件对象现在的位置，不在了返回 null；Simulation 里默认查实体注册表 */
   locate: (ref: R) => Point3 | null = () => null;
 
   constructor(

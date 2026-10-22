@@ -27,6 +27,7 @@ src/
     sim/                不依赖 WebGL 和 DOM
       simulation.ts     Simulation：模拟内核。时钟、按登记顺序每步推进的子系统、存档登记、最近事件、advance（固定步长、帧预算、实际倍速）
       saves.ts          SaveRegistry：存档的各部分（字段名、保存、恢复、是否可选），读档按登记顺序恢复
+      entities.ts       EntityRegistry：每类对象的位置、相机观察距离、能否跟随、读档后编号是否还对得上；选中、飞过去、跟随、事件定位都查它
       events.ts         EventLog：最近事件（时刻、文字、涉及的对象、位置），对象的位置由游戏提供
       clock.ts          SimClock：游戏日、时刻、昼夜；一天多长、几点开局由游戏传入
       spatial.ts        SpatialHash：每步重建的均匀网格，用于近邻查询；放什么由游戏定（有 pos 和 alive 即可）
@@ -54,6 +55,7 @@ src/
       expansion.ts      NestExpansion：拥挤度、规划新房间、分配挖掘工作面、推进隧道和房间的挖掘
     world/
       world.ts          World（继承 Simulation）：组装所有模拟子系统，登记每步的更新顺序和存档的各部分；房间温度（含石块加温）
+      entities.ts       GameRef（能选中、能出现在事件里的对象）与各类对象在实体注册表里的登记
       soil.ts           Soil：土壤温湿度模型（随深度衰减的日较差、阴雨降温、地面湿润）
       terrain.ts        解析式高度场、蚁丘、草被密度、地形网格
       vegetation.ts     草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
@@ -78,8 +80,9 @@ src/
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
   layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
-  coretest.ts           框架层单元测试：高度场求交、存档登记、事件记录、模拟内核的推进、词典重名
+  coretest.ts           框架层单元测试：高度场求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
   saveui.mjs            页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
+  selecttest.mjs        页面里的选中、跟随、按 F 取消、飞到房间、点击事件飞过去
   simtest.ts            无界面模拟测试
   tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
   savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
@@ -94,7 +97,7 @@ docs/                   本文档目录
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EventLog` 的对象位置、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-052。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-053。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
 
 配置也分两份：`src/core/config.ts` 的 `ENGINE` 是框架的（主循环、后台运行、画质、自动保存），`src/games/ant/config.ts` 的 `CONFIG` 是蚂蚁游戏的。
 

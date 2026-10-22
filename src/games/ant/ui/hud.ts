@@ -5,11 +5,11 @@ import { FOOD_KIND_NAMES } from '../world/food';
 import { PREDATOR_INFO, Spider } from '../world/predators';
 import type { SimClock } from '../../../core/sim/clock';
 import { ITEM_NAMES } from '../sim/items';
-import type { ColonySample, EventRef } from '../sim/colony';
+import type { ColonySample } from '../sim/colony';
 import type { SimEvent } from '../../../core/sim/events';
 import { OBSTACLE_INFO } from '../world/vegetation';
 import type { World } from '../world/world';
-import type { Selection } from './picking';
+import type { GameRef } from '../world/entities';
 import { TOOLS, type ToolController } from './tools';
 import type { AntSaveMeta } from '../world/save';
 import { BACKGROUND_LIMITED } from '../../../core/platform/background';
@@ -216,8 +216,8 @@ export class Hud {
   private toastTimer = 0;
   private statsDrawn = -1;
   onAction: ((a: HudAction, arg?: number) => void) | null = null;
-  onEvent: ((e: SimEvent<EventRef>) => void) | null = null;
-  private shownEvents: SimEvent<EventRef>[] = [];
+  onEvent: ((e: SimEvent<GameRef>) => void) | null = null;
+  private shownEvents: SimEvent<GameRef>[] = [];
   private eventsKey = '';
   state = { xray: false, forcedXray: false, pheromone: false, roleColors: false, grass: true, stats: false, following: false, background: true };
   /** 手机布局：一行顶栏 + 底栏，面板改为抽屉（见 updateMode） */
@@ -512,7 +512,7 @@ export class Hud {
     }
   }
 
-  refresh(sel: Selection | null, fps: number, perf?: { sim: number; views: number; render: number }): void {
+  refresh(sel: GameRef | null, fps: number, perf?: { sim: number; views: number; render: number }): void {
     const w = this.world;
     const c = w.clock;
     document.getElementById('clock')!.textContent = tr(c.stamp());
@@ -687,7 +687,7 @@ export class Hud {
       </div>`;
   }
 
-  private renderInfo(sel: Selection | null): void {
+  private renderInfo(sel: GameRef | null): void {
     if (!sel) {
       this.infoEl.classList.add('empty');
       this.infoEl.innerHTML = `<div class="hint">${t('info.hint')}</div>`;
