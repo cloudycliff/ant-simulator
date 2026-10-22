@@ -13,7 +13,7 @@
 - 画质默认“自动”（电脑高、手机中，持续卡顿时降档），可手动选高 / 中 / 低 / 省电；帧率最高 60，暂停不操作时降到 15（DECISIONS T-047）
 - 网页版可以添加到手机主屏幕，像应用一样打开，断网也能玩（DECISIONS T-048）
 - 手机和平板可以用地图式手势操作（DECISIONS T-044）；手机上（横竖屏）换成一行顶栏 + 底栏 + 抽屉的布局，平板沿用桌面布局并加大按钮（DECISIONS T-045）
-- 代码量：`src/` 下约 14970 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 1670 行。`src/core` 是可复用的框架层（约 3600 行），`src/games/ant` 是蚂蚁游戏（约 9200 行），`src/games/aquarium` 是检验框架用的鱼缸示例（约 1200 行，DECISIONS T-049、T-056，框架重构进行中）
+- 代码量：`src/` 下约 14970 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 1670 行。`src/core` 是可复用的框架层（约 3600 行），`src/games/ant` 是蚂蚁游戏（约 9200 行），`src/games/aquarium` 是检验框架用的鱼缸示例（约 1200 行）。框架重构已完成（DECISIONS T-049 到 T-056），怎样用框架做新游戏见 [FRAMEWORK.md](FRAMEWORK.md)
 - 鱼缸示例：https://cyber-ant.cloudycliff.workers.dev/aquarium.html
 - 构建：`npm run build` 通过，游戏是单个 `dist/index.html`（约 790 KB），双击即可运行；鱼缸是 `dist/aquarium.html`（约 570 KB）；`dist/` 里另有网页版用的清单、离线缓存脚本和图标
 - 性能：1000 只蚂蚁每个模拟步约 0.35 ms，3000 只约 1.7 ms（含蚂蚁避让）；无头 Chrome 中 3000 只保持 60 FPS（DECISIONS T-031、T-032）
@@ -609,3 +609,9 @@
 - 部署后发现并修好：蚂蚁游戏的离线缓存脚本会接管同一网址下的鱼缸页，打开鱼缸会顶掉蚂蚁游戏的离线缓存。现在只接管蚂蚁游戏的页面，缓存名升到 v2；`pwatest` 加了一项
 
 **结果**：鱼缸 17 项检查通过，截图正常（桌面、竖屏手机、夜里、英文、喂食）；蚂蚁游戏 `SIM_SEED=7` 跑 5 天，输出与改动前逐行相同；类型、依赖方向、框架单元测试、词典检查通过；存档（含下雨中途存档）、工具、防御、天气、性能测试通过，性能不变；页面存档、选中跟随、触屏、鼠标、画质、添加到主屏幕测试和各屏幕截图通过
+
+### 2026-10-22 · 框架重构（九）：框架文档与文档模板
+
+- 新增 `docs/FRAMEWORK.md`：框架给什么、一个游戏由哪些文件组成、从复制鱼缸示例开始的八个步骤（世界、存档位、空间、视图、游戏模块、文字、验证）、还没有的东西
+- 新增 `docs/templates/`：AGENTS、PROGRESS、DECISIONS、ARCHITECTURE、ROADMAP、BALANCE 六份文档骨架
+- README、AGENTS、ARCHITECTURE 链到新文档。框架重构的九步到此完成

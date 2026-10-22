@@ -116,7 +116,7 @@ scripts/
   i18ncheck.ts          界面文字检查：两个游戏和框架的中英文占位符一致，游戏的键不和框架重名，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
   extract-shots.mjs     从浏览器捕获结果中提取截图
   icons.mjs             从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
-docs/                   本文档目录
+docs/                   本文档目录；FRAMEWORK.md 讲怎样用框架做新游戏，templates/ 是新项目的文档骨架
 ```
 
 ## 分层

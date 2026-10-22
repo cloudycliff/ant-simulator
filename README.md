@@ -109,3 +109,5 @@ Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：�
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 产品与技术决策记录 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 代码结构、模拟与渲染机制、扩展指南、验证工具 |
 | [docs/BALANCE.md](docs/BALANCE.md) | 数值参数一览与调参历史 |
+| [docs/FRAMEWORK.md](docs/FRAMEWORK.md) | 怎样用 `src/core` 框架做一个新的模拟游戏 |
+| [docs/templates/](docs/templates/) | 新项目用的文档骨架（AGENTS 和上面五份） |
