@@ -2,7 +2,7 @@
 
 基于 Three.js 的 Web 版蚂蚁生态模拟。以黑毛蚁 *Lasius niger* 为原型，还原地下蚁穴结构和蚁穴周围的觅食环境。约 1000 只蚂蚁按社会分工自主行动，玩家可以在场景中自由飞行观察，点选蚂蚁、房间和植物查看信息。
 
-**在线试玩：** https://cyber-ant.cloudycliff.workers.dev
+**在线试玩：** https://cyberant.pages.dev
 
 - 工蚁随日龄从保育蚁转为内务蚁、觅食蚁，并按蚁群需要动态调整
 - 甜液装在工蚁的嗉囊（“社会胃”）里，靠嘴对嘴交哺在蚁群中流动
@@ -19,7 +19,7 @@
 
 当前进度：**第三阶段进行中**（干预工具、存档、天敌、警报与防御、天气已完成）。详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
-代码分成可复用的框架层 `src/core` 和游戏内容 `src/games/`。为了检验框架，仓库里还有一个很小的鱼缸示例（霓虹灯鱼、神仙鱼、鼠鱼，可以喂食、敲玻璃）：https://cyber-ant.cloudycliff.workers.dev/aquarium.html ，本地是 `npm run dev` 后打开 http://localhost:5173/aquarium.html 。
+代码分成可复用的框架层 `src/core` 和游戏内容 `src/games/`。为了检验框架，仓库里还有一个很小的鱼缸示例（霓虹灯鱼、神仙鱼、鼠鱼，可以喂食、敲玻璃）：https://cyberant.pages.dev/aquarium.html ，本地是 `npm run dev` 后打开 http://localhost:5173/aquarium.html 。
 
 ## 运行
 
@@ -54,7 +54,7 @@ npx tsx scripts/games/aquarium/aquatest.ts       # 鱼缸示例的无界面检�
 
 ### 部署到 Cloudflare
 
-Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：构建命令 `npm run build`，部署命令 `npx wrangler deploy`，按 `wrangler.jsonc` 把 `dist` 作为静态网站发布，Node 版本由 `.node-version` 指定。之后每次推送到 `main` 都会自动重新部署。网页版的存档保存在该网址下的浏览器本地，和双击打开 HTML 文件的存档互不相通。
+Cloudflare 后台的 Pages 项目 `cyberant` 连接了这个 GitHub 仓库：生产分支 `main`，构建命令 `npm run build`，输出目录 `dist`，Node 版本由 `.node-version` 指定。之后每次推送到 `main` 都会自动重新部署。网页版的存档保存在该网址下的浏览器本地，和双击打开 HTML 文件的存档互不相通。
 
 ## 操作
 

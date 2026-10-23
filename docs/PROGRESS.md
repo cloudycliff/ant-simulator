@@ -8,13 +8,13 @@
 - 第一、二阶段已验收
 - **第三阶段已完成，待验收**：玩家干预工具、存档、天敌、警报与防御、天气、性能、打磨。顺序见 [ROADMAP.md](ROADMAP.md)
 - 界面支持中文和英文：第一次打开按浏览器语言选择，右上角的语言菜单随时切换（DECISIONS T-040、T-041）
-- 已部署到 https://cyber-ant.cloudycliff.workers.dev ，推送到 `main` 自动发布
+- 已部署到 https://cyberant.pages.dev ，推送到 `main` 自动发布
 - 最小化浏览器或切到其他标签页时默认继续运行，顶栏“后台运行”可以关掉（DECISIONS T-042）；手机和平板的浏览器会冻结后台页面，那里的开关只给说明（T-046）
 - 画质默认“自动”（电脑高、手机中，持续卡顿时降档），可手动选高 / 中 / 低 / 省电；帧率最高 60，暂停不操作时降到 15（DECISIONS T-047）
 - 网页版可以添加到手机主屏幕，像应用一样打开，断网也能玩（DECISIONS T-048）
 - 手机和平板可以用地图式手势操作（DECISIONS T-044）；手机上（横竖屏）换成一行顶栏 + 底栏 + 抽屉的布局，平板沿用桌面布局并加大按钮（DECISIONS T-045）
 - 代码量：`src/` 下约 16300 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 2400 行。`src/core` 是可复用的框架层（约 3900 行），`src/games/ant` 是蚂蚁游戏（约 10200 行），`src/games/aquarium` 是检验框架用的鱼缸示例（约 1200 行）。框架重构已完成（DECISIONS T-049 到 T-056），怎样用框架做新游戏见 [FRAMEWORK.md](FRAMEWORK.md)，对外接口见 [API.md](API.md)
-- 鱼缸示例：https://cyber-ant.cloudycliff.workers.dev/aquarium.html
+- 鱼缸示例：https://cyberant.pages.dev/aquarium.html
 - 构建：`npm run build` 通过，游戏是单个 `dist/index.html`（约 790 KB），双击即可运行；鱼缸是 `dist/aquarium.html`（约 570 KB）；`dist/` 里另有网页版用的清单、离线缓存脚本和图标
 - 性能：1000 只蚂蚁每个模拟步约 0.35 ms，3000 只约 1.7 ms（含蚂蚁避让）；无头 Chrome 中 3000 只保持 60 FPS（DECISIONS T-031、T-032）
 
@@ -397,7 +397,7 @@
 **实现**
 - Cloudflare 后台的 Worker 项目 `cyber-ant` 连接 GitHub 仓库，推送到 `main` 自动构建发布；`wrangler.jsonc` 把 `dist` 作为静态网站发布（不写配置时 wrangler 会尝试自动配置，要求 Vite 6 以上而失败），`.node-version` 指定 Node 22
 - 顶栏最右侧加 GitHub 链接，新标签页打开
-- README 加在线试玩地址 https://cyber-ant.cloudycliff.workers.dev
+- README 加在线试玩地址 https://cyber-ant.cloudycliff.workers.dev（后来换成 Pages，见 2026-10-23 · 改用 Cloudflare Pages）
 
 **结果**
 - 线上地址在 Chrome 中正常加载运行，控制台无报错
@@ -745,3 +745,8 @@
 - `aquashots` 的手机喂食截图改点鱼缸中间（原来点在鱼缸上方，一直没喂上）
 
 **结果**：`npm run check` 16 项、`npm run check:ui` 8 项通过；鱼缸截图正常，手机上点选喂食成功
+
+### 2026-10-23 · 改用 Cloudflare Pages
+
+- GitHub 仓库重建（提交的作者信息改为 cloudycliff）后，原来的 Worker 项目和仓库断开了连接。改用 Pages 项目 `cyberant`：生产分支 `main`，构建命令 `npm run build`，输出目录 `dist`
+- 新地址 https://cyberant.pages.dev ，鱼缸示例 https://cyberant.pages.dev/aquarium.html。浏览器里的存档按网址分开保存，旧地址上的存档不会带过来；添加到主屏幕的要从新地址重新添加
