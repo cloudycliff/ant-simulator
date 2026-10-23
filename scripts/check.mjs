@@ -1,5 +1,5 @@
 // 一键检查。用法：
-//   node scripts/check.mjs                 类型、依赖、框架单测、词典、鱼缸，固定编号的模拟和基线对比，蚂蚁的存档、工具、防御、天气、性能测试
+//   node scripts/check.mjs                 类型、依赖、框架单测、词典、鱼缸，固定编号的模拟和基线对比，蚂蚁的存档、工具、防御、天气、瓢虫、性能测试
 //   node scripts/check.mjs --fast          只跑前五项（一分钟内）
 //   node scripts/check.mjs --ui            构建后跑浏览器测试；开发服务器没开时自己起一个
 //   node scripts/check.mjs --all           全部
@@ -76,6 +76,7 @@ const NODE_STEPS = [
   { name: '干预工具', argv: tsx('scripts/games/ant/tooltest.ts') },
   { name: '防御', argv: tsx('scripts/games/ant/defensetest.ts') },
   { name: '天气', argv: tsx('scripts/games/ant/weathertest.ts') },
+  { name: '瓢虫与蚜虫', argv: tsx('scripts/games/ant/ladybugtest.ts'), judge: lastLine(/^全部通过/) },
   { name: '拥挤（3000 只）', argv: tsx('scripts/games/ant/crowdtest.ts'), judge: lastLine(/^休息室最挤/) },
   { name: '性能（3000 只）', argv: tsx('scripts/games/ant/perftest.ts'), judge: lastLine(/^1 倍速/) },
 ];

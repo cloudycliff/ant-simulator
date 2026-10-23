@@ -39,7 +39,7 @@ export function* maintenanceRoutine(a: Ant, w: World): Routine {
 
   // 有扩建工程时大量投入挖掘，否则只缓慢延长现有隧道
   const D = CONFIG.defense;
-  if (w.predators.threatEntrance >= 0 && w.predators.guardsOut < D.maxGuards && w.rng.chance(D.guardProb)) return yield* guard(a, w, true);
+  if (w.predators.threatEntrance >= 0 && w.predators.guardsAll < D.maxGuards && w.rng.chance(D.guardProb)) return yield* guard(a, w, true);
 
   const digP = col.expansion.project ? 0.45 : 0.15;
   const r = w.rng.next();
@@ -192,10 +192,12 @@ export function* dumpSoil(a: Ant, w: World, project: boolean): Routine {
 
 /** 入口警戒；threat 为 true 时是因为有狼蛛逼近，去受威胁的那个入口，巡逻范围更大 */
 export function* guard(a: Ant, w: World, threat = false): Routine {
-  yield* goHome(a);
+  // 正在入口外日常巡逻的直接就地转为警戒
+  const outside = threat && a.domain === 'surface';
+  if (!outside) yield* goHome(a);
   a.guarding = threat;
   a.activity = L(threat ? 'act.guardThreat' : 'act.goGuard');
-  if (threat) {
+  if (threat && !outside) {
     // 从巢深处走到入口要一阵子，到了入口威胁已经解除就不出去了
     const ti = w.predators.threatEntrance;
     if (ti >= 0) yield { k: 'goto', node: w.nest.entrances[ti].node };
@@ -204,7 +206,7 @@ export function* guard(a: Ant, w: World, threat = false): Routine {
       return;
     }
   }
-  yield { k: 'exit' };
+  if (!outside) yield { k: 'exit' };
   const ti = w.predators.threatEntrance;
   const ent = threat && ti >= 0 ? w.nest.entrances[ti] : w.nest.nearestEntrance(a.pos.x, a.pos.z);
   a.activity = L(threat ? 'act.guardingThreat' : 'act.guarding');

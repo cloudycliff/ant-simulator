@@ -56,6 +56,11 @@ for (let k = 0; k < 12; k++) {
 }
 console.log('最多同时原地打转的蚂蚁', stuckMax);
 log(w.removeObstacle(14, 2), true, '移除树枝');
+const aph = w.aphids.colonies.find((c) => !w.ladybugs.on(c))!;
+log(w.placeLadybug(aph.x + 3, aph.z), true, '在蚜虫群旁放瓢虫');
+log(w.placeLadybug(aph.x, aph.z), false, '同一群蚜虫上再放一只瓢虫');
+log(w.placeLadybug(0, 0), false, '在没有蚜虫的地方放瓢虫');
+log(w.removePredator(aph.x - 2, aph.z), true, '赶走瓢虫');
 console.log('剩余玩家障碍物', w.veg.placed.length, '避障圆总数', w.veg.obstacles.length);
 if (syrup.amount >= start) problems.push('糖水没有被搬走');
 if (stuckMax > 15) problems.push(`同时原地打转的蚂蚁太多（${stuckMax}）`);

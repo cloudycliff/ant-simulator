@@ -9,7 +9,7 @@
 - 觅食蚁在植物上放牧蚜虫、采集蜜露；满载归来时通过触角接触激发同伴出巢
 - 白天保育蚁把蛹搬到大石块下晒暖的房间，傍晚搬回深处
 - 蚁穴拥挤时，内务蚁会挖出新的隧道和房间
-- 地表有天敌：游荡捕猎的狼蛛，挖漏斗陷阱的蚁狮
+- 地表有天敌：游荡捕猎的狼蛛，挖漏斗陷阱的蚁狮，飞来吃蚜虫、被照料蚜虫的工蚁赶走的瓢虫；蚜虫太挤时长出翅膀飞走
 - 受到攻击的蚂蚁释放警报信息素，附近的同伴赶来围攻、把狼蛛赶走；巢口有天敌时觅食蚁留在巢里，内务蚁出来警戒；爬出过陷阱的蚂蚁会绕开它
 - 会下雨：雨水冲淡信息素、积成水洼，觅食蚁回巢躲雨，内务蚁在雨前用土粒封住入口、雨后清开；入口没封好时浅层房间会进水，蛹被搬到深处
 - 玩家可以投放食物、放置石块和树枝路障、浇水或招来一场雨、放入或赶走天敌，观察蚁群如何应对
@@ -35,6 +35,7 @@ npx tsx scripts/games/ant/simtest.ts 3000   # 无界面模拟 5 个游戏日（6
 npx tsx scripts/games/ant/savetest.ts       # 存档往返测试
 npx tsx scripts/games/ant/defensetest.ts    # 放入狼蛛，观察警报、围攻与入口警戒
 npx tsx scripts/games/ant/weathertest.ts    # 招来一场雨，观察躲雨、封堵入口与进水
+npx tsx scripts/games/ant/ladybugtest.ts    # 瓢虫来访、蚜虫涨落，有无蚂蚁照料的对照
 npx tsx scripts/games/ant/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 npx tsx scripts/games/ant/crowdtest.ts      # 3000 只工蚁时休息室、蚁丘和隧道有多挤
 npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查

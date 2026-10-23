@@ -68,7 +68,12 @@ try {
   b = await cam();
   check('双指同时上滑：俯仰变平，不转向', b.pitch > a.pitch + 0.2 && Math.abs(b.yaw - a.yaw) < 0.02, { dPitch: (b.pitch - a.pitch).toFixed(3) });
 
-  // 点选：找一只画面中间的地表蚂蚁，故意点偏 12 像素
+  // 点选：找一只画面中间的地表蚂蚁，故意点偏 12 像素。手势后镜头落在哪里看运气，先换到一只身边 2 cm 内没有同伴的地表蚂蚁斜上方
+  await g.ev(`(() => {
+    const surf = world.colony.ants.filter((a) => a.domain === 'surface' && !a.climbing);
+    const a = surf.find((a) => Math.hypot(a.pos.x, a.pos.z) > 8 && surf.every((b) => b === a || a.pos.distanceTo(b.pos) > 2)) ?? surf[0];
+    controller.setPose(a.pos.clone().add({ x: 4, y: 8, z: 8 }), a.pos.clone());
+  })()`);
   // 暂停后蚂蚁不动，屏幕坐标才可靠
   await g.ev(`world.clock.paused = true`);
   await sleep(200);
@@ -116,6 +121,14 @@ try {
     check('双击飞到蚂蚁旁边', moved(a, b) > 1 && dist < 9, { move: moved(a, b).toFixed(1), dist: dist.toFixed(1) });
   }
   await g.ev(`world.clock.paused = false`);
+  // 工具测试按固定的视角点屏幕：从斜上方看主入口一带的空地
+  await g.ev(`(() => {
+    if (controller.mode === 'follow') controller.stopFollow();
+    const e = world.nest.entrances[0];
+    const h = world.terrain.heightAt(e.x, e.z);
+    controller.setPose(camera.position.clone().set(e.x + 5, h + 9, e.z + 9), camera.position.clone().set(e.x, h, e.z + 2));
+  })()`);
+  await sleep(300);
 
   // 工具：投食，点地面出现“放在这里”，确认后才放下
   await g.ev(`document.querySelector('[data-a="tool"][data-v="0"]').click()`);

@@ -9,6 +9,7 @@ import { AlarmField } from './alarm';
 import { AphidManager } from './aphids';
 import { defineEntities, type GameRef } from './entities';
 import { FoodManager, SOURCE_INFO, type FoodSourceType } from './food';
+import { LadybugManager } from './ladybugs';
 import { PheromoneField } from './pheromone';
 import { PREDATOR_INFO, PredatorManager, Spider, type Predator, type PredatorKind } from './predators';
 import { Terrain } from './terrain';
@@ -22,6 +23,8 @@ import type { ToolResult } from '../../../core/ui/tools';
 export type { ToolResult };
 
 const fail = (k: MsgKey): ToolResult => ({ ok: false, msg: L(k) });
+/** 放瓢虫、赶瓢虫时，离蚜虫植物多远以内算点中 */
+const LADYBUG_REACH = 6;
 const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 'dir.7'] as const;
 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
@@ -32,6 +35,7 @@ export class World extends Simulation<GameRef> {
   readonly veg: Vegetation;
   readonly food: FoodManager;
   readonly aphids: AphidManager;
+  readonly ladybugs: LadybugManager;
   readonly pheromone: PheromoneField;
   readonly water: WaterManager;
   readonly predators: PredatorManager;
@@ -55,6 +59,7 @@ export class World extends Simulation<GameRef> {
     this.food = new FoodManager(this.terrain, this.veg, this.rng, this.ids);
     this.food.init();
     this.aphids = new AphidManager(this.veg, this.rng, this.ids);
+    this.ladybugs = new LadybugManager(this.aphids, this.rng);
     this.pheromone = new PheromoneField(this.terrain);
     this.water = new WaterManager(this.terrain, this.veg, this.pheromone, this.ids);
     this.predators = new PredatorManager(this.terrain, this.veg, this.rng, this.ids);
@@ -69,7 +74,8 @@ export class World extends Simulation<GameRef> {
     this.addSystem('predators', (dt) => this.predators.update(dt, this));
     this.addSystem('alarm', (dt) => this.alarm.update(dt));
     this.addSystem('food', (dt) => this.food.update(dt));
-    this.addSystem('aphids', (dt) => this.aphids.update(dt, this.clock.seconds));
+    this.addSystem('aphids', (dt) => this.aphids.update(dt, this));
+    this.addSystem('ladybugs', (dt) => this.ladybugs.update(dt, this));
     this.addSystem('water', (dt) => this.water.update(dt, this.soil));
     this.addSystem('pheromone', (dt) => this.pheromone.update(dt));
 
@@ -88,6 +94,7 @@ export class World extends Simulation<GameRef> {
     S.add('weather', () => this.weather.toSave(this), (d) => this.weather.restore(d, this), true);
     S.add('food', () => this.food.toSave(), (d) => this.food.restore(d));
     S.add('aphids', () => this.aphids.toSave(), (d) => this.aphids.restore(d));
+    S.add('ladybugs', () => this.ladybugs.toSave(), (d) => this.ladybugs.restore(d), true);
     S.add('pheromone', () => this.pheromone.toSave(), (d) => this.pheromone.restore(d));
     S.add('colony', () => this.colony.toSave(), (d) => this.colony.restore(d));
   }
@@ -196,9 +203,28 @@ export class World extends Simulation<GameRef> {
 
   removePredator(x: number, z: number, dry = false): ToolResult {
     const p = this.predators.near(x, z, CONFIG.predators.pitRadius + 1);
-    if (!p) return fail('tool.noPredator');
+    const c = p ? null : this.aphids.nearestColony(x, z, LADYBUG_REACH);
+    const bug = c && this.ladybugs.on(c);
+    if (!p && !bug) return fail('tool.noPredator');
     if (dry) return { ok: true };
-    return this.dismissPredator(p);
+    if (bug) {
+      this.ladybugs.shoo(bug, false);
+      return { ok: true, msg: L('tool.ladybugShooed') };
+    }
+    return this.dismissPredator(p!);
+  }
+
+  /** 瓢虫只能放在蚜虫群上：落到 LADYBUG_REACH 以内最近的一群 */
+  placeLadybug(x: number, z: number, dry = false): ToolResult {
+    const c = this.aphids.nearestColony(x, z, LADYBUG_REACH);
+    if (!c) return fail('tool.noAphidsNear');
+    if (this.ladybugs.on(c)) return fail('tool.ladybugThere');
+    if (this.ladybugs.ladybugs.length >= CONFIG.ladybug.max) return fail('tool.tooManyLadybugs');
+    if (dry) return { ok: true };
+    this.ladybugs.add(c, true);
+    const msg = L('tool.ladybugPlaced', { place: this.describePlace(c.x, c.z) });
+    this.events.push(msg, { kind: 'plant', id: c.plant.index });
+    return { ok: true, msg };
   }
 
   removePredatorById(id: number): ToolResult {

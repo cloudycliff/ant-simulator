@@ -27,7 +27,8 @@ function metrics(w: World): Record<string, string | number> {
     edges: w.nest.edges.length,
     project: p ? `${p.type} ${p.enlarge ? `扩大#${p.chamber!.id} ${(p.soil / p.soilNeeded).toFixed(2)} r=${p.chamber!.rx.toFixed(2)}` : p.chamber ? `房间 ${(p.soil / p.soilNeeded).toFixed(2)}` : `隧道 ${(p.face.len / p.face.full.length).toFixed(2)}`}` : '-',
     sources: w.food.sources.length,
-    aphids: w.aphids.colonies.map((a) => Math.round(a.count)).join(','),
+    aphids: w.aphids.colonies.map((a) => `${Math.round(a.count)}${a.dispersing ? '*' : ''}`).join(','),
+    ladybugs: `${w.ladybugs.ladybugs.map((l) => `${w.aphids.colonies.indexOf(l.colony)}:${l.state}:${l.eaten}`).join(',')} / ${w.ladybugs.visits},${w.ladybugs.repelled},${w.ladybugs.eaten}`,
     pheromone: Math.round(pher),
     placed: w.veg.placed.map((p) => (p.kind === 'twig' ? p.kind : `${p.kind}#${p.shape.toFixed(4)}`)).join(' '),
     puddles: w.water.puddles.length,
@@ -66,6 +67,10 @@ for (let t = 0; stage && stage !== 'rain' && t < 12000; t += 10) {
   if (p && (stage === 'enlarge' ? !!p.enlarge && p.soil > 5 : !p.enlarge && (stage === 'chamber') === !!p.chamber)) break;
   run(a, 10);
 }
+// 存档时有一只正在吃蚜虫的瓢虫
+const aph = a.aphids.colonies[0];
+a.placeLadybug(aph.x, aph.z);
+run(a, 5);
 
 const t0 = performance.now();
 const json = JSON.stringify(saveWorld(a, Date.now()));
@@ -80,7 +85,7 @@ const sizes = Object.entries(data).map(([k, v]) => `${k} ${(JSON.stringify(v).le
 console.log(`各部分（KB）：${sizes.join('  ')}`);
 
 /** 读档后必须原样恢复的指标 */
-const EXACT = ['ants', 'outside', 'brood', 'items', 'food', 'liquid', 'chambers', 'edges', 'project', 'sources', 'aphids', 'placed', 'puddles', 'predators', 'stats', 'weather'];
+const EXACT = ['ants', 'outside', 'brood', 'items', 'food', 'liquid', 'chambers', 'edges', 'project', 'sources', 'aphids', 'ladybugs', 'placed', 'puddles', 'predators', 'stats', 'weather'];
 const problems: string[] = [];
 const ma = metrics(a);
 const mb = metrics(b);

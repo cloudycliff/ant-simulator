@@ -86,7 +86,8 @@ src/
       terrain.ts        解析式高度场、蚁丘、草被密度、地形网格
       vegetation.ts     草（风动着色器）、石块、落叶、枯枝、植物（含 4 株寄主植物）；地表避障圆与空间网格
       food.ts           食物源类型、生成、网格
-      aphids.ts         蚜虫群：附着在植物茎秆上，增殖、蜜露积存、实例化网格
+      aphids.ts         蚜虫群：附着在植物茎秆上，增殖、太挤时迁飞、蜜露积存、实例化网格
+      ladybugs.ts       瓢虫：飞来、吃蚜虫、被爬上植物的工蚁驱赶、飞走的状态机；网格与存档（T-066）
       predators.ts      天敌：狼蛛（游荡、扑击、进食、离开的状态机）与蚁狮陷阱（松沙区、坑底捕食）；网格与存档
       alarm.ts          警报信息素：短暂的点源列表，浓度查询；信息素视图下画成红圈
       weather.ts        天气：晴 / 转阴 / 下雨的阶段与雨势、云量、地面湿润度；积水洼、浅层房间进水；入口封堵任务的分配
@@ -124,6 +125,7 @@ scripts/
     tooltest.ts         干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
     defensetest.ts      防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
     weathertest.ts      天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
+    ladybugtest.ts      瓢虫测试：自然运行 7 天看瓢虫来访和蚜虫涨落，再比较有无蚂蚁照料时瓢虫吃掉多少
     perftest.ts         性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
     crowdtest.ts        拥挤测试：3000 只工蚁跑一个游戏日，统计休息室密度、巢口附近和隧道里的重叠
   games/aquarium/
@@ -260,7 +262,9 @@ requestAnimationFrame
 
 天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `surfaceMove`（`antSurface.ts`）里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
 
-防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行；没闻到警报时同一次检查看附近有没有捕猎中的狼蛛，发觉了就由 `Ant.flee` 接管几秒，同样不动协程（T-062）。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines/` 里觅食蚁出巢前和内务蚁选任务时读取它们；入口刚受威胁时 `callGuards`（`colonySocial.ts`）用 `Behavior.start` 打断几只最近的空手内务蚁，直接换成警戒任务（T-061）。
+防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行；没闻到警报时同一次检查看附近有没有捕猎中的狼蛛，发觉了就由 `Ant.flee` 接管几秒，同样不动协程（T-062）。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines/` 里觅食蚁出巢前和内务蚁选任务时读取它们；入口刚受威胁时 `callGuards`（`colonySocial.ts`）用 `Behavior.start` 打断几只最近的空手内务蚁（先是入口外正在日常巡逻的），直接换成警戒任务（T-061）；警戒上限按 `guardsAll`（含巢里赶往入口的）计（T-066）。
+
+瓢虫（`world/ladybugs.ts`）：`LadybugManager.update` 排在蚜虫之后，每 0.5 秒数一次爬在各株植物上的工蚁，据此减慢进食、累计驱赶。觅食蚁的 `tendAphids` 读 `ladybugs.on(colony)` 决定是挤蜜露还是留下驱赶。瓢虫网格的 `userData.pick` 指向所在植物，点它就选中植物。
 
 天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `Soil`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`stepExit`（`antNest.ts`）只走没封死的入口；全部封死时带 `giveUp` 的 `exit` 指令以结果 `'blocked'` 结束，由协程决定怎么处理手里的东西（T-036）。雨后的分批出巢由 `WeatherSystem.damp` 控制。
 

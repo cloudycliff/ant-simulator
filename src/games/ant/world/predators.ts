@@ -108,8 +108,9 @@ export class PredatorManager {
   antlions: Antlion[] = [];
   /** 有狼蛛逼近的入口编号，没有时为 -1 */
   threatEntrance = -1;
-  /** 正在入口警戒的工蚁数 */
+  /** 正在入口外警戒的工蚁数；加上还在巢里赶往入口的 */
   guardsOut = 0;
+  guardsAll = 0;
   private surface: Ant[] = [];
   private mats = {
     body: new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.8 }),
@@ -223,7 +224,9 @@ export class PredatorManager {
     const days = dt / CONFIG.time.dayLength;
     this.surface.length = 0;
     this.guardsOut = 0;
+    this.guardsAll = 0;
     for (const a of w.colony.ants) {
+      if (a.guarding) this.guardsAll++;
       if (a.domain !== 'surface' || a.role === 'queen') continue;
       if (a.guarding) this.guardsOut++;
       if (!a.climbing) this.surface.push(a);

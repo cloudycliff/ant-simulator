@@ -92,6 +92,28 @@ export const CONFIG = {
     maxCount: 80,
     honeydewPerAphidDay: 0.2,
     maxHoneydew: 6,
+    /** 没人照料的蚜虫群每天另外减少的比例（草蛉、寄生蜂、迁飞）；瓢虫的捕食单独结算 */
+    untendedLoss: 0.04,
+    /** 达到 crowdAt × maxCount 只时开始生出有翅蚜迁飞，每天飞走 dispersePerDay 的比例，降到 disperseTo × maxCount 只为止 */
+    crowdAt: 0.7,
+    disperseTo: 0.4,
+    dispersePerDay: 1.5,
+  },
+
+  ladybug: {
+    /** 晴天白天每天平均飞来几只；同时最多几只；气温低于 minTemp 不飞 */
+    perDay: 2.5,
+    max: 3,
+    minTemp: 12,
+    /** 每只每天能吃掉的蚜虫数（茎上有 n 只工蚁时按 1 / (1 + chasedSlow·n) 变慢）；吃够 appetite 只就飞走 */
+    eatPerDay: 150,
+    chasedSlow: 0.5,
+    appetite: [15, 30] as [number, number],
+    /** 爬在这株植物上的工蚁累计驱赶（只数 × 秒）超过该值就飞走；没有工蚁时每秒恢复的量 */
+    harassLimit: 60,
+    harassRecover: 0.5,
+    /** 蚜虫少于这么多只时飞去别处；只挑至少 minAphids × 1.5 只的蚜虫群 */
+    minAphids: 8,
   },
 
   expansion: {

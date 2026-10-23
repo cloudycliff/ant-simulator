@@ -4,6 +4,7 @@ import type { InfoPanels } from '../../../core/app/game';
 import { bar, cap, esc, hex, when } from '../../../core/ui/html';
 import { CHAMBER_INFO } from '../nest/nest';
 import { ITEM_NAMES } from '../sim/items';
+import type { AphidColony } from '../world/aphids';
 import type { GameRef } from '../world/entities';
 import { FOOD_KIND_NAMES } from '../world/food';
 import { PREDATOR_INFO, Spider } from '../world/predators';
@@ -167,6 +168,15 @@ function chamberInfo(w: World, id: number): string {
       <div class="actions"><button data-a="flyto">${t('info.flyRoom')}</button></div>`;
 }
 
+function ladybugState(w: World, c: AphidColony): string {
+  const l = w.ladybugs.ladybugs.find((x) => x.colony === c);
+  if (!l) return cap(t('unit.none'));
+  if (l.state === 'arrive') return t('info.ladybugArriving');
+  if (l.state === 'leave') return t(l.fled ? 'info.ladybugDriven' : 'info.ladybugLeaving');
+  if (l.chasers > 0) return `${t('info.ladybugChased', { n: l.chasers })} ${bar(l.harass / CONFIG.ladybug.harassLimit, '#e0604a')}`;
+  return t('info.ladybugEating', { n: l.eaten });
+}
+
 function plantInfo(w: World, id: number): string {
   const ac = w.aphids.byPlant(id);
   if (!ac) {
@@ -185,10 +195,12 @@ function plantInfo(w: World, id: number): string {
       <div class="kv">
         <span>${t('info.aphidCount')}</span><b>${t('info.aboutN', { n: Math.round(ac.count) })}</b>
         <span>${t('info.honeydew')}</span><b>${bar(ac.honeydew / 6, '#f2c25a')} ${t('unit.portions', { n: ac.honeydew.toFixed(1) })}</b>
-        <span>${t('info.state')}</span><b>${t(!ac.discovered ? 'info.undiscovered' : ac.tended(now) ? 'info.tended' : 'info.untended')}</b>
+        <span>${t('info.state')}</span><b>${t(ac.dispersing ? 'info.aphidsDispersing' : !ac.discovered ? 'info.undiscovered' : ac.tended(now) ? 'info.tended' : 'info.untended')}</b>
         <span>${t('info.onPlant')}</span><b>${onPlant}</b>
         <span>${t('info.herders')}</span><b>${t('unit.ants', { n: herders })}</b>
         <span>${t('info.collected')}</span><b>${t('unit.portions', { n: ac.collected.toFixed(1) })}</b>
+        <span>${t('info.ladybug')}</span><b>${ladybugState(w, ac)}</b>
+        <span>${t('info.eatenByLadybugs')}</span><b>${t('unit.aphids', { n: ac.eaten })}</b>
         <span>${t('info.distance')}</span><b>${Math.hypot(ac.x, ac.z).toFixed(0)} cm</b>
       </div>
       <div class="actions"><button data-a="flyto">${t('info.flyNear')}</button></div>`;

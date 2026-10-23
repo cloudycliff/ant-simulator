@@ -47,7 +47,7 @@ export const antGame: GameModule<World, GameRef, SaveData, AntSaveMeta> = {
 
 function mount(ctx: GameContext<World, GameRef>): GameSession<GameRef> {
   const { world, scene, camera } = ctx;
-  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.water.group, world.predators.group, world.alarm.group);
+  scene.add(world.terrain.mesh, world.veg.group, world.food.group, world.aphids.group, world.ladybugs.group, world.water.group, world.predators.group, world.alarm.group);
 
   const nestView = new NestView(world.nest, world.terrain);
   nestView.build();
@@ -66,7 +66,7 @@ function mount(ctx: GameContext<World, GameRef>): GameSession<GameRef> {
 
   const picker = new Picker(world, camera, ctx.dom, antView, {
     chambers: nestView.chamberMeshes,
-    surface: [world.food.group, nestView.surfaceGroup, world.veg.placedGroup, world.water.group, world.predators.group, ...world.veg.group.children.filter((o) => o.userData.pick)],
+    surface: [world.food.group, nestView.surfaceGroup, world.veg.placedGroup, world.water.group, world.predators.group, world.ladybugs.group, ...world.veg.group.children.filter((o) => o.userData.pick)],
     terrain: world.terrain.mesh,
   });
   const tools = createTools(world);
@@ -161,6 +161,7 @@ function mount(ctx: GameContext<World, GameRef>): GameSession<GameRef> {
       world.veg.update(dt, world.weather.rain);
       world.aphids.sync();
       world.predators.sync(f.time);
+      world.ladybugs.sync(f.time);
       world.alarm.sync(view.pheromone);
       nestView.sync();
       antView.update(f.time, camera.position);

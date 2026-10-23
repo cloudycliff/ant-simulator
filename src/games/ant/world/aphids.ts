@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { L } from '../../../core/i18n';
 import type { Rng } from '../../../core/util/random';
 import type { IdPool } from '../../../core/sim/ids';
 import type { Plant, Vegetation } from './vegetation';
+import type { World } from './world';
 
 const MAX_VISIBLE = 80;
 /** 被照料的判定时长（秒）：这段时间内有工蚁来过 */
@@ -15,6 +17,10 @@ export class AphidColony {
   discovered = false;
   lastTended = -1e9;
   collected = 0;
+  /** 累计被瓢虫吃掉的只数 */
+  eaten = 0;
+  /** 正在生出有翅蚜迁飞 */
+  dispersing = false;
   private slots: { a: number; y: number; tone: number }[] = [];
 
   constructor(
@@ -94,14 +100,20 @@ export class AphidManager {
     this.sync();
   }
 
-  update(dt: number, now: number): void {
+  update(dt: number, w: World): void {
     const C = CONFIG.aphid;
     const days = dt / CONFIG.time.dayLength;
+    const now = w.clock.seconds;
     for (const c of this.colonies) {
-      // 被蚂蚁照料的蚜虫群天敌少、增殖快；无人照料时会被瓢虫等捕食或迁飞
+      // 被蚂蚁照料的蚜虫群增殖快；无人照料时还会被草蛉、寄生蜂吃掉（瓢虫在 ladybugs.ts 里结算）
       const tended = c.tended(now);
-      const growth = (tended ? 0.35 : 0.1) * c.count * (1 - c.count / C.maxCount);
-      const loss = tended ? 0 : c.count * 0.08;
+      if (!c.dispersing && c.count >= C.crowdAt * C.maxCount) {
+        c.dispersing = true;
+        w.events.push(L('ev.aphidsDisperse', { place: w.describePlace(c.x, c.z) }), { kind: 'plant', id: c.plant.index });
+      } else if (c.dispersing && c.count <= C.disperseTo * C.maxCount) c.dispersing = false;
+      // 太挤时生出有翅蚜陆续飞走，这期间几乎不再增殖
+      const growth = c.dispersing ? 0 : (tended ? 0.35 : 0.1) * c.count * (1 - c.count / C.maxCount);
+      const loss = c.count * ((tended ? 0 : C.untendedLoss) + (c.dispersing ? C.dispersePerDay : 0));
       c.count = Math.max(4, c.count + (growth - loss) * days);
       c.honeydew = Math.min(C.maxHoneydew, c.honeydew + c.count * C.honeydewPerAphidDay * days);
     }
@@ -122,13 +134,32 @@ export class AphidManager {
     return best;
   }
 
+  /** radius 以内最近的蚜虫群（不管有没有蜜露） */
+  nearestColony(x: number, z: number, radius: number): AphidColony | null {
+    let best: AphidColony | null = null;
+    let bd = radius * radius;
+    for (const c of this.colonies) {
+      const d = (c.x - x) ** 2 + (c.z - z) ** 2;
+      if (d < bd) [bd, best] = [d, c];
+    }
+    return best;
+  }
+
   byId(id: number): AphidColony | undefined {
     return this.colonies.find((c) => c.id === id);
   }
 
   /** 蚜虫群的位置由世界种子决定，存档只记录各群的状态（按顺序） */
-  toSave(): { count: number; honeydew: number; discovered: boolean; lastTended: number; collected: number }[] {
-    return this.colonies.map((c) => ({ count: c.count, honeydew: c.honeydew, discovered: c.discovered, lastTended: Math.max(-1e6, c.lastTended), collected: c.collected }));
+  toSave(): { count: number; honeydew: number; discovered: boolean; lastTended: number; collected: number; eaten?: number; dispersing?: boolean }[] {
+    return this.colonies.map((c) => ({
+      count: c.count,
+      honeydew: c.honeydew,
+      discovered: c.discovered,
+      lastTended: Math.max(-1e6, c.lastTended),
+      collected: c.collected,
+      eaten: c.eaten,
+      dispersing: c.dispersing,
+    }));
   }
 
   restore(s: ReturnType<AphidManager['toSave']>): void {
@@ -140,6 +171,8 @@ export class AphidManager {
       c.discovered = x.discovered;
       c.lastTended = x.lastTended;
       c.collected = x.collected;
+      c.eaten = x.eaten ?? 0;
+      c.dispersing = x.dispersing ?? false;
     });
   }
 

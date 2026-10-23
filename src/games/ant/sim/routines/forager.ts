@@ -29,11 +29,13 @@ function pickHerd(a: Ant, w: World): AphidColony | null {
   if (a.scout || !w.rng.chance(0.3)) return null;
   const known = aph.colonies.filter((c) => c.discovered && tenders(w, c) < 4 + c.count / 8);
   if (!known.length) return null;
+  // 瓢虫正在吃的那群更吸引照料者：回来的工蚁带着那里的警报气味
+  const pull = (c: AphidColony) => c.honeydew + 0.5 + (w.ladybugs.on(c) ? 3 : 0);
   let total = 0;
-  for (const c of known) total += c.honeydew + 0.5;
+  for (const c of known) total += pull(c);
   let r = w.rng.next() * total;
   for (const c of known) {
-    r -= c.honeydew + 0.5;
+    r -= pull(c);
     if (r <= 0) return c;
   }
   return known[known.length - 1];
@@ -158,13 +160,15 @@ function* tendAphids(a: Ant, w: World, c: AphidColony, arrived: boolean): Routin
     a.activity = L('act.goPlant');
     yield { k: 'walk', x: c.x + Math.cos(ang) * 1.6, z: c.z + Math.sin(ang) * 1.6, r: 0.6 };
   }
-  const guard = c.honeydew < 0.6;
+  const bug = w.ladybugs.on(c);
+  const guard = c.honeydew < 0.6 || bug !== null;
   const ang = Math.atan2(a.pos.z - c.z, a.pos.x - c.x);
-  a.activity = L(guard ? 'act.guardAphids' : 'act.milkAphids');
+  a.activity = L(bug ? 'act.chaseLadybug' : guard ? 'act.guardAphids' : 'act.milkAphids');
   c.lastTended = w.clock.seconds;
-  yield { k: 'climb', x: c.x, z: c.z, angle: ang, r: c.stemRadius, top: w.rng.range(c.bandLo, c.bandHi) - 0.3, stay: guard ? w.rng.range(25, 45) : w.rng.range(6, 10) };
+  yield { k: 'climb', x: c.x, z: c.z, angle: ang, r: c.stemRadius, top: w.rng.range(c.bandLo, c.bandHi) - 0.3, stay: bug ? w.rng.range(15, 30) : guard ? w.rng.range(25, 45) : w.rng.range(6, 10) };
   c.lastTended = w.clock.seconds;
   a.herd = c.id;
+  if (bug) a.note(w, L(bug.fled ? 'note.droveLadybug' : 'note.chasedLadybug'));
   const amt = Math.min(1 - a.crop, c.honeydew);
   c.honeydew -= amt;
   c.collected += amt;

@@ -9,20 +9,23 @@ import { guard } from './routines/maintenance';
 
 const ROLE_ORDER: Record<Role, number> = { queen: -1, nurse: 0, maintenance: 1, forager: 2 };
 const bySepS = (a: Ant, b: Ant) => a.sepS - b.sepS;
+/** 入口外这么近、正在日常巡逻的内务蚁也算可招呼的 */
+const CALL_PATROL_RADIUS = 15;
 
 /**
- * 狼蛛刚逼近某个入口时，离入口最近的几只空手内务蚁放下手头的事出来警戒。
+ * 狼蛛刚逼近某个入口时，离入口最近的几只空手内务蚁放下手头的事出来警戒：先是正在入口外巡逻的，再是巢里的。
  * 不这样的话要等它们各自做完手头的任务（几十秒）才会挑到警戒
  */
 export function callGuards(col: Colony, entrance: number): void {
   const w = col.w;
   if (w.weather.keepIn) return;
-  const n = Math.min(CONFIG.defense.callGuards, CONFIG.defense.maxGuards - w.predators.guardsOut);
+  const n = Math.min(CONFIG.defense.callGuards, CONFIG.defense.maxGuards - w.predators.guardsAll);
   if (n <= 0) return;
-  const node = w.nest.entrances[entrance].node;
+  const ent = w.nest.entrances[entrance];
+  const near = (a: Ant) => a.domain === 'surface' && a.activity.k === 'act.guarding' && Math.hypot(a.pos.x - ent.x, a.pos.z - ent.z) < CALL_PATROL_RADIUS;
   const picked = col.ants
-    .filter((a) => a.role === 'maintenance' && a.alive && a.domain === 'nest' && !a.carrying && a.plugging < 0 && !a.guarding)
-    .map((a) => ({ a, d: w.nest.routeLength(a.currentNode(w), node) }))
+    .filter((a) => a.role === 'maintenance' && a.alive && !a.carrying && a.plugging < 0 && !a.guarding && a.alarmT <= 0 && (a.domain === 'nest' || near(a)))
+    .map((a) => ({ a, d: a.domain === 'surface' ? Math.hypot(a.pos.x - ent.x, a.pos.z - ent.z) : w.nest.routeLength(a.currentNode(w), ent.node) }))
     .sort((p, q) => p.d - q.d)
     .slice(0, n);
   for (const { a } of picked) {

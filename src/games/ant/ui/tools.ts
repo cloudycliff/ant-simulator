@@ -9,7 +9,7 @@ import type { World } from '../world/world';
 export type ToolKind = 'food' | 'obstacle' | 'water' | 'predator';
 
 const OBSTACLES: (PlaceableObstacle | 'remove')[] = ['pebble', 'rock', 'twig', 'remove'];
-const PREDATORS: (PredatorKind | 'remove')[] = ['spider', 'antlion', 'remove'];
+const PREDATORS: (PredatorKind | 'ladybug' | 'remove')[] = ['spider', 'antlion', 'ladybug', 'remove'];
 
 export const TOOLS: ToolDef<ToolKind>[] = [
   {
@@ -41,7 +41,11 @@ export const TOOLS: ToolDef<ToolKind>[] = [
     key: '9',
     hint: L('tool.predatorHint'),
     options: PREDATORS.map((k) =>
-      k === 'remove' ? { label: L('tool.dismiss'), radius: CONFIG.predators.pitRadius + 1 } : { label: PREDATOR_INFO[k].name, radius: k === 'spider' ? 1.5 : CONFIG.predators.pitRadius },
+      k === 'remove'
+        ? { label: L('tool.dismiss'), radius: CONFIG.predators.pitRadius + 1 }
+        : k === 'ladybug'
+          ? { label: L('ladybug.name'), radius: 1.2 }
+          : { label: PREDATOR_INFO[k].name, radius: k === 'spider' ? 1.5 : CONFIG.predators.pitRadius },
     ),
   },
 ];
@@ -53,6 +57,7 @@ export function createTools(w: World): ToolController<ToolKind> {
     if (d.kind === 'water') return i === 2 ? w.callRain(dry) : w.pourWater(p.x, p.z, i === 1, dry);
     if (d.kind === 'predator') {
       const k = PREDATORS[i];
+      if (k === 'ladybug') return w.placeLadybug(p.x, p.z, dry);
       return k === 'remove' ? w.removePredator(p.x, p.z, dry) : w.placePredator(k, p.x, p.z, dry);
     }
     const k = OBSTACLES[i];

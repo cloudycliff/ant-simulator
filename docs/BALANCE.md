@@ -61,6 +61,11 @@
 | `aphid.colonies` | 6 | 蚜虫群数量（先占寄主植物，再选距巢 80 cm 内的植物） |
 | `aphid.initialCount / maxCount` | 16–36 / 80 | 每群初始与最大蚜虫数 |
 | `aphid.honeydewPerAphidDay / maxHoneydew` | 0.2 / 6 | 每只蚜虫每天产蜜露量、每群积存上限 |
+| `aphid.untendedLoss` | 0.04 | 没人照料的蚜虫群每天另外减少的比例（草蛉、寄生蜂），瓢虫的捕食另算 |
+| `aphid.crowdAt / disperseTo / dispersePerDay` | 0.7 / 0.4 / 1.5 | 达到上限的 70%（56 只）时生出有翅蚜迁飞、不再增殖，每天飞走 1.5 倍的比例，降到 40%（32 只）为止 |
+| `ladybug.perDay / max / minTemp` | 2.5 / 3 / 12 | 晴天白天平均每天飞来的瓢虫数、同时最多几只、地表低于该温度（°C）不飞 |
+| `ladybug.eatPerDay / chasedSlow / appetite` | 150 / 0.5 / 15–30 | 每只每天能吃的蚜虫数；植物上有 n 只工蚁时吃的速度乘 1 / (1 + 0.5n)；吃够几只飞走 |
+| `ladybug.harassLimit / harassRecover / minAphids` | 60 / 0.5 / 8 | 被驱赶量（工蚁数 × 秒）超过该值就飞走，没有工蚁时每秒恢复量；蚜虫少于几只时飞走（只挑至少 1.5 倍的蚜虫群） |
 | `expansion.capacityPerArea` | 1.8 | 每单位地板面积（rx·rz）容纳的成虫 + 幼体 |
 | `expansion.trigger` | 0.88 | 占用率超过该值时规划新房间 |
 | `expansion.tunnelSoilPerUnit / chamberSoilPerArea` | 4 / 4 | 每 cm 隧道、每单位房间面积需要挖的土粒数 |
@@ -91,8 +96,8 @@
 | `defense.mobKillPerSec` | 0.025 | 围攻时每只工蚁每秒被咬死的概率 |
 | `defense.fleeRange / fleeNoticeMoving / fleeNoticeStill` | 10 / 0.35 / 0.08 | 没闻到警报的地表工蚁离捕猎中的狼蛛多近时可能发觉它（cm，狼蛛发现蚂蚁是 7 cm）；狼蛛走动 / 静止伏击时每 0.5 秒发觉的概率 |
 | `defense.fleeSec / fleeSpeed` | 2–4 / 1.25 | 发觉后跑开的秒数和速度倍数 |
-| `defense.guardRadius / holdBackProb / guardProb / maxGuards` | 20 / 0.7 / 0.5 / 24 | 狼蛛离入口多近算威胁；受威胁时觅食蚁留巢的概率、内务蚁出巢警戒的概率与人数上限 |
-| `defense.callGuards / guardCheckSec` | 8 / 2 | 入口刚受威胁时立刻调派离入口最近的空手内务蚁数；警戒蚁每巡逻几秒看一次威胁还在不在 |
+| `defense.guardRadius / holdBackProb / guardProb / maxGuards` | 20 / 0.7 / 0.5 / 24 | 狼蛛离入口多近算威胁；受威胁时觅食蚁留巢的概率、内务蚁出巢警戒的概率与人数上限（含还在巢里赶往入口的） |
+| `defense.callGuards / guardCheckSec` | 8 / 2 | 入口刚受威胁时立刻调派离入口最近的空手内务蚁数（先挑入口 15 cm 内正在日常巡逻的）；警戒蚁每巡逻几秒看一次威胁还在不在 |
 | `crowd.restDensity` | 2.2 | 休息室每 cm² 可走地板超过这么多只时，改去越冬室、储食室里最不挤的一间歇着 |
 | `crowd.moundRef` | 120 | 一个入口外警戒、闲逛的蚂蚁超过这么多只时，巡逻范围按 √(只数 / 120) 放大，再出去的概率按它的倒数减少 |
 | `nest.workersPerExtraRest` | 200 | 开局工蚁多于 1000 只时，每多这么多只多挖一间工蚁休息室（3000 只开局多 10 间）；300 时只多 7 间，越冬室仍是休息溢出的主要去处，隧道重叠 1270–1380 对 |
