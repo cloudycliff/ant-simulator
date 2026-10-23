@@ -61,6 +61,8 @@ export interface ColonySave {
   /** 事件记录在 World.events，存档格式里放在蚁群下面 */
   events: SimEventSave<GameRef>[];
   expansion: ExpansionSave;
+  /** 步数和几个定时任务的累计秒数；较早的存档没有，从 0 开始 */
+  clocks?: number[];
 }
 
 const HISTORY_MAX = 24 * 60;
@@ -211,6 +213,7 @@ export class Colony {
       history: this.history.map((h) => ({ ...h, day: Math.round(h.day * 1e4) / 1e4, food: r2(h.food), liquid: r2(h.liquid) })),
       events: this.w.events.toSave((r) => this.w.entities.stable(r)),
       expansion: this.expansion.toSave(),
+      clocks: [this.tickN, this.lastShortageDay, this.reviewAcc, this.climateAcc, this.sampleAcc],
     };
   }
 
@@ -254,6 +257,7 @@ export class Colony {
     this.history = s.history;
     this.w.events.restore(s.events);
     this.expansion.restore(s.expansion);
+    if (s.clocks) [this.tickN, this.lastShortageDay, this.reviewAcc, this.climateAcc, this.sampleAcc] = s.clocks;
     this.refreshFoodStock();
     this.liquidStock = this.ants.reduce((sum, a) => sum + a.crop, 0);
   }

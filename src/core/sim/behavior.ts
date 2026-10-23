@@ -6,7 +6,8 @@ export type Routine<C> = Generator<C, void, unknown>;
 
 /**
  * 驱动一个个体的行为协程。指令的类型和执行由游戏决定，这里只管取指令、交结果、换任务。
- * 协程和指令都不进存档：读档后由游戏决定从什么任务开始（比如先把手里的东西送到）
+ * 协程不能存档（生成器不能序列化）。游戏可以存下当前指令和它的执行进度，读档后用 resume 接着做完这一步，
+ * 之后再由 run 的 next 开新任务（比如先把手里的东西送到）
  */
 export class Behavior<C> {
   routine: Routine<C> | null = null;
@@ -44,6 +45,17 @@ export class Behavior<C> {
   start(r: Routine<C>): void {
     this.routine = r;
     this.cmd = null;
+    this.result = undefined;
+  }
+
+  /**
+   * 读档：接着执行一条存下来的指令，不带协程；做完后下一帧开新任务。
+   * started 为真时执行者不再把它当作第一步（进度由游戏自己恢复）
+   */
+  resume(cmd: C, started: boolean): void {
+    this.routine = null;
+    this.cmd = cmd;
+    this.started = started;
     this.result = undefined;
   }
 

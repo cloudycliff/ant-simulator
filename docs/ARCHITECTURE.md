@@ -121,7 +121,7 @@ scripts/
   games/ant/            蚂蚁游戏的无界面测试，失败时退出码非零
     simtest.ts          无界面模拟测试
     baseline/           simtest 在固定编号下的输出，check.mjs 拿它逐行对比
-    savetest.ts         存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
+    savetest.ts         存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 读档前后位置和活动接得上 → 两边各自继续运行
     tooltest.ts         干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
     defensetest.ts      防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
     weathertest.ts      天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
@@ -274,7 +274,7 @@ requestAnimationFrame
 
 页面启动时 `runApp` 先 `create(seed)`（即 `new World(seed)`），有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号；随机数和编号计数由 `Simulation` 用 `addLast` 登记，在这些之后恢复。设计取舍见 DECISIONS T-027。
 
-行为协程不进存档，读档后每只蚂蚁从新任务开始。搬运中的物品随蚂蚁存档（`AntSave.carry` 是物品编号），读档后还在它嘴里，`Colony.newRoutine` 先交给 `finishCarry`：按物品种类把它送到该去的地方（食物进储食室、土粒按扩建工程倒掉、尸体和巢外垃圾运出去、巢内垃圾进垃圾室、幼体进对应房间）。新增一种可搬运的物品时要在 `finishCarry` 里补一个分支（T-059）。
+行为协程不进存档（生成器不能序列化）。存的是当前这条指令和它的执行进度（`AntSave.step`，隧道里还有 `GraphWalker.toSave` 的位置），读档后 `Ant.restoreStep` 用 `Behavior.resume` 接着做完这一步，之后开新任务；构造时随机抽的个体差异（`ind`）和增援、躲避这类短暂状态（`fx`）也进存档，蚁群另存几个周期计时（`ColonySave.clocks`）。新增指令种类或指令执行时用到的蚂蚁字段时，要在 `stepSave` / `restoreStep` 里补上，`savetest` 的接续检查会抓到漏掉的（T-067）。搬运中的物品随蚂蚁存档（`AntSave.carry` 是物品编号），读档后还在它嘴里，`Colony.newRoutine` 先交给 `finishCarry`：按物品种类把它送到该去的地方（食物进储食室、土粒按扩建工程倒掉、尸体和巢外垃圾运出去、巢内垃圾进垃圾室、幼体进对应房间）。新增一种可搬运的物品时要在 `finishCarry` 里补一个分支（T-059）。
 
 ### 主循环与后台运行
 

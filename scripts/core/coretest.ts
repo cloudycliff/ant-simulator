@@ -50,6 +50,11 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
   w.advance(g, 0.5, 2);
   const turned = w.advance(g, 0.2, 0) === 'walking' && w.from === 1 && near(w.s, 1.7, 1e-9);
   check('半路换了目标、新路线要折回时就地掉头', turned && w.advance(g, 1, 0) === 'arrived' && w.node === 0 && near(w.walked, 0.3, 1e-9), { from: w.from, s: w.s });
+  w.at(0);
+  w.advance(g, 3.25, 3);
+  const w2 = new GraphWalker<GraphEdge>();
+  w2.restore(JSON.parse(JSON.stringify(w.toSave(edges))), edges);
+  check('存档后接着走，和没存过一样', w2.edge === w.edge && w2.from === w.from && w2.advance(g, 1, 3) === w.advance(g, 1, 3) && w2.s === w.s, w.toSave(edges));
   w.at(4);
   check('没有路', w.advance(g, 1, 0) === 'noRoute' && !w.moved);
   const pe = { a: 0, b: 1, length: 4, points: [new THREE.Vector3(0, 0, 0), new THREE.Vector3(2, 0, 0), new THREE.Vector3(2, 0, 2)], cum: [0, 2, 4] };
@@ -123,6 +128,13 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
   log.length = 0;
   b.run(routine, exec, 3);
   check('start 换成指定的协程，它结束后再用 next 开新任务', made === 4 && log.join(' ') === 'z! a!', log.join(' '));
+  const saved = { k: 'c', n: 3 };
+  left.set(saved, 2);
+  b.resume(saved, true);
+  log.length = 0;
+  b.run(routine, exec);
+  b.run(routine, exec);
+  check('resume 接着做存下来的指令、不再当第一步，做完后开新任务', made === 5 && log.join(' ') === 'c c a!', log.join(' '));
 }
 
 // ---------------- 高度场空间 ----------------

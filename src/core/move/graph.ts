@@ -105,6 +105,15 @@ export function tunnelFloor(c: THREE.Vector3, t: THREE.Vector3, radius: number, 
 /** advance 的结果：到了目标、还在边上、没有路、这一步换了三次边还没走完 */
 export type WalkResult = 'arrived' | 'walking' | 'noRoute' | 'pending';
 
+/** GraphWalker 的存档：边用它在边数组里的序号表示，不在边上时是 -1 */
+export interface WalkerSave {
+  node: number;
+  edge: number;
+  from: number;
+  s: number;
+  goal: number;
+}
+
 /** 在图上一跳一跳走向目标节点：在边上时记着从哪端出发、走了多远 */
 export class GraphWalker<E extends GraphEdge> {
   node = -1;
@@ -137,6 +146,18 @@ export class GraphWalker<E extends GraphEdge> {
 
   dir(): 1 | -1 {
     return this.from === this.edge!.a ? 1 : -1;
+  }
+
+  toSave(edges: readonly E[]): WalkerSave {
+    return { node: this.node, edge: this.edge ? edges.indexOf(this.edge) : -1, from: this.from, s: Math.round(this.s * 1000) / 1000, goal: this.goal };
+  }
+
+  restore(s: WalkerSave, edges: readonly E[]): void {
+    this.node = s.node;
+    this.edge = edges[s.edge] ?? null;
+    this.from = s.from;
+    this.s = s.s;
+    this.goal = s.goal;
   }
 
   /** 沿路走 step 的距离，一次最多换三条边。走到半路换了目标、而新路线要折回出发的那端时，就地掉头 */

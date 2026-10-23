@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG, type Role } from '../config';
 import { asText, L, type Text } from '../../../core/i18n';
-import { GraphWalker } from '../../../core/move/graph';
+import { GraphWalker, type WalkerSave } from '../../../core/move/graph';
 import { Behavior, type Routine as CoreRoutine } from '../../../core/sim/behavior';
 import { Skirt } from '../../../core/move/surface';
 import { clamp } from '../../../core/util/math';
@@ -64,9 +64,35 @@ export interface AntSave {
   log: { t: number | string; msg: Text | string }[];
   /** 手里拿着的物品编号；较早的存档没有，读档时那些物品直接送到目的地 */
   carry?: number;
+  /** 正在做的那一步；较早的存档没有，读档后从新任务开始、走在隧道中途的放到节点上 */
+  step?: StepSave;
+  /** 构造时随机抽的个体差异与计时：步速、隧道里靠右的程度和当前让开的距离、下次触角接触和查看警报的时刻；较早的存档没有，读档时重新抽 */
+  ind?: number[];
+  /** 几十秒内的短暂状态：增援、躲避（存狼蛛在列表里的位置，它的编号读档后会变）、原地停留、陷在蚁狮坑里、记着要绕开的坑、蹚水 */
+  fx?: { alarm?: number[]; flee?: number[]; hold?: number; pit?: number[]; avoid?: number[]; wade?: number; taskAct?: Text };
+}
+
+type CommandSave = Exclude<Command, { k: 'room' }> | { k: 'room'; chamber: number; time: number; point?: number[] };
+
+/** 当前指令和它的执行进度（DECISIONS T-067） */
+interface StepSave {
+  cmd: CommandSave;
+  started: boolean;
+  act: Text;
+  timer: number;
+  pause: number;
+  patrol: number;
+  local: number[];
+  nav: number[];
+  ent: number;
+  noise: number;
+  climb?: number[];
+  walk?: WalkerSave;
+  blocked?: boolean;
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
+const v3 = (v: THREE.Vector3) => [r3(v.x), r3(v.y), r3(v.z)];
 
 export class Ant {
   id: number;
@@ -229,10 +255,83 @@ export class Ant {
       shares: this.shares,
       log: this.log.slice(0, 4),
       ...(this.carrying ? { carry: this.carrying.id } : {}),
+      ind: [r3(this.pace), r3(this.lane), r3(this.side), r3(this.nextContactAt), r3(this.nextAlarmCheck), r3(this.layTrail), this.memoryChecked ? 1 : 0],
+      ...this.stepSave(w),
     };
   }
 
-  /** 读档：恢复个体状态和位置，任务协程从头开始（手里的东西由 Colony.restore 交还，先送到再选新任务）。走在隧道中途的蚂蚁放到最近的节点上，爬在植物上的放回地面 */
+  private stepSave(w: World): Pick<AntSave, 'step' | 'fx'> {
+    const out: Pick<AntSave, 'step' | 'fx'> = {};
+    const b = this.behavior;
+    if (b.cmd) {
+      const c = b.cmd;
+      out.step = {
+        cmd: c.k === 'room' ? { ...c, point: c.point && v3(c.point) } : { ...c },
+        started: b.started,
+        act: this.activity,
+        timer: r3(this.timer),
+        pause: r3(this.pauseT),
+        patrol: r3(this.patrolT),
+        local: v3(this.localTarget),
+        nav: v3(this.navTarget),
+        ent: this.entranceTarget,
+        noise: r3(this.pathNoise),
+        ...(c.k === 'climb' ? { climb: [r3(this.climbS), this.climbPhase, r3(this.climbR0), r3(this.climbY0)] } : {}),
+        ...(this.domain === 'nest' && this.room < 0 ? { walk: this.walk.toSave(w.nest.edges) } : {}),
+        ...(this.exitBlocked ? { blocked: true } : {}),
+      };
+    }
+    const fx: NonNullable<AntSave['fx']> = {};
+    if (this.alarmT > 0) fx.alarm = [r3(this.alarmT), r3(this.alarmX), r3(this.alarmZ)];
+    if (this.fleeT > 0) fx.flee = [r3(this.fleeT), w.predators.spiders.findIndex((p) => p.id === this.fleeFrom)];
+    if (this.holdT > 0) fx.hold = r3(this.holdT);
+    if (this.pitT > 0) fx.pit = [r3(this.pitT), r3(this.pitX), r3(this.pitZ)];
+    if (this.avoidPit) fx.avoid = [r3(this.avoidPit.x), r3(this.avoidPit.z), r3(this.pitAvoidT)];
+    if (this.wadeT > 0) fx.wade = r3(this.wadeT);
+    if (this.alarmT > 0 || this.fleeT > 0 || this.exitBlocked) fx.taskAct = this.taskActivity;
+    if (Object.keys(fx).length) out.fx = fx;
+    return out;
+  }
+
+  private restoreStep(s: AntSave, w: World): void {
+    if (s.ind) {
+      let mc: number;
+      [this.pace, this.lane, this.side, this.nextContactAt, this.nextAlarmCheck, this.layTrail, mc] = s.ind;
+      this.memoryChecked = mc === 1;
+    }
+    const fx = s.fx;
+    if (fx) {
+      if (fx.alarm) [this.alarmT, this.alarmX, this.alarmZ] = fx.alarm;
+      if (fx.flee) [this.fleeT, this.fleeFrom] = [fx.flee[0], w.predators.spiders[fx.flee[1]]?.id ?? -1];
+      this.holdT = fx.hold ?? 0;
+      if (fx.pit) [this.pitT, this.pitX, this.pitZ] = fx.pit;
+      if (fx.avoid) [this.avoidPit, this.pitAvoidT] = [{ x: fx.avoid[0], z: fx.avoid[1] }, fx.avoid[2]];
+      this.wadeT = fx.wade ?? 0;
+      if (fx.taskAct) this.taskActivity = asText(fx.taskAct);
+    }
+    const st = s.step;
+    if (!st) return;
+    const c = st.cmd;
+    const cmd: Command = c.k === 'room' ? { ...c, point: c.point && new THREE.Vector3(c.point[0], c.point[1], c.point[2]) } : c;
+    if (cmd.k === 'room' && !w.nest.chambers[cmd.chamber]) return;
+    if (cmd.k === 'goto' && !w.nest.nodes[cmd.node]) return;
+    this.behavior.resume(cmd, st.started);
+    this.activity = asText(st.act);
+    this.timer = st.timer;
+    this.pauseT = st.pause;
+    this.patrolT = st.patrol;
+    this.localTarget.set(st.local[0], st.local[1], st.local[2]);
+    this.navTarget.set(st.nav[0], st.nav[1], st.nav[2]);
+    this.entranceTarget = st.ent;
+    this.pathNoise = st.noise;
+    if (st.climb) [this.climbS, this.climbPhase, this.climbR0, this.climbY0] = st.climb;
+    this.exitBlocked = st.blocked === true;
+  }
+
+  /**
+   * 读档：恢复个体状态、位置和正在做的那一步，做完这一步再开新任务（手里的东西由 Colony.restore 交还，先送到再选新任务）。
+   * 较早的存档没有这一步：走在隧道中途的放到最近的节点上，爬在植物上的放回地面
+   */
   static fromSave(s: AntSave, w: World): Ant {
     const a = new Ant(s.role, s.age, w, s.id);
     w.ids.seen('ant', s.id);
@@ -255,12 +354,19 @@ export class Ant {
     a.log = s.log.map((e) => ({ t: e.t, msg: asText(e.msg) }));
     a.heading = s.h;
     const nest = w.nest;
+    const wk = s.step?.walk;
     if (s.surface) {
       a.placeOnSurface(s.p[0], s.p[2], w);
       a.fwd.set(Math.cos(s.h), 0, Math.sin(s.h));
+      // 爬在植物上的高度、坑里的位置都按存档原样
+      if (s.step) a.pos.set(s.p[0], s.p[1], s.p[2]);
     } else if (s.room >= 0 && nest.chambers[s.room]) {
       a.domain = 'nest';
       a.room = s.room;
+      a.pos.set(s.p[0], s.p[1], s.p[2]);
+    } else if (wk && nest.nodes[wk.node] && (wk.edge < 0 || nest.edges[wk.edge])) {
+      a.domain = 'nest';
+      a.walk.restore(wk, nest.edges);
       a.pos.set(s.p[0], s.p[1], s.p[2]);
     } else {
       a.domain = 'nest';
@@ -269,6 +375,7 @@ export class Ant {
     }
     a.localTarget.copy(a.pos);
     a.navTarget.copy(a.pos);
+    a.restoreStep(s, w);
     return a;
   }
 

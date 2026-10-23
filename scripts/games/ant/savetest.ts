@@ -6,7 +6,7 @@ import { loadWorld, saveWorld, type SaveData } from '../../../src/games/ant/worl
 
 const step = 1 / 30;
 const run = (w: World, sec: number) => {
-  for (let t = 0; t < sec; t += step) w.advance(step);
+  for (let i = Math.round(sec / step); i > 0; i--) w.advance(step);
 };
 
 function metrics(w: World): Record<string, string | number> {
@@ -104,8 +104,51 @@ const bad1 = check(b);
 console.log('一致性检查：', bad1.join('；') || '通过');
 problems.push(...bad1);
 
-run(a, 1200);
-run(b, 300);
+// 读档后接着做正在做的那一步：位置不跳、活动说明不变，几秒后大多还和原世界走在一起
+const twins = a.colony.ants.map((x) => [x, b.colony.antById(x.id)] as const).filter((p) => p[1]);
+const jumped = twins.filter(([x, y]) => x.pos.distanceTo(y!.pos) > 0.01).length;
+const sameAct = twins.filter(([x, y]) => tr(x.activity) === tr(y!.activity)).length;
+const climbing = [a, b].map((wd) => wd.colony.ants.filter((x) => x.climbing).length);
+const kindAt = new Map(twins.map(([x]) => [x.id, x.behavior.cmd?.k ?? '-']));
+console.log(`读档后位置变了的 ${jumped} 只，活动说明相同的 ${sameAct}/${twins.length} 只，爬在植物上的 ${climbing[0]} | ${climbing[1]} 只`);
+if (jumped) problems.push(`读档后有 ${jumped} 只蚂蚁位置变了`);
+if (sameAct < twins.length * 0.99) problems.push(`读档后活动说明不同的有 ${twins.length - sameAct} 只`);
+if (climbing[0] !== climbing[1]) problems.push('读档后爬在植物上的蚂蚁数不同');
+// 对照：去掉“正在做的那一步”和个体计时，相当于较早的存档，读档后都从新任务开始
+const old = JSON.parse(json) as SaveData;
+for (const x of old.colony.ants) {
+  delete x.step;
+  delete x.ind;
+  delete x.fx;
+}
+const o = new World(old.seed);
+loadWorld(o, old);
+run(a, 5);
+run(b, 5);
+run(o, 5);
+/** 和原世界相差不到 1 cm 的蚂蚁；按读档时的指令分别数走散的 */
+const together = (wd: World) => {
+  const apart = new Map<string, number[]>();
+  let n = 0;
+  for (const [x] of twins) {
+    const y = wd.colony.antById(x.id);
+    const v = apart.get(kindAt.get(x.id)!) ?? [0, 0];
+    v[1]++;
+    if (x.alive && y?.alive && x.pos.distanceTo(y.pos) < 1) n++;
+    else v[0]++;
+    apart.set(kindAt.get(x.id)!, v);
+  }
+  return { n, apart: [...apart].map(([k, [m, all]]) => `${k} ${m}/${all}`).join('，') };
+};
+const tb = together(b);
+const to = together(o);
+console.log(`再运行 5 秒，和原世界相差不到 1 cm 的 ${tb.n}/${twins.length} 只（不接着做这一步时 ${to.n} 只）`);
+console.log(`  走散的，按读档时的指令：${tb.apart}`);
+console.log(`  不接着做时：${to.apart}`);
+if (tb.n < twins.length * 0.5) problems.push(`读档 5 秒后只有 ${tb.n} 只还和原世界在一起`);
+
+run(a, 1195);
+run(b, 295);
 const stuck = held.filter(([x, it]) => x.alive && x.carrying === it).length;
 console.log(`读档时搬运中的 ${held.length} 件，300 秒后还拿在原来的蚂蚁手里：${stuck} 件`);
 if (stuck) problems.push(`读档后有 ${stuck} 件东西一直没送到`);
