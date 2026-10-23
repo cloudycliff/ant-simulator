@@ -125,6 +125,7 @@ scripts/
     defensetest.ts      防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
     weathertest.ts      天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
     perftest.ts         性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
+    crowdtest.ts        拥挤测试：3000 只工蚁跑一个游戏日，统计休息室密度、巢口附近和隧道里的重叠
   games/aquarium/
     aquatest.ts         鱼缸示例的无界面检查：鱼不出缸、喂食后会吃、开关灯和吃完的事件、存档往返、同编号可重现、英文文字
     aquashots.mjs       鱼缸示例的截图（桌面、手机）：白天、夜里、选中的鱼、饥饿着色、统计、英文、喂食、手机抽屉
@@ -228,7 +229,7 @@ requestAnimationFrame
 | `enter` | 地表上用路径整合返回最近的入口；携带食物时沿途释放信息素 |
 | `search {time}` | 地表觅食搜索；返回找到的食物源，超时返回 `null` |
 | `walk {x, z, r}` | 地表走到某点 |
-| `patrol {x, z, radius, time}` | 在某点周围巡逻 |
+| `patrol {x, z, radius, time}` | 在某点周围巡逻：走到范围内的随机点（偏向中心），停一会儿再换一个点 |
 | `climb {x, z, angle, r, top, stay}` | 走到植物茎秆旁，沿茎秆爬到 `top` 高度停留 `stay` 秒，再爬下来 |
 | `wait {time}` | 原地停留 |
 

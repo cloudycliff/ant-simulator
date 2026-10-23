@@ -91,6 +91,8 @@ export class Ant {
   heading = 0;
   entranceTarget = -1;
   pathNoise = 0;
+  /** 巡逻时走向当前目标点（localTarget）的剩余秒数，被挡住走不到就换一个点 */
+  patrolT = 0;
   /** 觅食地点记忆（黑毛蚁觅食蚁具有地点忠诚性） */
   memory: { x: number; z: number } | null = null;
   memoryChecked = false;
@@ -108,6 +110,7 @@ export class Ant {
   sepPush = 0;
   /** 个体步速差异：同时出发的同伴不会一直并排走 */
   pace = 0;
+  /** 房间里要走去的点；在地表巡逻时也借用它 */
   localTarget = new THREE.Vector3();
   navTarget = new THREE.Vector3();
   pauseT = 0;

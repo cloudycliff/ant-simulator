@@ -56,7 +56,7 @@ export function* foragerRoutine(a: Ant, w: World): Routine {
     if (a.crop > 0.6 && w.rng.chance(0.4)) return yield* distributeCrop(a, w);
     const LO = CONFIG.loiter;
     const calm = !w.clock.isNight && w.weather.damp === 0 && w.predators.threatEntrance < 0 && surfaceT >= LO.minTemp;
-    if (calm && w.rng.chance(LO.chance)) return yield* loiter(a, w);
+    if (calm && w.rng.chance(LO.chance) && w.colony.moundHasRoom(a)) return yield* loiter(a, w);
     return yield* rest(a, w, L('act.restFull'));
   }
 

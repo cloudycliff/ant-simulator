@@ -7,6 +7,9 @@ import type { World } from '../../world/world';
 import type { Ant, Command, Routine } from '../ant';
 import type { Item } from '../items';
 
+/** 休息室挤满时可以去歇着的房间（育幼室、蚁后室、垃圾室不去） */
+const REST_SPILL: Chamber['type'][] = ['rest', 'winter', 'food'];
+
 export function chamber(w: World, t: Chamber['type']): Chamber {
   return w.nest.chamberOfType(t)[0];
 }
@@ -173,7 +176,12 @@ export function* rest(a: Ant, w: World, label: Text = L('act.rest')): Routine {
   const from = a.currentNode(w);
   const c1 = w.rng.pick(rooms);
   const c2 = w.rng.pick(rooms);
-  const c = w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
+  let c = w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
+  // 休息室挤满了就去别的不太挤的房间歇着
+  const col = w.colony;
+  if (col.roomDensity(c) > CONFIG.crowd.restDensity) {
+    for (const o of w.nest.chambers) if (o.ready && REST_SPILL.includes(o.type) && col.roomDensity(o) < col.roomDensity(c)) c = o;
+  }
   a.activity = L('act.goTo', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = label;

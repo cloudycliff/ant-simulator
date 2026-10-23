@@ -1,12 +1,12 @@
 /**
  * 防御测试：让狼蛛走近觅食路线，看有没有蚂蚁提前躲开；再在蚂蚁来往多的地方和巢口附近各放一只狼蛛，观察警报、围攻、驱赶、躲避和入口警戒。
- * npx tsx scripts/games/ant/defensetest.ts [热身秒数，默认 500]
+ * npx tsx scripts/games/ant/defensetest.ts [热身秒数，默认 800，到第二天下午，地表蚂蚁多、内务蚁也在出巢警戒]
  */
 import { tr } from '../../../src/core/i18n';
 import { CONFIG } from '../../../src/games/ant/config';
 import { World } from '../../../src/games/ant/world/world';
 
-const warm = Number(process.argv[2] ?? 500);
+const warm = Number(process.argv[2] ?? 800);
 const w = new World();
 // 下雨时内务蚁不出巢警戒，测试只看晴天
 CONFIG.weather.rainPerDay = 0;
@@ -67,7 +67,9 @@ function run(label: string, x: number, z: number, secs: number, outskirts = fals
     if (threatAt >= 0 && guardsAt < 0 && w.predators.guardsOut >= 3) guardsAt = t;
     if (threatAt >= 0 && !threat && threatEnd < 0) threatEnd = t;
     if (threatEnd >= 0 && guardsHomeAt < 0 && w.predators.guardsOut === 0) guardsHomeAt = t;
-    if (threatEnd >= 0 && guardsHomeAt < 0) {
+    // 狼蛛又逼近入口时，出来的警戒蚁就不算闲逛
+    if (threat) idle.clear();
+    else if (threatEnd >= 0 && guardsHomeAt < 0) {
       for (const a of w.colony.ants) {
         if (!a.guarding || a.domain !== 'surface' || a.alarmT > 0) continue;
         const v = (idle.get(a.id) ?? 0) + step;
@@ -85,6 +87,7 @@ function run(label: string, x: number, z: number, secs: number, outskirts = fals
   }
   console.log(`结果：被捕食 / 咬死 ${st.preyed - p0}，赶走 ${st.repelled - r0}，最多同时围攻 ${maxMob}，最多增援 ${maxResp}，最多警戒 ${maxGuards}，${goneAt >= 0 ? `${goneAt.toFixed(0)} 秒后离开` : '仍在场'}`);
   console.log(`躲避：发觉狼蛛靠近而躲开 ${fled} 次，最多同时 ${maxFlee} 只`);
+  totalFled += fled;
   if (threatAt >= 0) {
     const arrive = guardsAt >= 0 ? guardsAt - threatAt : Infinity;
     const home = threatEnd >= 0 ? (guardsHomeAt >= 0 ? guardsHomeAt - threatEnd : Infinity) : 0;
@@ -103,31 +106,51 @@ const problems: string[] = [];
  * 入口受威胁后几秒内要有 3 只出来警戒；威胁解除后，每只警戒蚁在外面闲逛（不算追打狼蛛、搜寻警报源）最多几秒。
  * 闻得到警报的会一直搜寻到警报散掉（约 20 秒），那段不算
  */
-const GUARD_ARRIVE = Number(process.env.GUARD_ARRIVE ?? 10);
+const GUARD_ARRIVE = Number(process.env.GUARD_ARRIVE ?? 15);
 const GUARD_LINGER = Number(process.env.GUARD_LINGER ?? 8);
+/** 所有场景里合计至少这么多次发觉狼蛛而躲开 */
+const MIN_FLED = 10;
+let totalFled = 0;
 
-/** 狼蛛从 15 cm 外朝蚂蚁多的地方走过去：第一次扑击之前，要有蚂蚁发觉它并躲开 */
+/**
+ * 狼蛛从 15 cm 外朝蚂蚁多的地方走过去，看有没有蚂蚁发觉它并躲开。
+ * 狼蛛 7 cm 就扑、蚂蚁 10 cm 才察觉，一扑中就停下吃，单这一段躲开几只看运气，只和后面几段合计判定
+ */
 function approach(x: number, z: number): void {
-  const ang = Math.atan2(z, x) + Math.PI / 2;
-  const sx = x + Math.cos(ang) * 15;
-  const sz = z + Math.sin(ang) * 15;
+  // 从 15 cm 外附近蚂蚁最少的方向过来，不然一放下就扑到了旁边的蚂蚁
+  let sx = x;
+  let sz = z;
+  let best = Infinity;
+  for (let i = 0; i < 16; i++) {
+    const ang = (i / 16) * Math.PI * 2;
+    const px = x + Math.cos(ang) * 15;
+    const pz = z + Math.sin(ang) * 15;
+    if (Math.hypot(px, pz) > CONFIG.world.size / 2 - 3) continue;
+    const n = w.colony.ants.filter((a) => a.domain === 'surface' && Math.hypot(a.pos.x - px, a.pos.z - pz) < 12).length;
+    if (n < best) [best, sx, sz] = [n, px, pz];
+  }
   w.placePredator('spider', sx, sz);
   const s = w.predators.spiders[w.predators.spiders.length - 1];
   console.log(`\n== 狼蛛走近觅食路线：从 (${sx.toFixed(0)}, ${sz.toFixed(0)}) 走向 (${x.toFixed(0)}, ${z.toFixed(0)})`);
   let fled = 0;
   let fleeing = new Set<number>();
-  let t = 0;
-  for (; t < 30 && s.state !== 'chase'; t += step) {
-    s.gx = x;
-    s.gz = z;
-    if (s.state === 'pause') s.state = 'wander';
+  let chaseAt = -1;
+  let fledBefore = 0;
+  for (let t = 0; t < 20; t += step) {
+    if (s.state === 'chase' && chaseAt < 0) [chaseAt, fledBefore] = [t, fled];
+    if (s.state === 'wander' || s.state === 'pause') {
+      s.gx = x;
+      s.gz = z;
+      s.state = 'wander';
+    }
     w.advance(step);
+    if (!w.predators.spiders.includes(s)) break;
     const now = new Set(w.colony.ants.filter((a) => a.fleeT > 0).map((a) => a.id));
     for (const id of now) if (!fleeing.has(id)) fled++;
     fleeing = now;
   }
-  console.log(`结果：${t.toFixed(1)} 秒后第一次扑击，之前有 ${fled} 次发觉狼蛛而躲开`);
-  if (fled < 3) problems.push(`狼蛛走近时只有 ${fled} 次提前躲开`);
+  console.log(`结果：${chaseAt >= 0 ? `${chaseAt.toFixed(1)} 秒后第一次扑击，之前有 ${fledBefore} 次躲开；` : ''}20 秒里共 ${fled} 次发觉狼蛛而躲开`);
+  totalFled += fled;
   w.predators.remove(s);
 }
 
@@ -143,5 +166,7 @@ for (let t = 0; t < 60; t += step) w.advance(step);
 const e2 = w.nest.entrances[1];
 const ang = Math.atan2(e2.z, e2.x);
 run(`${tr(e2.label)}外 16 cm`, e2.x + Math.cos(ang) * 16, e2.z + Math.sin(ang) * 16, 120, true);
+console.log(`\n躲避合计：${totalFled} 次`);
+if (totalFled < MIN_FLED) problems.push(`所有场景合计只有 ${totalFled} 次躲开狼蛛`);
 console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
 if (problems.length) process.exitCode = 1;

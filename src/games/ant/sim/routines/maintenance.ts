@@ -44,7 +44,7 @@ export function* maintenanceRoutine(a: Ant, w: World): Routine {
   const digP = col.expansion.project ? 0.45 : 0.15;
   const r = w.rng.next();
   if (r < digP) return yield* dig(a, w);
-  if (r < digP + 0.25 && !w.clock.isNight) return yield* guard(a, w);
+  if (r < digP + 0.25 && !w.clock.isNight && col.moundHasRoom(a)) return yield* guard(a, w);
   if (a.crop > 0.6 && w.rng.chance(0.5)) return yield* distributeCrop(a, w);
   return yield* patrolNest(a, w);
 }
@@ -215,7 +215,7 @@ export function* guard(a: Ant, w: World, threat = false): Routine {
     const until = w.clock.seconds + w.rng.range(25, 60);
     do yield { k: 'patrol', x: ent.x, z: ent.z, radius: 7, time: D.guardCheckSec };
     while (w.clock.seconds < until && w.predators.threatEntrance >= 0);
-  } else yield { k: 'patrol', x: ent.x, z: ent.z, radius: 4.5, time: w.rng.range(25, 60) };
+  } else yield { k: 'patrol', x: ent.x, z: ent.z, radius: 4.5 * w.colony.moundScale(w.nest.entrances.indexOf(ent)), time: w.rng.range(25, 60) };
   a.guarding = false;
   a.activity = L('act.guardEnd');
   yield { k: 'enter' };
@@ -227,10 +227,11 @@ export function* loiter(a: Ant, w: World): Routine {
   a.activity = L('act.loiterOut');
   yield { k: 'exit' };
   const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
+  const s = w.colony.moundScale(w.nest.entrances.indexOf(ent));
   const ang = w.rng.range(0, TAU);
-  const d = w.rng.range(LO.offset[0], LO.offset[1]);
+  const d = w.rng.range(LO.offset[0], LO.offset[1]) * s;
   a.activity = L(w.rng.chance(0.5) ? 'act.patrolTerritory' : 'act.bask');
-  yield { k: 'patrol', x: ent.x + Math.cos(ang) * d, z: ent.z + Math.sin(ang) * d, radius: w.rng.range(LO.radius[0], LO.radius[1]), time: w.rng.range(LO.time[0], LO.time[1]) };
+  yield { k: 'patrol', x: ent.x + Math.cos(ang) * d, z: ent.z + Math.sin(ang) * d, radius: w.rng.range(LO.radius[0], LO.radius[1]) * s, time: w.rng.range(LO.time[0], LO.time[1]) };
   a.activity = L('act.loiterEnd');
   yield { k: 'enter' };
 }

@@ -18,146 +18,146 @@ init ants=1001, chambers=11, nodes=23
      35  为喂幼虫储备食物，向 # 乞食
      33  前往蚁后室
 
-[第1天 22:30] ants=1006 outside=77 food=386.5 liquid=298.1 brood={"egg":50,"larva":87,"pupa":41} queenHunger=0.13
-  roles N240/246 M308/357 F457/402  pupae@向阳育幼室  occupancy=89% chambers=12 enlarged=0 project=rest tunnel 7.4/7.4 soil 10/204
-  aphids 28*/0.5 31*/0.4 22*/0.1 30*/0.7 19*/0.3 36*/0.1  sources=15 pher=2499 home=1459
+[第1天 22:30] ants=1007 outside=60 food=331.7 liquid=300.1 brood={"egg":50,"larva":87,"pupa":40} queenHunger=0.14
+  roles N241/244 M301/352 F464/410  pupae@向阳育幼室  occupancy=87% chambers=11 enlarged=0 project=enlarge#3 rest tunnel 10.3/10.3 soil 52/105
+  aphids 28*/0.8 31*/0.6 21*/0.4 30*/0.6 18*/0.1 36*/0.8  sources=15 pher=2094 home=1253
   spiders=- antlions=2 1 1  weather=晴 rains=0 wet=0.00 plugs=0.0/0.0
-  stats={"eggsLaid":22,"emerged":9,"deaths":4,"foodCollected":484,"wasteRemoved":47,"soilExcavated":326,"honeydew":17,"trophallaxis":1928,"contacts":13321,"roleChanges":68,"preyed":4,"repelled":0}
-    161  夜间在巢内休息
-     77  食物储备充足，留在巢内待命
-     61  把土粒运出巢外
-     57  前往工蚁休息室 n
-     43  前往工蚁休息室
-     35  舔舐清洁幼虫，防止霉菌滋生
-     30  前往记忆中的觅食地点
-     29  前往向阳育幼室
-     28  前往幼虫室
-     26  前往蚁后室
-     23  舔舐清洁卵团，防止霉菌滋生
-     22  前往卵室
-
-[第2天 13:30] ants=1018 outside=293 food=525.9 liquid=214.3 brood={"egg":61,"larva":77,"pupa":48} queenHunger=0.48
-  roles N254/255 M308/355 F455/407  pupae@向阳育幼室  occupancy=90% chambers=12 enlarged=0 project=rest tunnel 7.4/7.4 soil 159/204
-  aphids 32*/0.3 36*/0.3 24*/0.1 34*/1.3 23*/0.3 40*/0.4  sources=18 pher=2424 home=1868
-  spiders=- antlions=3 1 2  weather=晴 rains=0 wet=0.00 plugs=0.0/0.0
-  stats={"eggsLaid":44,"emerged":23,"deaths":6,"foodCollected":746,"wasteRemoved":102,"soilExcavated":475,"honeydew":39,"trophallaxis":3042,"contacts":27229,"roleChanges":68,"preyed":6,"repelled":0}
-     78  在蚁丘旁晒太阳
-     68  在入口附近警戒巡逻，检查来者气味
-     67  食物储备充足，留在巢内待命
-     65  在巢口附近巡视领地
-     37  前往工蚁休息室 n
-     33  舔舐清洁幼虫，防止霉菌滋生
-     32  前往卵室
-     32  前往工蚁休息室
-     32  储备充足，出巢在附近走走
+  stats={"eggsLaid":22,"emerged":10,"deaths":4,"foodCollected":421,"wasteRemoved":43,"soilExcavated":368,"honeydew":16,"trophallaxis":2283,"contacts":13280,"roleChanges":61,"preyed":4,"repelled":0}
+    139  夜间在巢内休息
+    102  把土粒运出巢外
+     76  食物储备充足，留在巢内待命
+     53  前往工蚁休息室 n
+     40  前往工蚁休息室
+     39  前往越冬室
+     34  前往卵室
+     34  前往向阳育幼室
      29  前往蚁后室
-     28  前往向阳育幼室
-     27  前往幼虫室
-
-[第3天 04:30] ants=1026 outside=40 food=585.0 liquid=163.1 brood={"egg":70,"larva":73,"pupa":56} queenHunger=0.30
-  roles N259/268 M313/347 F453/410  pupae@蛹室  occupancy=86% chambers=12 enlarged=0 project=-
-  aphids 37*/0.3 40*/1.2 28*/0.2 37*/2.0 26*/1.1 44*/0.0  sources=20 pher=127 home=1762
-  spiders=- antlions=5 1 2  weather=小雨 rains=1 wet=0.81 plugs=1.0/1.0
-  stats={"eggsLaid":67,"emerged":33,"deaths":8,"foodCollected":982,"wasteRemoved":205,"soilExcavated":537,"honeydew":62,"trophallaxis":3502,"contacts":41110,"roleChanges":73,"preyed":8,"repelled":0}
-    217  地表太冷，在巢内等待
-    105  前往工蚁休息室 n
-     58  前往工蚁休息室
-     45  舔舐清洁幼虫，防止霉菌滋生
-     40  巡视工蚁休息室 n
-     31  下雨了，赶回巢内躲雨
-     27  舔舐清洁蛹，防止霉菌滋生
-     26  前往蛹室
-     26  舔舐清洁卵团，防止霉菌滋生
-     25  侍奉蚁后：梳理、舔舐蚁后体表
-     24  前往卵室
-     24  前往幼虫室
-
-[第3天 19:30] ants=1033 outside=219 food=553.5 liquid=157.7 brood={"egg":72,"larva":78,"pupa":63} queenHunger=0.17
-  roles N267/285 M313/334 F452/412  pupae@向阳育幼室  occupancy=87% chambers=12 enlarged=0 project=-
-  aphids 39*/0.1 43*/0.2 28*/3.7 38*/4.9 29*/0.1 47*/0.2  sources=19 pher=1365 home=1375
-  spiders=wander/0 wander/0 antlions=5 1 2  weather=晴 rains=1 wet=0.00 plugs=0.0/0.0
-  stats={"eggsLaid":89,"emerged":41,"deaths":9,"foodCollected":1117,"wasteRemoved":343,"soilExcavated":537,"honeydew":85,"trophallaxis":3803,"contacts":55642,"roleChanges":73,"preyed":8,"repelled":0}
-     86  前往工蚁休息室 n
-     66  在蚁丘旁晒太阳
-     58  食物储备充足，留在巢内待命
-     53  在巢口附近巡视领地
-     52  夜间在巢内休息
-     40  在入口附近警戒巡逻，检查来者气味
-     36  前往向阳育幼室
-     36  舔舐清洁幼虫，防止霉菌滋生
-     33  巡视工蚁休息室 n
-     32  前往工蚁休息室
-     29  前往蚁后室
-     28  侍奉蚁后：梳理、舔舐蚁后体表
-
-[第4天 10:30] ants=1025 outside=6 food=281.3 liquid=123.3 brood={"egg":72,"larva":93,"pupa":67} queenHunger=0.52
-  roles N271/304 M255/213 F498/508  pupae@蛹室  occupancy=88% chambers=12 enlarged=0 project=-
-  aphids 44*/0.5 47*/0.9 31*/4.6 41*/6.0 33*/0.8 51*/0.1  sources=20 pher=39 home=1054
-  spiders=- antlions=7 1 2  weather=小雨 rains=2 wet=1.00 plugs=1.0/1.0
-  stats={"eggsLaid":112,"emerged":45,"deaths":21,"foodCollected":1242,"wasteRemoved":556,"soilExcavated":537,"honeydew":109,"trophallaxis":4136,"contacts":69864,"roleChanges":131,"preyed":13,"repelled":2}
-    217  食物储备充足，留在巢内待命
-    114  前往工蚁休息室 n
-     42  侧入口已被土粒封住，在里面等待雨停
-     40  前往蛹室
-     38  外面在下雨，留在巢内
-     33  前往工蚁休息室
-     31  巡视越冬室
-     30  前往卵室
-     30  巡视工蚁休息室 n
-     29  主入口已被土粒封住，在里面等待雨停
      28  舔舐清洁幼虫，防止霉菌滋生
-     26  前往幼虫室
+     23  侍奉蚁后：梳理、舔舐蚁后体表
+     23  前往幼虫室
 
-[第5天 01:30] ants=1026 outside=25 food=130.4 liquid=134.9 brood={"egg":72,"larva":93,"pupa":83} queenHunger=0.34
-  roles N277/323 M198/143 F550/559  pupae@蛹室  occupancy=87% chambers=12 enlarged=0 project=enlarge#11 rest tunnel 7.4/7.4 soil 86/90
-  aphids 47*/1.5 51*/0.2 33*/5.0 43*/6.0 37*/0.3 55*/1.2  sources=20 pher=105 home=980
-  spiders=wander/0 antlions=8 1 2  weather=大雨 rains=3 wet=1.00 plugs=1.0/1.0
-  stats={"eggsLaid":134,"emerged":51,"deaths":26,"foodCollected":1399,"wasteRemoved":797,"soilExcavated":623,"honeydew":136,"trophallaxis":4568,"contacts":84004,"roleChanges":188,"preyed":14,"repelled":2}
-    286  地表太冷，在巢内等待
-    126  前往工蚁休息室 n
-     56  前往工蚁休息室
-     50  前往储食室清理垃圾
-     42  把蛹搬到蛹室
-     33  舔舐清洁蛹，防止霉菌滋生
-     30  把垃圾搬到垃圾室
-     25  前往蛹室
-     23  前往蚁后室
-     20  前往幼虫室 n
-     18  侍奉蚁后：梳理、舔舐蚁后体表
-     18  夜间在巢内休息
+[第2天 13:30] ants=1017 outside=306 food=443.1 liquid=216.6 brood={"egg":61,"larva":75,"pupa":49} queenHunger=0.49
+  roles N255/256 M301/352 F460/406  pupae@向阳育幼室  occupancy=87% chambers=11 enlarged=1 project=-
+  aphids 32*/0.2 36*/0.2 25*/0.0 34*/0.0 21*/0.3 40*/0.4  sources=19 pher=2597 home=1654
+  spiders=wander/1 antlions=3 1 1  weather=晴 rains=0 wet=0.00 plugs=0.0/0.0
+  stats={"eggsLaid":44,"emerged":24,"deaths":8,"foodCollected":665,"wasteRemoved":90,"soilExcavated":437,"honeydew":40,"trophallaxis":3403,"contacts":27092,"roleChanges":61,"preyed":8,"repelled":1}
+     85  食物储备充足，留在巢内待命
+     76  在蚁丘旁晒太阳
+     72  在巢口附近巡视领地
+     68  在入口附近警戒巡逻，检查来者气味
+     35  前往卵室
+     33  储备充足，出巢在附近走走
+     32  前往幼虫室 n
+     31  前往幼虫室
+     31  前往入口执勤
+     30  前往向阳育幼室
+     27  舔舐清洁幼虫，防止霉菌滋生
+     26  巡视越冬室
 
-[第5天 16:30] ants=1040 outside=328 food=275.1 liquid=187.4 brood={"egg":72,"larva":102,"pupa":71} queenHunger=0.16
-  roles N303/320 M174/213 F562/506  pupae@向阳育幼室  occupancy=87% chambers=12 enlarged=1 project=-
-  aphids 50*/0.2 54*/0.2 35*/0.0 45*/0.0 41*/0.1 56*/0.1  sources=12 pher=3626 home=1852
-  spiders=- antlions=10 2 3  weather=晴 rains=3 wet=0.00 plugs=0.0/0.0
-  stats={"eggsLaid":157,"emerged":77,"deaths":38,"foodCollected":1818,"wasteRemoved":1107,"soilExcavated":643,"honeydew":179,"trophallaxis":5249,"contacts":97513,"roleChanges":218,"preyed":18,"repelled":2}
-     97  食物储备充足，留在巢内待命
-     66  前往记忆中的觅食地点
-     66  在蚁丘旁晒太阳
-     57  舔舐清洁幼虫，防止霉菌滋生
-     54  在巢口附近巡视领地
-     48  前往向阳育幼室
-     44  前往工蚁休息室 n
-     41  储备充足，出巢在附近走走
-     37  爬上植物守护蚜虫，驱赶瓢虫等天敌
-     34  前往工蚁休息室
-     31  前往卵室
-     29  前往幼虫室 n
+[第3天 04:30] ants=1022 outside=5 food=489.3 liquid=172.9 brood={"egg":70,"larva":73,"pupa":56} queenHunger=0.31
+  roles N258/268 M308/345 F455/408  pupae@蛹室  occupancy=88% chambers=11 enlarged=1 project=rest tunnel 0.6/7.3 soil 0/243
+  aphids 36*/0.9 40*/1.3 27*/1.8 37*/2.5 25*/0.9 42*/2.9  sources=20 pher=139 home=964
+  spiders=- antlions=4 2 2  weather=雨后 rains=1 wet=0.83 plugs=1.0/1.0
+  stats={"eggsLaid":67,"emerged":33,"deaths":12,"foodCollected":894,"wasteRemoved":131,"soilExcavated":437,"honeydew":56,"trophallaxis":4134,"contacts":41084,"roleChanges":68,"preyed":12,"repelled":2}
+    104  夜间在巢内休息
+     75  食物储备充足，留在巢内待命
+     66  前往工蚁休息室
+     56  前往越冬室
+     52  地表太冷，在巢内等待
+     52  前往工蚁休息室 n
+     37  前往卵室
+     37  前往蛹室
+     33  舔舐清洁幼虫，防止霉菌滋生
+     26  前往幼虫室 n
+     26  巡视储食室
+     25  前往蚁后室
 
-[第6天 07:30] ants=1050 outside=124 food=305.3 liquid=174.3 brood={"egg":72,"larva":112,"pupa":65} queenHunger=0.03
-  roles N321/324 M205/212 F523/513  pupae@蛹室  occupancy=88% chambers=13 enlarged=1 project=larva tunnel 8.8/8.9 soil 29/272
-  aphids 54*/0.1 58*/0.0 38*/2.8 49*/0.2 45*/0.2 60*/0.2  sources=19 pher=1953 home=2285
-  spiders=- antlions=11 2 3  weather=晴 rains=3 wet=0.00 plugs=0.0/0.0
-  stats={"eggsLaid":179,"emerged":95,"deaths":46,"foodCollected":2015,"wasteRemoved":1163,"soilExcavated":705,"honeydew":213,"trophallaxis":6202,"contacts":111448,"roleChanges":249,"preyed":19,"repelled":2}
-    150  储备充足，出巢在附近走走
-     94  食物储备充足，留在巢内待命
-     49  舔舐清洁幼虫，防止霉菌滋生
-     47  前往工蚁休息室 n
-     37  侍奉蚁后：梳理、舔舐蚁后体表
-     33  前往蛹室
-     33  前往幼虫室
-     31  夜间在巢内休息
-     28  前往幼虫室 n
+[第3天 19:30] ants=1026 outside=228 food=549.0 liquid=184.1 brood={"egg":72,"larva":78,"pupa":63} queenHunger=0.18
+  roles N266/284 M308/331 F451/410  pupae@向阳育幼室  occupancy=89% chambers=12 enlarged=1 project=rest tunnel 7.3/7.3 soil 106/243
+  aphids 40*/0.1 44*/0.2 30*/0.3 39*/0.6 28*/0.0 45*/0.0  sources=19 pher=2183 home=1616
+  spiders=- antlions=5 3 3  weather=晴 rains=1 wet=0.00 plugs=0.0/0.0
+  stats={"eggsLaid":89,"emerged":41,"deaths":16,"foodCollected":1156,"wasteRemoved":325,"soilExcavated":570,"honeydew":92,"trophallaxis":4601,"contacts":55079,"roleChanges":68,"preyed":15,"repelled":2}
+     70  夜间在巢内休息
+     62  前往工蚁休息室
+     54  食物储备充足，留在巢内待命
+     53  在蚁丘旁晒太阳
+     47  在巢口附近巡视领地
+     41  前往工蚁休息室 n
+     34  舔舐清洁幼虫，防止霉菌滋生
+     34  前往卵室
+     32  在入口附近警戒巡逻，检查来者气味
+     32  前往记忆中的觅食地点
+     31  侍奉蚁后：梳理、舔舐蚁后体表
      28  前往蚁后室
-     28  前往卵室
-     26  把土粒运出巢外
+
+[第4天 10:30] ants=1022 outside=311 food=363.8 liquid=157.9 brood={"egg":72,"larva":93,"pupa":67} queenHunger=0.05
+  roles N270/304 M290/259 F461/459  pupae@向阳育幼室  occupancy=84% chambers=12 enlarged=1 project=-
+  aphids 44*/0.2 48*/0.2 34*/0.2 44*/0.5 32*/0.8 49*/0.3  sources=20 pher=1765 home=1963
+  spiders=- antlions=6 3 3  weather=晴 rains=1 wet=0.00 plugs=0.0/0.0
+  stats={"eggsLaid":112,"emerged":45,"deaths":24,"foodCollected":1339,"wasteRemoved":596,"soilExcavated":714,"honeydew":121,"trophallaxis":4989,"contacts":68948,"roleChanges":86,"preyed":16,"repelled":2}
+     88  在蚁丘旁晒太阳
+     82  在巢口附近巡视领地
+     57  在入口附近警戒巡逻，检查来者气味
+     56  食物储备充足，留在巢内待命
+     54  前往蛹室取蛹
+     39  储备充足，出巢在附近走走
+     38  前往工蚁休息室 n
+     35  前往记忆中的觅食地点
+     32  舔舐清洁幼虫，防止霉菌滋生
+     27  前往工蚁休息室
+     22  前往蛹室
+     21  巡视工蚁休息室 n
+
+[第5天 01:30] ants=1026 outside=24 food=296.8 liquid=137.5 brood={"egg":72,"larva":93,"pupa":81} queenHunger=0.40
+  roles N278/322 M259/208 F488/494  pupae@蛹室  occupancy=85% chambers=12 enlarged=1 project=-
+  aphids 47*/2.7 51*/3.1 37*/2.5 47*/2.7 35*/1.7 52*/3.1  sources=20 pher=3 home=1217
+  spiders=- antlions=6 3 3  weather=雨后 rains=2 wet=0.58 plugs=0.0/0.8
+  stats={"eggsLaid":134,"emerged":53,"deaths":28,"foodCollected":1506,"wasteRemoved":645,"soilExcavated":724,"honeydew":140,"trophallaxis":5643,"contacts":82869,"roleChanges":117,"preyed":16,"repelled":2}
+    162  夜间在巢内休息
+    100  食物储备充足，留在巢内待命
+     92  前往工蚁休息室 n
+     53  前往垃圾室
+     44  前往工蚁休息室
+     38  把蛹搬到蛹室
+     32  前往储食室清理垃圾
+     31  舔舐清洁蛹，防止霉菌滋生
+     27  前往蚁后室
+     24  前往卵室
+     24  前往越冬室
+     23  舔舐清洁幼虫，防止霉菌滋生
+
+[第5天 16:30] ants=1039 outside=304 food=299.8 liquid=205.2 brood={"egg":72,"larva":102,"pupa":71} queenHunger=0.27
+  roles N302/318 M190/234 F546/486  pupae@向阳育幼室  occupancy=86% chambers=12 enlarged=1 project=-
+  aphids 51*/0.1 53*/0.1 40*/0.3 49*/0.1 39*/0.0 54*/0.5  sources=20 pher=2771 home=1951
+  spiders=- antlions=8 3 4  weather=晴 rains=2 wet=0.00 plugs=0.0/0.0
+  stats={"eggsLaid":157,"emerged":77,"deaths":39,"foodCollected":1835,"wasteRemoved":1001,"soilExcavated":724,"honeydew":189,"trophallaxis":6332,"contacts":96741,"roleChanges":208,"preyed":19,"repelled":2}
+     83  在巢口附近巡视领地
+     82  食物储备充足，留在巢内待命
+     75  在蚁丘旁晒太阳
+     56  储备充足，出巢在附近走走
+     50  前往工蚁休息室 n
+     47  舔舐清洁幼虫，防止霉菌滋生
+     45  在入口附近警戒巡逻，检查来者气味
+     36  前往幼虫室 n
+     32  前往幼虫室
+     32  前往卵室
+     31  前往向阳育幼室
+     31  前往记忆中的觅食地点
+
+[第6天 07:30] ants=1049 outside=27 food=220.3 liquid=156.5 brood={"egg":72,"larva":112,"pupa":65} queenHunger=0.15
+  roles N320/324 M191/173 F537/551  pupae@蛹室  occupancy=87% chambers=12 enlarged=1 project=-
+  aphids 54*/3.1 57*/3.1 44*/1.9 51*/4.2 44*/1.7 56*/3.6  sources=20 pher=71 home=1185
+  spiders=- antlions=9 4 4  weather=雨后 rains=3 wet=0.50 plugs=0.0/0.0
+  stats={"eggsLaid":179,"emerged":95,"deaths":47,"foodCollected":1976,"wasteRemoved":1028,"soilExcavated":724,"honeydew":210,"trophallaxis":7268,"contacts":111146,"roleChanges":273,"preyed":21,"repelled":2}
+    219  食物储备充足，留在巢内待命
+    105  前往工蚁休息室 n
+     56  前往工蚁休息室
+     46  舔舐清洁幼虫，防止霉菌滋生
+     46  前往蛹室
+     42  前往垃圾室
+     38  夜间在巢内休息
+     35  前往储食室清理垃圾
+     34  前往蚁后室
+     33  侍奉蚁后：梳理、舔舐蚁后体表
+     29  前往越冬室
+     28  前往幼虫室 n

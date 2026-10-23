@@ -79,6 +79,13 @@ export const CONFIG = {
     time: [30, 80] as [number, number],
   },
 
+  crowd: {
+    /** 休息室里每 cm² 可走地板超过这么多只时，改去越冬室、储食室里最不挤的一间歇着（蚂蚁身体间距 0.64 cm，约 2.8 只就挤满了） */
+    restDensity: 2.2,
+    /** 在一个入口外警戒、闲逛的蚂蚁超过这么多只时，巡逻和闲逛的范围按 √(只数 / moundRef) 放大，蚁群大了蚁丘也大 */
+    moundRef: 120,
+  },
+
   aphid: {
     colonies: 6,
     initialCount: [16, 36] as [number, number],

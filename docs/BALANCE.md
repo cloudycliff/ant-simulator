@@ -93,6 +93,8 @@
 | `defense.fleeSec / fleeSpeed` | 2–4 / 1.25 | 发觉后跑开的秒数和速度倍数 |
 | `defense.guardRadius / holdBackProb / guardProb / maxGuards` | 20 / 0.7 / 0.5 / 24 | 狼蛛离入口多近算威胁；受威胁时觅食蚁留巢的概率、内务蚁出巢警戒的概率与人数上限 |
 | `defense.callGuards / guardCheckSec` | 8 / 2 | 入口刚受威胁时立刻调派离入口最近的空手内务蚁数；警戒蚁每巡逻几秒看一次威胁还在不在 |
+| `crowd.restDensity` | 2.2 | 休息室每 cm² 可走地板超过这么多只时，改去越冬室、储食室里最不挤的一间歇着 |
+| `crowd.moundRef` | 120 | 一个入口外警戒、闲逛的蚂蚁超过这么多只时，巡逻范围按 √(只数 / 120) 放大，再出去的概率按它的倒数减少 |
 | `defense.pitAvoidPad` | 1 | 记住陷阱的蚂蚁在陷阱半径外再留出的距离（cm） |
 | `weather.rainPerDay / firstRainDay` | 0.6 / 1 | 平均每天下雨次数（每游戏小时判定一次）；第一个游戏日不自然下雨 |
 | `weather.overcastSec / rainDays / rainStrength` | 25 / 0.1–0.25 / 0.45–1 | 下雨前转阴的秒数；一场雨的游戏日长度；雨势范围（> 0.75 显示为大雨） |

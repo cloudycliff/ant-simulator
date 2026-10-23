@@ -240,19 +240,30 @@ export function stepWalk(a: Ant, dt: number, w: World, cmd: Extract<Command, { k
 
 export function stepPatrol(a: Ant, dt: number, w: World, cmd: Extract<Command, { k: 'patrol' }>, first: boolean): boolean {
   if (a.domain === 'nest') return true;
-  if (first) a.timer = cmd.time;
+  if (first) {
+    a.timer = cmd.time;
+    a.patrolT = 0;
+  }
   a.timer -= dt;
   if (a.pauseT > 0) {
     a.pauseT -= dt;
     return a.timer <= 0;
   }
-  if (w.rng.chance(dt * 0.25)) a.pauseT = w.rng.range(0.5, 3);
-  const dx = cmd.x - a.pos.x;
-  const dz = cmd.z - a.pos.z;
-  let desired: number | null = null;
-  if (dx * dx + dz * dz > cmd.radius * cmd.radius) desired = Math.atan2(dz, dx);
-  else a.heading += w.rng.gauss(0, 1) * 4 * Math.sqrt(dt);
-  surfaceMove(a, dt, w, desired, 4, 0.7);
+  // 在巡逻范围里走走停停：走到一个随机点，停一会儿，再换一个点
+  a.patrolT -= dt;
+  const dx = a.localTarget.x - a.pos.x;
+  const dz = a.localTarget.z - a.pos.z;
+  const arrived = dx * dx + dz * dz < 0.36;
+  if (arrived || a.patrolT <= 0) {
+    if (arrived) a.pauseT = w.rng.range(0.5, 3);
+    const ang = w.rng.range(0, Math.PI * 2);
+    // 偏向中心：离中心越远的点越少，巡逻的大多还在入口 / 闲逛点附近
+    const r = cmd.radius * w.rng.next();
+    a.localTarget.set(cmd.x + Math.cos(ang) * r, 0, cmd.z + Math.sin(ang) * r);
+    a.patrolT = 2 + (cmd.radius * 2) / CONFIG.ant.speedSurface;
+    return a.timer <= 0;
+  }
+  surfaceMove(a, dt, w, Math.atan2(dz, dx) + w.rng.gauss(0, 1) * 0.3, 4, 0.7);
   return a.timer <= 0;
 }
 

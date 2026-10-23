@@ -106,6 +106,11 @@ export class Colony {
   tickN = 0;
   lastShortageDay = -1;
 
+  // 本步各房间里、各入口附近地表的蚂蚁数，同一步第一次用到时才数
+  private crowdTick = -1;
+  private roomN: number[] = [];
+  private moundN: number[] = [];
+
   private reviewAcc = 0;
   private climateAcc = 0;
   private sampleAcc = 0;
@@ -619,6 +624,53 @@ export class Colony {
     if (ant.domain === 'surface') this.dropOnSurface(it, ant.pos.x, ant.pos.z);
     else if (ant.room >= 0) this.addToChamber(it, this.w.nest.chambers[ant.room], ant.pos);
     else this.dropAtNode(it, ant.currentNode(this.w), ant.pos);
+  }
+
+  private countCrowd(): void {
+    if (this.crowdTick === this.tickN) return;
+    this.crowdTick = this.tickN;
+    const nest = this.w.nest;
+    this.roomN = nest.chambers.map(() => 0);
+    this.moundN = nest.entrances.map(() => 0);
+    for (const a of this.ants) {
+      const cmd = a.behavior.cmd;
+      if (a.domain === 'nest') {
+        // 正往房间走的也算上，不然同一时刻挑房间的都会挤去同一间
+        const room = cmd?.k === 'room' ? cmd.chamber : a.room;
+        if (room >= 0) this.roomN[room]++;
+      } else if (cmd?.k === 'patrol') {
+        // 巡逻指令只用于入口警戒和闲逛，按巡逻中心归到最近的入口
+        let best = 0;
+        let bd = Infinity;
+        nest.entrances.forEach((e, i) => {
+          const d = (e.x - cmd.x) ** 2 + (e.z - cmd.z) ** 2;
+          if (d < bd) {
+            bd = d;
+            best = i;
+          }
+        });
+        this.moundN[best]++;
+      }
+    }
+  }
+
+  /** 房间里每 cm² 可走地板上的蚂蚁数 */
+  roomDensity(c: Chamber): number {
+    this.countCrowd();
+    return (this.roomN[c.id] ?? 0) / (Math.PI * c.rx * c.rz * 0.62 * 0.62);
+  }
+
+  /** 在某个入口外警戒、闲逛的蚂蚁多于平常时，巡逻和闲逛范围的放大倍数 */
+  moundScale(entrance: number): number {
+    this.countCrowd();
+    return Math.sqrt(Math.max(1, (this.moundN[entrance] ?? 0) / CONFIG.crowd.moundRef));
+  }
+
+  /** 离 a 最近的入口外已经有很多同伴在警戒、闲逛时，只按放大倍数的倒数的概率再出去 */
+  moundHasRoom(a: Ant): boolean {
+    const nest = this.w.nest;
+    const s = this.moundScale(nest.entrances.indexOf(nest.nearestEntrance(a.pos.x, a.pos.z)));
+    return s <= 1 || this.w.rng.chance(1 / s);
   }
 
   update(dt: number): void {

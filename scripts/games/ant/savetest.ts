@@ -80,13 +80,16 @@ const sizes = Object.entries(data).map(([k, v]) => `${k} ${(JSON.stringify(v).le
 console.log(`各部分（KB）：${sizes.join('  ')}`);
 
 /** 读档后必须原样恢复的指标 */
-const EXACT = ['ants', 'outside', 'brood', 'items', 'food', 'liquid', 'chambers', 'edges', 'project', 'sources', 'aphids', 'pheromone', 'placed', 'puddles', 'predators', 'stats', 'weather'];
+const EXACT = ['ants', 'outside', 'brood', 'items', 'food', 'liquid', 'chambers', 'edges', 'project', 'sources', 'aphids', 'placed', 'puddles', 'predators', 'stats', 'weather'];
 const problems: string[] = [];
 const ma = metrics(a);
 const mb = metrics(b);
 console.log('\n指标            原世界 | 读档后');
 for (const k of Object.keys(ma)) console.log(`${k.padEnd(10)} ${ma[k]} | ${mb[k]}${ma[k] === mb[k] ? '' : '   ← 不同'}`);
 for (const k of EXACT) if (ma[k] !== mb[k]) problems.push(`读档后 ${k} 不同`);
+// 信息素按 8 位量化存档，总量允许差一点
+const pa = Number(ma.pheromone);
+if (Math.abs(pa - Number(mb.pheromone)) > Math.max(2, pa * 0.005)) problems.push('读档后 pheromone 不同');
 const carryA = a.colony.ants.filter((x) => x.carrying).length;
 const carryB = b.colony.ants.filter((x) => x.carrying).length;
 console.log(`搬运中的物品：原世界 ${carryA} 件，读档后 ${carryB} 件`);
