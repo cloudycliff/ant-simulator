@@ -6,6 +6,13 @@ export class Rng {
   reseed(seed: number): void {
     this.s = seed >>> 0 || 1;
   }
+  /** 内部状态，存档用：恢复后接着产生和存档时相同的序列 */
+  get state(): number {
+    return this.s >>> 0;
+  }
+  set state(v: number) {
+    this.s = v >>> 0;
+  }
   next(): number {
     let t = (this.s += 0x6d2b79f5);
     t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -31,8 +38,6 @@ export class Rng {
     return mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
 }
-
-export const rng = new Rng(Date.now() & 0xffffffff);
 
 /** 2D 值噪声 + 分形叠加，用于地形与植被分布。 */
 export class Noise2D {

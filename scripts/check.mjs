@@ -18,7 +18,7 @@ const ONLY_UI = args.has('--ui') && !ALL;
 const TSX = resolve('node_modules/tsx/dist/cli.mjs');
 const TSC = resolve('node_modules/typescript/bin/tsc');
 const VITE = resolve('node_modules/vite/bin/vite.js');
-const BASELINE = resolve('scripts/games/ant/baseline/sim-seed7.txt');
+const BASELINE = resolve('scripts/games/ant/baseline/sim.txt');
 const DEV = 'http://localhost:5173/';
 
 /** 去掉每次都不一样的耗时，剩下的应该逐行相同 */
@@ -69,7 +69,7 @@ const FAST_STEPS = [
 ];
 
 const NODE_STEPS = [
-  { name: '模拟基线（编号 7，5 天）', argv: tsx('scripts/games/ant/simtest.ts', '3000'), env: { SIM_SEED: '7' }, judge: simCheck },
+  { name: '模拟基线（5 天）', argv: tsx('scripts/games/ant/simtest.ts', '3000'), judge: simCheck },
   { name: '存档往返', argv: tsx('scripts/games/ant/savetest.ts') },
   { name: '存档往返（下雨中途）', argv: tsx('scripts/games/ant/savetest.ts', '1900', 'rain') },
   { name: '干预工具', argv: tsx('scripts/games/ant/tooltest.ts') },

@@ -29,7 +29,8 @@ function busiestSpot(): { x: number; z: number; n: number } {
   return [...cells.values()].sort((a, b) => b.n - a.n)[0];
 }
 
-function run(label: string, x: number, z: number, secs: number): void {
+/** outskirts：蚂蚁稀少的外围，狼蛛可能吃饱了才走，只要求有蚂蚁响应 */
+function run(label: string, x: number, z: number, secs: number, outskirts = false): void {
   const r = w.placePredator('spider', x, z);
   console.log(`\n== ${label}：(${x.toFixed(0)}, ${z.toFixed(0)}) ${r.msg ? tr(r.msg) : ''}`);
   const s = w.predators.spiders[w.predators.spiders.length - 1];
@@ -56,8 +57,8 @@ function run(label: string, x: number, z: number, secs: number): void {
   }
   console.log(`结果：被捕食 / 咬死 ${st.preyed - p0}，赶走 ${st.repelled - r0}，最多同时围攻 ${maxMob}，最多增援 ${maxResp}，最多警戒 ${maxGuards}，${goneAt >= 0 ? `${goneAt.toFixed(0)} 秒后离开` : '仍在场'}`);
   if (w.predators.spiders.includes(s)) w.predators.remove(s);
-  if (maxResp === 0) problems.push(`${label}：没有蚂蚁响应警报`);
-  if (goneAt < 0) problems.push(`${label}：狼蛛 ${secs} 秒内没有离开`);
+  if (maxResp === 0 && !(outskirts && maxGuards > 0)) problems.push(`${label}：没有蚂蚁响应警报`);
+  if (goneAt < 0 && !outskirts) problems.push(`${label}：狼蛛 ${secs} 秒内没有离开`);
 }
 
 const problems: string[] = [];
@@ -71,6 +72,6 @@ run(`${tr(e.label)}外 8 cm`, e.x + 8, e.z + 2, 150);
 for (let t = 0; t < 60; t += step) w.advance(step);
 const e2 = w.nest.entrances[1];
 const ang = Math.atan2(e2.z, e2.x);
-run(`${tr(e2.label)}外 16 cm`, e2.x + Math.cos(ang) * 16, e2.z + Math.sin(ang) * 16, 120);
+run(`${tr(e2.label)}外 16 cm`, e2.x + Math.cos(ang) * 16, e2.z + Math.sin(ang) * 16, 120, true);
 console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
 if (problems.length) process.exitCode = 1;

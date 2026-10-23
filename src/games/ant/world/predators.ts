@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
 import { clamp, TAU, wrapAngle } from '../../../core/util/math';
-import { rng, type Rng } from '../../../core/util/random';
+import type { Rng } from '../../../core/util/random';
+import type { IdPool } from '../../../core/sim/ids';
 import type { Ant } from '../sim/ant';
-import { Item } from '../sim/items';
 import type { Terrain } from './terrain';
 import type { Vegetation } from './vegetation';
 import type { World } from './world';
@@ -37,10 +37,8 @@ function pitDent(t: number): number {
 
 export type SpiderState = 'wander' | 'pause' | 'chase' | 'feed' | 'leave';
 
-let nextPredatorId = 1;
 
 export class Spider {
-  id = nextPredatorId++;
   readonly kind = 'spider';
   state: SpiderState = 'wander';
   timer = 0;
@@ -60,32 +58,34 @@ export class Spider {
   /** 是被蚂蚁赶走的 */
   fled = false;
   constructor(
+    public id: number,
     public x: number,
     public z: number,
     public heading: number,
     public placed: boolean,
     public mesh: THREE.Group,
+    private rng: Rng,
   ) {
     const [a, b] = CONFIG.predators.spiderStayDays;
-    this.stayLeft = rng.range(a, b);
+    this.stayLeft = this.rng.range(a, b);
     this.pickGoal();
   }
 
   pickGoal(): void {
-    const a = rng.range(0, TAU);
-    const d = rng.range(12, CONFIG.world.forageRadius * 0.7);
+    const a = this.rng.range(0, TAU);
+    const d = this.rng.range(12, CONFIG.world.forageRadius * 0.7);
     this.gx = Math.cos(a) * d;
     this.gz = Math.sin(a) * d;
   }
 }
 
 export class Antlion {
-  id = nextPredatorId++;
   readonly kind = 'antlion';
   /** 正在进食的剩余秒数，进食时不再捕猎 */
   feedT = 0;
   caught = 0;
   constructor(
+    public id: number,
     public x: number,
     public z: number,
     public placed: boolean,
@@ -124,12 +124,13 @@ export class PredatorManager {
   constructor(
     private terrain: Terrain,
     private veg: Vegetation,
-    worldRng: Rng,
+    private rng: Rng,
+    private ids: IdPool,
   ) {
     // 蚁狮偏好干燥、草少的裸露地面
     for (let k = 0; k < 400 && this.antlions.length < CONFIG.predators.antlions; k++) {
-      const a = worldRng.range(0, TAU);
-      const d = worldRng.range(18, 75);
+      const a = this.rng.range(0, TAU);
+      const d = this.rng.range(18, 75);
       const x = Math.cos(a) * d;
       const z = Math.sin(a) * d;
       if (this.terrain.grassDensity(x, z) > 0.25 || this.veg.obstacleAt(x, z, CONFIG.predators.pitRadius + 1)) continue;
@@ -141,7 +142,7 @@ export class PredatorManager {
   // ---------------- 增删 ----------------
 
   addSpider(x: number, z: number, heading: number, placed: boolean): Spider {
-    const s = new Spider(x, z, heading, placed, this.spiderMesh());
+    const s = new Spider(this.ids.next('predator'), x, z, heading, placed, this.spiderMesh(), this.rng);
     s.mesh.traverse((o) => (o.userData.pick = { kind: 'predator', id: s.id }));
     this.group.add(s.mesh);
     this.spiders.push(s);
@@ -149,7 +150,7 @@ export class PredatorManager {
   }
 
   addAntlion(x: number, z: number, placed: boolean): Antlion {
-    const p = new Antlion(x, z, placed, this.pitMesh(x, z));
+    const p = new Antlion(this.ids.next('predator'), x, z, placed, this.pitMesh(x, z));
     p.mesh.traverse((o) => (o.userData.pick = { kind: 'predator', id: p.id }));
     this.terrain.setDent(p.id, { x, z, r: CONFIG.predators.pitRadius, depth: pitDent });
     this.veg.clearLitter(x, z, CONFIG.predators.pitRadius * PIT_EDGE);
@@ -240,14 +241,14 @@ export class PredatorManager {
     }
 
     const natural = this.spiders.filter((s) => !s.placed).length;
-    if (natural < P.maxNaturalSpiders && this.spiders.length < P.maxSpiders && w.weather.phase === 'clear' && rng.chance(days * P.spiderPerDay)) {
+    if (natural < P.maxNaturalSpiders && this.spiders.length < P.maxSpiders && w.weather.phase === 'clear' && this.rng.chance(days * P.spiderPerDay)) {
       const R = CONFIG.world.forageRadius - 3;
       for (let k = 0; k < 10; k++) {
-        const a = rng.range(0, TAU);
+        const a = this.rng.range(0, TAU);
         const x = Math.cos(a) * R;
         const z = Math.sin(a) * R;
         if (this.veg.obstacleAt(x, z, 2, true)) continue;
-        const s = this.addSpider(x, z, a + Math.PI + rng.range(-0.5, 0.5), false);
+        const s = this.addSpider(x, z, a + Math.PI + this.rng.range(-0.5, 0.5), false);
         w.events.push(L('ev.spiderArrived'), { kind: 'predator', id: s.id });
         break;
       }
@@ -276,7 +277,7 @@ export class PredatorManager {
         if (s.timer <= 0) {
           this.dropHusk(w, s.x + Math.cos(s.heading) * 1.8, s.z + Math.sin(s.heading) * 1.8);
           s.state = 'pause';
-          s.timer = rng.range(4, 10);
+          s.timer = this.rng.range(4, 10);
         }
         return;
       case 'pause':
@@ -295,7 +296,7 @@ export class PredatorManager {
         const a = this.surface.find((b) => b.id === s.target);
         if (!a || !a.alive || s.timer <= 0) {
           s.state = 'pause';
-          s.timer = rng.range(3, 8);
+          s.timer = this.rng.range(3, 8);
           return;
         }
         const dx = a.pos.x - s.x;
@@ -303,7 +304,7 @@ export class PredatorManager {
         const d = Math.hypot(dx, dz);
         if (d < 1.1) {
           w.alarm.emit(a.pos.x, a.pos.z, CONFIG.defense.alarmOnAttack);
-          if (rng.chance(P.spiderCatch)) {
+          if (this.rng.chance(P.spiderCatch)) {
             s.state = 'feed';
             s.timer = P.spiderFeedSec;
             s.meals++;
@@ -315,7 +316,7 @@ export class PredatorManager {
           } else {
             a.note(w, L('note.escapedSpider'));
             s.state = 'pause';
-            s.timer = rng.range(2, 5);
+            s.timer = this.rng.range(2, 5);
           }
           return;
         }
@@ -323,20 +324,20 @@ export class PredatorManager {
         return;
       }
       case 'wander': {
-        if (rng.chance(dt * 0.06)) {
+        if (this.rng.chance(dt * 0.06)) {
           s.state = 'pause';
-          s.timer = rng.range(4, 12);
+          s.timer = this.rng.range(4, 12);
           return;
         }
         if (Math.hypot(s.gx - s.x, s.gz - s.z) < 6) s.pickGoal();
         const toGoal = wrapAngle(Math.atan2(s.gz - s.z, s.gx - s.x) - s.heading);
-        s.heading += clamp(toGoal, -0.6 * dt, 0.6 * dt) + rng.gauss(0, 1) * 1.2 * Math.sqrt(dt);
+        s.heading += clamp(toGoal, -0.6 * dt, 0.6 * dt) + this.rng.gauss(0, 1) * 1.2 * Math.sqrt(dt);
         // 循着地面振动往蚂蚁来往多的地方靠（蚂蚁走过处都留有归巢信息素，正好反映来往的多少）
         const sense = (da: number) => w.pheromone.sampleHome(s.x + Math.cos(s.heading + da) * 5, s.z + Math.sin(s.heading + da) * 5);
         const l = sense(-0.7);
         const r = sense(0.7);
         if (Math.abs(l - r) > 0.02 + 0.15 * (l + r)) s.heading += (l > r ? -1 : 1) * P.spiderTrailTurn * dt;
-        if (Math.hypot(s.x, s.z) > CONFIG.world.forageRadius - 4) s.heading = Math.atan2(-s.z, -s.x) + rng.range(-0.8, 0.8);
+        if (Math.hypot(s.x, s.z) > CONFIG.world.forageRadius - 4) s.heading = Math.atan2(-s.z, -s.x) + this.rng.range(-0.8, 0.8);
         this.walk(s, s.heading, P.spiderWalk * sf * dt);
         this.lookForPrey(s);
       }
@@ -356,7 +357,7 @@ export class PredatorManager {
     s.harass = Math.max(0, s.harass + (mob > 0 ? mob : -D.harassRecover) * dt);
     if (!mob) return false;
     for (const a of this.surface) {
-      if (a.mobTarget !== s.id || !a.alive || !rng.chance(D.mobKillPerSec * dt)) continue;
+      if (a.mobTarget !== s.id || !a.alive || !this.rng.chance(D.mobKillPerSec * dt)) continue;
       w.colony.stats.preyed++;
       w.colony.kill(a, L('cause.mobbed'));
       break;
@@ -411,7 +412,7 @@ export class PredatorManager {
     if (p.feedT > 0) {
       p.feedT -= dt;
       if (p.feedT <= 0) {
-        const a = rng.range(0, TAU);
+        const a = this.rng.range(0, TAU);
         const r = CONFIG.predators.pitRadius + 0.8;
         this.dropHusk(w, p.x + Math.cos(a) * r, p.z + Math.sin(a) * r);
       }
@@ -430,8 +431,8 @@ export class PredatorManager {
 
   /** 被吸干的空壳留在地表，内务蚁会把它当作同伴尸体搬去垃圾堆 */
   private dropHusk(w: World, x: number, z: number): void {
-    const it = new Item('corpse');
-    it.yaw = rng.range(0, TAU);
+    const it = w.colony.newItem('corpse');
+    it.yaw = this.rng.range(0, TAU);
     w.colony.dropOnSurface(it, x, z);
   }
 
@@ -532,7 +533,7 @@ export class PredatorManager {
         const px = Math.cos(a) * t * R;
         const pz = Math.sin(a) * t * R;
         pos.push(px, this.terrain.heightAt(x + px, z + pz) - h0 + pitLift(t), pz);
-        const grain = rng.range(0.9, 1.06);
+        const grain = this.rng.range(0.9, 1.06);
         col.push(c.r * grain, c.g * grain, c.b * grain);
       }
     }

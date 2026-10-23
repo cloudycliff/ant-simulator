@@ -4,7 +4,7 @@ import { SaveSlot, type SaveMeta } from '../../core/platform/saveSlot';
 import { Simulation } from '../../core/sim/simulation';
 import type { ToolResult } from '../../core/ui/tools';
 import { clamp, smoothstep } from '../../core/util/math';
-import { Noise2D, Rng } from '../../core/util/random';
+import { Noise2D } from '../../core/util/random';
 import { CONFIG, SPECIES, SPECIES_LIST, type Species } from './config';
 
 export type AqRef = { kind: 'fish'; id: number } | { kind: 'plant'; id: number } | { kind: 'food'; id: number };
@@ -76,7 +76,6 @@ const _d = new THREE.Vector3();
 
 /** 鱼缸：鱼、鱼食、水草和石头。水草和石头由编号生成，不进存档 */
 export class Tank extends Simulation<AqRef> {
-  readonly rng: Rng;
   readonly fish: Fish[] = [];
   food: Flake[] = [];
   readonly plants: Plant[] = [];
@@ -94,8 +93,7 @@ export class Tank extends Simulation<AqRef> {
   private lightWasOn: boolean;
 
   constructor(readonly seed: number) {
-    super(CONFIG.clock.dayLength, CONFIG.clock.startHour);
-    this.rng = new Rng(seed);
+    super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed);
     this.noise = new Noise2D(seed);
     this.generate();
     this.lightWasOn = this.light() > 0.5;
@@ -394,6 +392,7 @@ export interface AqSaveData extends TankSave {
   seed: number;
   savedAt: number;
   clock: { seconds: number; speed: number };
+  rng?: number;
   camera?: number[];
 }
 

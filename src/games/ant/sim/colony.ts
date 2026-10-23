@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CONFIG, ROLE_NAMES, type Role } from '../config';
 import { L, t, type Text } from '../../../core/i18n';
 import { clamp, lerp, smoothstep } from '../../../core/util/math';
-import { rng } from '../../../core/util/random';
 import type { Chamber, ChamberType } from '../nest/nest';
 import type { World } from '../world/world';
 import type { FoodKind } from '../world/food';
@@ -126,7 +125,7 @@ export class Colony {
     this.ensureChamberSlots();
     const ch = (t: ChamberType) => nest.chamberOfType(t);
 
-    this.queen = new Ant('queen', 900);
+    this.queen = new Ant('queen', 900, this.w);
     this.queen.size = 1;
     this.queen.placeInRoom(this.w, ch('queen')[0].id);
     this.ants.push(this.queen);
@@ -138,20 +137,20 @@ export class Colony {
     for (let i = 0; i < n; i++) {
       const p = i / n;
       const role: Role = p < r.nurse ? 'nurse' : p < r.nurse + r.maintenance ? 'maintenance' : 'forager';
-      const ant = new Ant(role, 0);
+      const ant = new Ant(role, 0, this.w);
       const span = ant.lifespan;
-      ant.ageDays = role === 'nurse' ? rng.range(0, 0.3) * span : role === 'maintenance' ? rng.range(0.25, 0.55) * span : rng.range(0.45, 0.95) * span;
-      if (role === 'forager') ant.scout = rng.chance(CONFIG.colony.scoutRatio);
-      if (rng.chance(CONFIG.colony.initialCropShare)) ant.crop = rng.range(0.2, 0.7);
+      ant.ageDays = role === 'nurse' ? this.w.rng.range(0, 0.3) * span : role === 'maintenance' ? this.w.rng.range(0.25, 0.55) * span : this.w.rng.range(0.45, 0.95) * span;
+      if (role === 'forager') ant.scout = this.w.rng.chance(CONFIG.colony.scoutRatio);
+      if (this.w.rng.chance(CONFIG.colony.initialCropShare)) ant.crop = this.w.rng.range(0.2, 0.7);
       this.liquidStock += ant.crop;
-      if (role === 'forager' && rng.chance(0.35)) {
-        const a = rng.range(0, Math.PI * 2);
-        const d = rng.range(6, 50);
+      if (role === 'forager' && this.w.rng.chance(0.35)) {
+        const a = this.w.rng.range(0, Math.PI * 2);
+        const d = this.w.rng.range(6, 50);
         ant.placeOnSurface(Math.cos(a) * d, Math.sin(a) * d, this.w);
         ant.heading = a;
       } else {
         const pool = role === 'nurse' ? brood : misc;
-        ant.placeInRoom(this.w, rng.pick(pool).id);
+        ant.placeInRoom(this.w, this.w.rng.pick(pool).id);
       }
       this.ants.push(ant);
     }
@@ -160,34 +159,34 @@ export class Colony {
     const b = CONFIG.colony.initialBrood;
     const qc = ch('queen')[0];
     for (let i = 0; i < b.egg; i++) {
-      const it = new Item('egg');
-      it.stageAge = rng.range(0, CONFIG.brood.eggDays);
+      const it = this.newItem('egg');
+      it.stageAge = this.w.rng.range(0, CONFIG.brood.eggDays);
       this.addToChamber(it, i < 8 ? qc : ch('egg')[0]);
     }
     for (let i = 0; i < b.larva; i++) {
-      const it = new Item('larva');
-      it.stageAge = rng.range(0, CONFIG.brood.larvaDays);
-      it.feeds = Math.floor(rng.range(0, CONFIG.brood.larvaFeedsNeeded + 1));
-      it.hunger = rng.range(0, 0.8);
-      this.addToChamber(it, rng.pick(ch('larva')));
+      const it = this.newItem('larva');
+      it.stageAge = this.w.rng.range(0, CONFIG.brood.larvaDays);
+      it.feeds = Math.floor(this.w.rng.range(0, CONFIG.brood.larvaFeedsNeeded + 1));
+      it.hunger = this.w.rng.range(0, 0.8);
+      this.addToChamber(it, this.w.rng.pick(ch('larva')));
     }
     for (let i = 0; i < b.pupa; i++) {
-      const it = new Item('pupa');
-      it.stageAge = rng.range(0, CONFIG.brood.pupaDays);
+      const it = this.newItem('pupa');
+      it.stageAge = this.w.rng.range(0, CONFIG.brood.pupaDays);
       this.addToChamber(it, ch('pupa')[0]);
     }
     // 甜液储存在工蚁的嗉囊里，储食室只放固体食物
     const store = this.foodChamber();
     for (let i = 0; i < CONFIG.colony.initialFood; i++) {
-      const it = new Item('food');
-      it.foodKind = rng.chance(0.55) ? 'prey' : 'seed';
-      it.age = rng.range(0, 1.2);
+      const it = this.newItem('food');
+      it.foodKind = this.w.rng.chance(0.55) ? 'prey' : 'seed';
+      it.age = this.w.rng.range(0, 1.2);
       this.addToChamber(it, store);
     }
-    for (let i = 0; i < 12; i++) this.addToChamber(new Item('waste'), ch('waste')[0]);
-    for (let i = 0; i < 6; i++) this.addToChamber(new Item('waste'), rng.pick(ch('larva')));
-    for (let i = 0; i < 45; i++) this.dropAtMidden(new Item(rng.chance(0.2) ? 'corpse' : 'waste'));
-    for (let i = 0; i < 320; i++) this.dropOnMound(new Item('soil'), rng.pick(this.w.nest.entrances));
+    for (let i = 0; i < 12; i++) this.addToChamber(this.newItem('waste'), ch('waste')[0]);
+    for (let i = 0; i < 6; i++) this.addToChamber(this.newItem('waste'), this.w.rng.pick(ch('larva')));
+    for (let i = 0; i < 45; i++) this.dropAtMidden(this.newItem(this.w.rng.chance(0.2) ? 'corpse' : 'waste'));
+    for (let i = 0; i < 320; i++) this.dropOnMound(this.newItem('soil'), this.w.rng.pick(this.w.nest.entrances));
     this.refreshFoodStock();
     this.updateClimate();
     this.reviewRoles();
@@ -223,7 +222,7 @@ export class Colony {
     this.pupaChamber = s.pupaChamber;
     const carried: Item[] = [];
     for (const is of s.items) {
-      const it = Item.fromSave(is);
+      const it = Item.fromSave(is, this.w.ids);
       if (it.place === 'chamber' && this.byChamber[it.chamber]) this.byChamber[it.chamber].push(it);
       else if (it.place === 'node') this.nodeItems.push(it);
       else if (it.place === 'surface' || it.place === 'midden' || it.place === 'mound') this.surfaceItems.push(it);
@@ -249,6 +248,10 @@ export class Colony {
     this.liquidStock = this.ants.reduce((sum, a) => sum + a.crop, 0);
   }
 
+  newItem(type: ItemType): Item {
+    return new Item(type, this.w.ids.next('item'));
+  }
+
   /** 新增房间后为它分配物品索引 */
   ensureChamberSlots(): void {
     while (this.byChamber.length < this.w.nest.chambers.length) this.byChamber.push([]);
@@ -264,7 +267,7 @@ export class Colony {
   seekShelter(p: number): void {
     for (const a of this.ants) {
       if (a.domain !== 'surface' || a.carrying || a.climbing || a.alarmT > 0 || a.pitT > 0 || a.role === 'queen') continue;
-      if (!rng.chance(p)) continue;
+      if (!this.w.rng.chance(p)) continue;
       for (const it of this.items) if (it.claimedBy === a.id) it.claimedBy = -1;
       a.layTrail = 0;
       a.abort();
@@ -275,7 +278,7 @@ export class Colony {
     const from = a.role;
     a.role = a.nextRole!;
     a.nextRole = null;
-    a.scout = a.role === 'forager' && rng.chance(CONFIG.colony.scoutRatio);
+    a.scout = a.role === 'forager' && this.w.rng.chance(CONFIG.colony.scoutRatio);
     a.memory = null;
     a.herd = -1;
     a.note(this.w, L(a.scout ? 'note.roleChangeScout' : 'note.roleChange', { from: ROLE_NAMES[from], to: ROLE_NAMES[a.role], age: a.ageDays.toFixed(1) }));
@@ -306,8 +309,8 @@ export class Colony {
     const spread = type === 'food' ? 0.24 : 0.2;
     const v = new THREE.Vector3();
     for (let i = 0; i < 6; i++) {
-      const x = p.x + rng.gauss(0, c.rx * spread);
-      const z = p.z + rng.gauss(0, c.rz * spread);
+      const x = p.x + this.w.rng.gauss(0, c.rx * spread);
+      const z = p.z + this.w.rng.gauss(0, c.rz * spread);
       v.set(x, c.floor.y + 0.1, z);
       if (this.w.nest.chamberAt(v) === c) {
         p.x = x;
@@ -327,7 +330,7 @@ export class Colony {
     this.detach(it);
     const p = spot ?? this.pileSpot(c, it.type);
     const pile = this.byChamber[c.id].length;
-    it.pos.set(p.x, c.floor.y + this.itemLift(it.type) + rng.range(0, Math.min(0.5, pile / 300)), p.z);
+    it.pos.set(p.x, c.floor.y + this.itemLift(it.type) + this.w.rng.range(0, Math.min(0.5, pile / 300)), p.z);
     it.place = 'chamber';
     it.chamber = c.id;
     this.byChamber[c.id].push(it);
@@ -337,11 +340,11 @@ export class Colony {
 
   dropAtMidden(it: Item): void {
     this.detach(it);
-    const a = rng.range(0, Math.PI * 2);
-    const d = Math.sqrt(rng.next()) * 3.2;
+    const a = this.w.rng.range(0, Math.PI * 2);
+    const d = Math.sqrt(this.w.rng.next()) * 3.2;
     const x = this.midden.x + Math.cos(a) * d;
     const z = this.midden.z + Math.sin(a) * d;
-    it.pos.set(x, this.w.terrain.heightAt(x, z) + 0.15 + rng.range(0, 0.3) * (1 - d / 3.2), z);
+    it.pos.set(x, this.w.terrain.heightAt(x, z) + 0.15 + this.w.rng.range(0, 0.3) * (1 - d / 3.2), z);
     it.place = 'midden';
     this.surfaceItems.push(it);
     this.items.add(it);
@@ -349,8 +352,8 @@ export class Colony {
 
   dropOnMound(it: Item, ent: { x: number; z: number }): void {
     this.detach(it);
-    const a = rng.range(0, Math.PI * 2);
-    const d = rng.range(1.6, 3.6);
+    const a = this.w.rng.range(0, Math.PI * 2);
+    const d = this.w.rng.range(1.6, 3.6);
     const x = ent.x + Math.cos(a) * d;
     const z = ent.z + Math.sin(a) * d;
     it.pos.set(x, this.w.terrain.heightAt(x, z) + 0.14, z);
@@ -501,9 +504,9 @@ export class Colony {
       kind = it.foodKind;
       if (it.amount <= 0.001) {
         const spot = it.pos.clone();
-        const leftover = rng.chance(0.3);
+        const leftover = this.w.rng.chance(0.3);
         this.destroy(it);
-        if (leftover) this.addToChamber(new Item('waste'), store, spot);
+        if (leftover) this.addToChamber(this.newItem('waste'), store, spot);
       }
     }
     this.refreshFoodStock();
@@ -551,7 +554,7 @@ export class Colony {
   // ---------------- 生命周期 ----------------
 
   layEgg(queen: Ant): void {
-    const it = new Item('egg');
+    const it = this.newItem('egg');
     const c = this.w.nest.chambers[queen.room >= 0 ? queen.room : this.w.nest.chamberOfType('queen')[0].id];
     this.addToChamber(it, c, queen.pos);
     this.eggCredit -= 1;
@@ -567,7 +570,7 @@ export class Colony {
   eclose(pupa: Item, helper: Ant | null): Ant | null {
     if (pupa.place !== 'chamber' || pupa.type !== 'pupa') return null;
     const c = this.w.nest.chambers[pupa.chamber];
-    const ant = new Ant('nurse', 0);
+    const ant = new Ant('nurse', 0, this.w);
     ant.placeInRoom(this.w, c.id);
     ant.pos.copy(pupa.pos).setY(c.floor.y);
     ant.hunger = 0.3;
@@ -592,7 +595,7 @@ export class Colony {
     for (const it of this.items) if (it.claimedBy === ant.id && it.carriedBy !== ant.id) it.claimedBy = -1;
     const carried = this.release(ant);
     if (leaveCorpse) {
-      const corpse = new Item('corpse');
+      const corpse = this.newItem('corpse');
       corpse.yaw = Math.atan2(ant.fwd.z, ant.fwd.x);
       this.placeAtAnt(ant, corpse);
     }
@@ -719,13 +722,13 @@ export class Colony {
     const near = this.spatial.near(p.x, p.y, p.z, CONFIG.social.contactRadius, this.near, a);
     for (const b of near) {
       if (b.role === 'queen' || b.holdT > 0 || now < b.nextContactAt || b.domain !== a.domain || b.climbing) continue;
-      if (!rng.chance(0.5)) continue;
-      const t = rng.range(0.6, 1.3);
+      if (!this.w.rng.chance(0.5)) continue;
+      const t = this.w.rng.range(0.6, 1.3);
       a.hold(t, b.pos);
       b.hold(t, a.pos);
       const [c0, c1] = CONFIG.social.contactCooldown;
-      a.nextContactAt = now + rng.range(c0, c1);
-      b.nextContactAt = now + rng.range(c0, c1);
+      a.nextContactAt = now + this.w.rng.range(c0, c1);
+      b.nextContactAt = now + this.w.rng.range(c0, c1);
       a.contacts++;
       b.contacts++;
       this.stats.contacts++;
@@ -896,7 +899,7 @@ export class Colony {
       const it = this.surfaceItems[i];
       it.age += days;
       // 地表尸体与垃圾会被分解者逐渐分解
-      if (it.place === 'midden' && it.age > 6 && rng.chance(days * 0.5)) this.destroy(it);
+      if (it.place === 'midden' && it.age > 6 && this.w.rng.chance(days * 0.5)) this.destroy(it);
       else if (it.place === 'surface' && it.age > 2 && it.free) this.destroy(it);
     }
   }

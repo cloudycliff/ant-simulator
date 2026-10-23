@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L } from '../../../core/i18n';
 import { TAU } from '../../../core/util/math';
-import { rng } from '../../../core/util/random';
 import { CHAMBER_INFO, type Chamber, type ChamberType, type DigFace } from '../nest/nest';
 import type { World } from '../world/world';
 
@@ -119,7 +118,7 @@ export class NestExpansion {
     const E = CONFIG.expansion;
     if (this.project || this.occupancy() <= E.trigger) return;
     const full = this.w.nest.chambers.length >= E.maxChambers;
-    if ((full || rng.chance(E.enlargeChance)) && this.planEnlarge()) return;
+    if ((full || this.w.rng.chance(E.enlargeChance)) && this.planEnlarge()) return;
     if (!full) this.plan();
   }
 
@@ -167,19 +166,19 @@ export class NestExpansion {
     const type: ChamberType = b.egg + b.larva + b.pupa > col.ants.length * 0.22 ? 'larva' : 'rest';
     const anchors = nest.nodes.filter((n) => n.kind === 'junction' && nest.surfaceY - n.pos.y > 8);
     for (let k = 0; k < 60; k++) {
-      const jn = rng.pick(anchors);
-      const rx = type === 'larva' ? rng.range(8, 10) : rng.range(7, 8.5);
-      const rz = rx * rng.range(0.75, 0.88);
-      const ry = rng.range(2.6, 3.2);
-      const ang = rng.range(0, TAU);
-      const dist = Math.max(rx, rz) + rng.range(4, 7);
-      const floor = jn.pos.clone().add(new THREE.Vector3(Math.cos(ang) * dist, -rng.range(1, 3), Math.sin(ang) * dist));
+      const jn = this.w.rng.pick(anchors);
+      const rx = type === 'larva' ? this.w.rng.range(8, 10) : this.w.rng.range(7, 8.5);
+      const rz = rx * this.w.rng.range(0.75, 0.88);
+      const ry = this.w.rng.range(2.6, 3.2);
+      const ang = this.w.rng.range(0, TAU);
+      const dist = Math.max(rx, rz) + this.w.rng.range(4, 7);
+      const floor = jn.pos.clone().add(new THREE.Vector3(Math.cos(ang) * dist, -this.w.rng.range(1, 3), Math.sin(ang) * dist));
       if (Math.hypot(floor.x, floor.z) > 40) continue;
-      const yaw = rng.range(0, Math.PI);
+      const yaw = this.w.rng.range(0, Math.PI);
       if (!nest.isClear(floor, rx, rz, ry, jn.pos)) continue;
       const door = nest.doorPosition(floor, rx, rz, yaw, jn.pos);
       nest.reserved.push({ x: floor.x, y: floor.y, z: floor.z, r: Math.max(rx, rz) });
-      const face = nest.planFace(jn.id, door, rng, CONFIG.nest.tunnelRadius, 0.8, 0.6);
+      const face = nest.planFace(jn.id, door, this.w.rng, CONFIG.nest.tunnelRadius, 0.8, 0.6);
       this.project = {
         face,
         type,
@@ -211,7 +210,7 @@ export class NestExpansion {
     const p = this.project;
     if (p && this.diggersAt(p.face.node) < CONFIG.expansion.maxDiggers) return p.face;
     const open = this.w.nest.faces.filter((f) => f !== p?.face && f.len < f.maxLen - 0.01);
-    return open.length ? rng.pick(open) : null;
+    return open.length ? this.w.rng.pick(open) : null;
   }
 
   isProjectFace(node: number): boolean {
@@ -228,7 +227,7 @@ export class NestExpansion {
     const c = this.project?.chamber;
     if (!c) return null;
     if (this.project!.enlarge) {
-      const a = rng.range(0, TAU);
+      const a = this.w.rng.range(0, TAU);
       const lx = Math.cos(a) * c.rx * 0.62;
       const lz = Math.sin(a) * c.rz * 0.62;
       const cy = Math.cos(c.yaw);
@@ -238,8 +237,8 @@ export class NestExpansion {
     const door = this.w.nest.nodes[c.door].pos;
     const k = Math.min(0.85, c.grow * 0.9);
     out.copy(door).lerp(c.floor, k);
-    out.x += rng.range(-1, 1) * c.rx * c.grow * 0.35;
-    out.z += rng.range(-1, 1) * c.rz * c.grow * 0.35;
+    out.x += this.w.rng.range(-1, 1) * c.rx * c.grow * 0.35;
+    out.z += this.w.rng.range(-1, 1) * c.rz * c.grow * 0.35;
     out.y = c.floor.y;
     return out;
   }

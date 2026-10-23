@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
 import type { Rng } from '../../../core/util/random';
+import type { IdPool } from '../../../core/sim/ids';
 import type { Terrain } from './terrain';
 import type { Vegetation } from './vegetation';
 
@@ -25,10 +26,8 @@ export const SOURCE_INFO: Record<FoodSourceType, { name: Text; kind: FoodKind; a
   syrup: { name: L('food.syrup'), kind: 'sugar', amount: [50, 70], radius: 1.8, desc: L('foodDesc.syrup') },
 };
 
-let nextFoodId = 1;
 
 export class FoodSource {
-  id = nextFoodId++;
   amount: number;
   initial: number;
   mesh: THREE.Object3D;
@@ -38,6 +37,7 @@ export class FoodSource {
   /** 由玩家投放 */
   placed = false;
   constructor(
+    public id: number,
     public type: FoodSourceType,
     public x: number,
     public z: number,
@@ -96,7 +96,7 @@ export class FoodManager {
     syrup: new THREE.MeshStandardMaterial({ color: 0xe8a640, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.7 }),
   };
 
-  constructor(private terrain: Terrain, private veg: Vegetation, private rng: Rng) {}
+  constructor(private terrain: Terrain, private veg: Vegetation, private rng: Rng, private ids: IdPool) {}
 
   init(): void {
     for (let i = 0; i < CONFIG.food.initialSources; i++) this.spawn(i < 3 ? 30 : 45);
@@ -127,7 +127,7 @@ export class FoodManager {
     mesh.position.set(x, y, z);
     mesh.rotation.y = this.rng.range(0, Math.PI * 2);
     this.group.add(mesh);
-    const src = new FoodSource(t, x, z, y, Math.round(this.rng.range(info.amount[0], info.amount[1])), mesh);
+    const src = new FoodSource(this.ids.next('food'), t, x, z, y, Math.round(this.rng.range(info.amount[0], info.amount[1])), mesh);
     this.sources.push(src);
     return src;
   }

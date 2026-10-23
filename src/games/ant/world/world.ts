@@ -2,7 +2,6 @@ import { CONFIG } from '../config';
 import { L, type MsgKey, type Text } from '../../../core/i18n';
 import { Simulation } from '../../../core/sim/simulation';
 import { TAU } from '../../../core/util/math';
-import { Rng } from '../../../core/util/random';
 import { Nest, type Chamber } from '../nest/nest';
 import type { Ant } from '../sim/ant';
 import { Colony } from '../sim/colony';
@@ -27,7 +26,6 @@ const COMPASS = ['dir.0', 'dir.1', 'dir.2', 'dir.3', 'dir.4', 'dir.5', 'dir.6', 
 
 /** 模拟世界：持有所有模拟状态，按固定步长推进。不依赖渲染。 */
 export class World extends Simulation<GameRef> {
-  readonly rng: Rng;
   readonly soil: Soil;
   readonly terrain: Terrain;
   readonly nest: Nest;
@@ -42,8 +40,7 @@ export class World extends Simulation<GameRef> {
   readonly colony: Colony;
 
   constructor(readonly seed: number = CONFIG.seed) {
-    super(CONFIG.time.dayLength, CONFIG.time.startHour);
-    this.rng = new Rng(seed);
+    super(CONFIG.time.dayLength, CONFIG.time.startHour, seed);
     this.soil = new Soil(this.clock);
     this.terrain = new Terrain(seed);
     for (const e of Nest.entranceLayout()) this.terrain.addMound(e.x, e.z, e.main ? 4.2 : 3.2, e.main ? 1.3 : 0.9);
@@ -55,12 +52,12 @@ export class World extends Simulation<GameRef> {
     for (const c of this.nest.chambers) {
       c.underStone = this.veg.obstacles.some((o) => o.kind === 'stone' && o.r > 3 && Math.hypot(o.x - c.floor.x, o.z - c.floor.z) < o.r + 3);
     }
-    this.food = new FoodManager(this.terrain, this.veg, this.rng);
+    this.food = new FoodManager(this.terrain, this.veg, this.rng, this.ids);
     this.food.init();
-    this.aphids = new AphidManager(this.veg, this.rng);
+    this.aphids = new AphidManager(this.veg, this.rng, this.ids);
     this.pheromone = new PheromoneField(this.terrain);
-    this.water = new WaterManager(this.terrain, this.veg, this.pheromone);
-    this.predators = new PredatorManager(this.terrain, this.veg, this.rng);
+    this.water = new WaterManager(this.terrain, this.veg, this.pheromone, this.ids);
+    this.predators = new PredatorManager(this.terrain, this.veg, this.rng, this.ids);
     this.alarm = new AlarmField(this.terrain);
     this.weather = new WeatherSystem(this.rng);
     this.colony = new Colony(this);

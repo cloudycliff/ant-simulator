@@ -8,7 +8,7 @@
 
 | 模块 | 内容 | 游戏要做的 |
 |---|---|---|
-| `core/sim` | `Simulation`：时钟、按登记顺序推进的子系统、存档登记、实体注册表、最近事件、固定步长和帧预算；`SpatialHash` | 继承它，登记子系统、存档部分、实体类型 |
+| `core/sim` | `Simulation`：时钟、随机数、编号、按登记顺序推进的子系统、存档登记、实体注册表、最近事件、固定步长和帧预算；`SpatialHash` | 继承它，登记子系统、存档部分、实体类型 |
 | `core/space` | `Space` 接口；`HeightfieldSpace`（地面）、`VolumeSpace`（盒子） | 选一种，传入高度函数和相机范围 |
 | `core/move` | 图上行走（最短路、沿边走）、地表转向、贴地、绕开圆形障碍 | 用得上就用 |
 | `core/render` | 户外的天空、太阳、星空、雾（`Environment`）；雨；画质档位 | 户外游戏用 `Environment`，室内自己放灯 |
@@ -50,8 +50,7 @@ src/games/<name>/
 ```ts
 export class Hive extends Simulation<HiveRef> {
   constructor(readonly seed: number) {
-    super(CONFIG.clock.dayLength, CONFIG.clock.startHour);
-    this.rng = new Rng(seed);
+    super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed);
     this.generate();
     this.addSystem('bees', (dt) => this.updateBees(dt));      // 每步按登记顺序调用
     this.saves.add('bees', () => ..., (d) => ...);             // 读档按登记顺序恢复，被引用的先登记
@@ -60,8 +59,8 @@ export class Hive extends Simulation<HiveRef> {
 }
 ```
 
-- **随机数**：用自己的 `new Rng(seed)`，同一个编号、同样的操作要得到同样的结果，测试靠这个。视图里的随机（叶子的形状等）另开一个 `Rng(seed + 1)`，不要消耗模拟的随机数
-- **存档**：世界由编号重新生成，存档只存会变的东西。时钟由内核自己存。后来才加的部分登记成可选（`saves.add(..., true)`），旧存档还能读
+- **随机数和编号**：模拟里只用 `this.rng`（由世界编号决定）和 `this.ids.next(类型)`，不要用 `Math.random` 或模块级的计数器。两样都由内核存档、最后恢复，所以同一个存档读进来，之后每次运行都一样，测试靠这个；同一进程里的两个世界也不会互相影响。视图里的随机（叶子的形状等）另开一个 `Rng(seed + 1)`，不要消耗模拟的随机数
+- **存档**：世界由编号重新生成，存档只存会变的东西。时钟、随机数和编号由内核自己存。后来才加的部分登记成可选（`saves.add(..., true)`），旧存档还能读
 - **实体**：能选中、能出现在事件里的对象都登记。`pos` 返回 null 表示已经不在了；可跟随的要返回对象自己的位置；读档后编号会变的设 `unstable`
 - **事件**：`this.events.push(L('ev.xxx', 参数), 涉及的对象, 位置)`，对象和位置都可以省略
 - **文字**：模拟里只用 `L()` 记下键和参数，界面显示时再翻译

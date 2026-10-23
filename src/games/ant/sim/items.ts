@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { L, type Text } from '../../../core/i18n';
 import type { FoodKind } from '../world/food';
+import type { IdPool } from '../../../core/sim/ids';
 
 export type ItemType = 'egg' | 'larva' | 'pupa' | 'food' | 'waste' | 'soil' | 'corpse';
 
@@ -17,7 +18,6 @@ export const ITEM_NAMES: Record<ItemType, Text> = {
   corpse: L('item.corpse'),
 };
 
-let nextItemId = 1;
 
 export interface ItemSave {
   id: number;
@@ -41,7 +41,6 @@ export interface ItemSave {
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 export class Item {
-  id = nextItemId++;
   place: ItemPlace = 'none';
   chamber = -1;
   node = -1;
@@ -63,7 +62,10 @@ export class Item {
   /** 存在时长（天），地表物品用于腐烂消失 */
   age = 0;
 
-  constructor(public type: ItemType) {}
+  constructor(
+    public type: ItemType,
+    public id: number,
+  ) {}
 
   get isBrood(): boolean {
     return this.type === 'egg' || this.type === 'larva' || this.type === 'pupa';
@@ -95,10 +97,9 @@ export class Item {
   }
 
   /** 读档：认领与携带关系不恢复（蚂蚁的任务会重新开始） */
-  static fromSave(s: ItemSave): Item {
-    const it = new Item(s.t);
-    it.id = s.id;
-    nextItemId = Math.max(nextItemId, s.id + 1);
+  static fromSave(s: ItemSave, ids: IdPool): Item {
+    const it = new Item(s.t, s.id);
+    ids.seen('item', s.id);
     it.place = s.pl;
     it.chamber = s.ch;
     it.node = s.nd;

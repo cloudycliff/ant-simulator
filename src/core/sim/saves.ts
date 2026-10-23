@@ -3,6 +3,7 @@ interface Section {
   save: () => unknown;
   restore: (d: never) => void;
   optional: boolean;
+  last?: boolean;
 }
 
 /**
@@ -18,6 +19,12 @@ export class SaveRegistry {
     this.sections.push({ key, save, restore, optional });
   }
 
+  /** 在其他部分全部恢复之后才恢复（比如随机数：别的部分恢复时可能还会抽随机数）。旧存档里没有时保留初始状态 */
+  addLast<T>(key: string, save: () => T, restore: (d: T) => void): void {
+    this.add(key, save, restore, true);
+    this.sections[this.sections.length - 1].last = true;
+  }
+
   save(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const s of this.sections) out[s.key] = s.save();
@@ -25,7 +32,7 @@ export class SaveRegistry {
   }
 
   restore(d: Record<string, unknown>): void {
-    for (const s of this.sections) {
+    for (const s of [...this.sections.filter((s) => !s.last), ...this.sections.filter((s) => s.last)]) {
       const v = d[s.key];
       if (v === undefined) {
         if (s.optional) continue;

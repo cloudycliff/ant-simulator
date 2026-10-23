@@ -103,5 +103,13 @@ const bad2 = check(b);
 console.log('一致性检查：', bad2.join('；') || '通过');
 problems.push(...bad2);
 if (b.colony.ants.length < 0.9 * a.colony.ants.length) problems.push('读档后的世界蚂蚁明显变少');
+
+const c = new World(data.seed);
+loadWorld(c, data);
+run(c, 1200);
+const mc2 = metrics(c);
+const diverged = Object.keys(mb2).filter((k) => mb2[k] !== mc2[k]);
+console.log(`同一个存档再读一次、同样跑 1200 秒：${diverged.length ? `${diverged.join('、')} 不同` : '和第一次完全相同'}`);
+if (diverged.length) problems.push(`同一个存档两次读档后的运行不同（${diverged.join('、')}）`);
 console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
 if (problems.length) process.exitCode = 1;

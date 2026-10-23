@@ -4,17 +4,17 @@ import type { PheromoneField } from './pheromone';
 import type { Soil } from './soil';
 import type { Terrain } from './terrain';
 import type { Obstacle, Vegetation } from './vegetation';
+import type { IdPool } from '../../../core/sim/ids';
 
-let nextPuddleId = 1;
 
 /** 地表水洼：蚂蚁会绕开，水下的信息素被冲掉；随温度蒸发、渗入土壤后缩小消失 */
 export class Puddle {
-  id = nextPuddleId++;
   /** 剩余水量，1 为刚浇下 */
   water = 1;
   readonly obstacle: Obstacle;
   meshR = 0;
   constructor(
+    public id: number,
     public x: number,
     public z: number,
     public r0: number,
@@ -47,6 +47,7 @@ export class WaterManager {
     private terrain: Terrain,
     private veg: Vegetation,
     private pheromone: PheromoneField,
+    private ids: IdPool,
   ) {}
 
   /** 在 (x,z) 浇水；落在已有水洼里时合并成更大的水洼 */
@@ -70,7 +71,7 @@ export class WaterManager {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.mat);
     mesh.receiveShadow = true;
     mesh.renderOrder = 1;
-    const p = new Puddle(x, z, r0, mesh);
+    const p = new Puddle(this.ids.next('puddle'), x, z, r0, mesh);
     p.water = water;
     p.obstacle.r = p.r;
     mesh.userData.pick = { kind: 'puddle', id: p.id };

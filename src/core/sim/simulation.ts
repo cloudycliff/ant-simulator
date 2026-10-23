@@ -1,7 +1,9 @@
 import { ENGINE } from '../config';
+import { Rng } from '../util/random';
 import { SimClock } from './clock';
 import { EntityRegistry, type EntityRef } from './entities';
 import { EventLog } from './events';
+import { IdPool } from './ids';
 import { SaveRegistry } from './saves';
 
 /** 每个模拟步调用一次的子系统；update 可以被替换（性能测试用它统计各子系统的耗时） */
@@ -26,8 +28,16 @@ export class Simulation<R extends EntityRef = EntityRef> {
   /** 最近的实际倍速（指数平均），模拟跟不上时低于 clock.speed */
   effectiveSpeed = 1;
 
-  constructor(dayLength: number, startHour: number) {
+  /**
+   * 模拟用的随机数，由世界的种子决定并进存档：同一个存档读进来，之后的运行每次都一样。
+   * 只影响画面的随机（雨滴、叶子抖动）用 Math.random，不要动它
+   */
+  readonly rng: Rng;
+  readonly ids = new IdPool();
+
+  constructor(dayLength: number, startHour: number, seed: number) {
     this.clock = new SimClock(dayLength, startHour);
+    this.rng = new Rng(seed);
     this.events = new EventLog<R>(this.clock);
     this.events.locate = (r) => this.entities.pos(r);
     this.saves.add(
@@ -37,6 +47,16 @@ export class Simulation<R extends EntityRef = EntityRef> {
         this.clock.seconds = d.seconds;
         this.clock.speed = d.speed;
       },
+    );
+    this.saves.addLast(
+      'rng',
+      () => this.rng.state,
+      (s) => (this.rng.state = s),
+    );
+    this.saves.addLast(
+      'ids',
+      () => this.ids.toSave(),
+      (d) => this.ids.restore(d),
     );
   }
 

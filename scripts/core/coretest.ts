@@ -129,12 +129,35 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
     threw = true;
   }
   check('重名的部分报错', threw);
+
+  const order2: string[] = [];
+  const r2 = new SaveRegistry();
+  r2.addLast('z', () => 0, () => order2.push('z'));
+  r2.add('a', () => 0, () => order2.push('a'));
+  r2.restore({ z: 0, a: 0 });
+  check('addLast 的部分最后恢复', order2.join('') === 'az', order2);
+  order2.length = 0;
+  r2.restore({ a: 0 });
+  check('addLast 的部分缺了跳过', order2.join('') === 'a', order2);
+}
+
+// ---------------- 随机数 ----------------
+{
+  const a = new Simulation(600, 6, 42);
+  const b = new Simulation(600, 6, 42);
+  check('同一种子的随机序列相同', a.rng.next() === b.rng.next() && a.rng.next() === b.rng.next());
+  a.rng.next();
+  const saved = JSON.parse(JSON.stringify(a.saves.save()));
+  const want = [a.rng.next(), a.rng.next()];
+  const c = new Simulation(600, 6, 42);
+  c.saves.restore(saved);
+  check('读档后接着产生存档时的序列', c.rng.next() === want[0] && c.rng.next() === want[1]);
 }
 
 // ---------------- 模拟内核与事件 ----------------
 {
   type Ref = { kind: 'bug'; id: number } | { kind: 'rock' };
-  const sim = new Simulation<Ref>(600, 6);
+  const sim = new Simulation<Ref>(600, 6, 1);
   const seen: string[] = [];
   sim.addSystem('first', () => seen.push('1'));
   sim.addSystem('second', () => seen.push('2'));

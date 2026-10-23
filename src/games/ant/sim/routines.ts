@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
 import { TAU } from '../../../core/util/math';
-import { rng } from '../../../core/util/random';
 import type { Chamber } from '../nest/nest';
 import { AphidColony } from '../world/aphids';
 import type { FoodSource } from '../world/food';
@@ -96,7 +95,7 @@ function* offerCrop(a: Ant, w: World, maxPartners: number, pred: (b: Ant) => boo
     const b = col.findRoommate(a, pred);
     if (!b) {
       a.activity = L('act.seekPartner');
-      yield { k: 'room', chamber: a.room, time: rng.range(1.5, 3) };
+      yield { k: 'room', chamber: a.room, time: w.rng.range(1.5, 3) };
       continue;
     }
     b.hold(b.pos.distanceTo(a.pos) / 1.4 + 2, a.pos);
@@ -116,7 +115,7 @@ function* offerCrop(a: Ant, w: World, maxPartners: number, pred: (b: Ant) => boo
 
 /** 走到房间里的随机位置再交哺：offerCrop 找最近的同伴，停在门口就会和刚进门的同伴挤成一团 */
 function* walkIntoRoom(w: World, c: Chamber): Routine {
-  yield { k: 'room', chamber: c.id, time: 0, point: w.nest.randomFloorPoint(c, rng.next.bind(rng), new THREE.Vector3()) };
+  yield { k: 'room', chamber: c.id, time: 0, point: w.nest.randomFloorPoint(c, () => w.rng.next(), new THREE.Vector3()) };
 }
 
 /** 返巢后在储食室（不够再去休息室）把嗉囊里的甜液分出去 */
@@ -127,7 +126,7 @@ function* unloadCrop(a: Ant, w: World): Routine {
   yield* walkIntoRoom(w, store);
   yield* offerCrop(a, w, 4);
   if (a.crop > 0.3) {
-    const c = rng.pick(w.nest.chamberOfType('rest'));
+    const c = w.rng.pick(w.nest.chamberOfType('rest'));
     a.activity = L('act.shareIn', { room: c.label });
     yield* walkIntoRoom(w, c);
     yield* offerCrop(a, w, 3);
@@ -139,7 +138,7 @@ function* distributeCrop(a: Ant, w: World): Routine {
   const col = w.colony;
   const options = broodChambers(w).filter((c) => col.ants.some((b) => b.room === c.id && b.role === 'nurse'));
   if (!options.length) return;
-  const c = rng.pick(options);
+  const c = w.rng.pick(options);
   yield* goHome(a);
   a.activity = L('act.bringCrop', { room: c.label });
   yield* walkIntoRoom(w, c);
@@ -161,7 +160,7 @@ function* eat(a: Ant, w: World): Routine {
     return;
   }
   yield* goHome(a);
-  if (a.room >= 0 && rng.chance(0.6) && (yield* solicit(a, w, L('reason.hungry')))) {
+  if (a.room >= 0 && w.rng.chance(0.6) && (yield* solicit(a, w, L('reason.hungry')))) {
     a.eatFromCrop();
     a.note(w, L('note.gotShare'));
     return;
@@ -178,7 +177,7 @@ function* eat(a: Ant, w: World): Routine {
     a.note(w, L('note.begged'));
   } else {
     a.note(w, L('note.noFood'));
-    a.eatRetryAt = w.clock.seconds + rng.range(30, 60);
+    a.eatRetryAt = w.clock.seconds + w.rng.range(30, 60);
   }
 }
 
@@ -187,13 +186,13 @@ function* rest(a: Ant, w: World, label: Text = L('act.rest')): Routine {
   // 随机挑两间休息室，去路程较近的一间
   const rooms = w.nest.chamberOfType('rest');
   const from = a.currentNode(w);
-  const c1 = rng.pick(rooms);
-  const c2 = rng.pick(rooms);
+  const c1 = w.rng.pick(rooms);
+  const c2 = w.rng.pick(rooms);
   const c = w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
   a.activity = L('act.goTo', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = label;
-  yield { k: 'room', chamber: c.id, time: rng.range(12, 30) };
+  yield { k: 'room', chamber: c.id, time: w.rng.range(12, 30) };
 }
 
 /** 天气转坏时返巢躲雨 */
@@ -209,7 +208,7 @@ export function* shelter(a: Ant, w: World): Routine {
 function* queenRoutine(a: Ant, w: World): Routine {
   const qc = chamber(w, 'queen');
   a.activity = L('act.queenIdle');
-  yield { k: 'room', chamber: qc.id, time: rng.range(4, 9) };
+  yield { k: 'room', chamber: qc.id, time: w.rng.range(4, 9) };
   while (w.colony.canLay()) {
     a.activity = L('act.lay');
     yield { k: 'wait', time: 2.5 };
@@ -229,13 +228,13 @@ function* nurseRoutine(a: Ant, w: World): Routine {
   if (wantsToEat(a, w)) return yield* eat(a, w);
 
   const egg = col.findItem((i) => i.type === 'egg' && col.chamberType(i.chamber) === 'queen', here(a, w));
-  if (egg && rng.chance(0.85)) return yield* carryBrood(a, w, egg, L('act.carryEgg'));
+  if (egg && w.rng.chance(0.85)) return yield* carryBrood(a, w, egg, L('act.carryEgg'));
 
   const ready = col.findItem((i) => i.type === 'pupa' && i.ready, here(a, w));
-  if (ready && rng.chance(0.8)) return yield* helpEclose(a, w, ready);
+  if (ready && w.rng.chance(0.8)) return yield* helpEclose(a, w, ready);
 
   const mover = col.findItem((i) => i.isBrood && i.wantsMove, here(a, w));
-  if (mover && rng.chance(0.75)) {
+  if (mover && w.rng.chance(0.75)) {
     const target = col.targetChamberFor(mover);
     return yield* carryBrood(a, w, mover, L('act.carryBrood', { item: ITEM_NAMES[mover.type], room: target.label }));
   }
@@ -243,7 +242,7 @@ function* nurseRoutine(a: Ant, w: World): Routine {
   if (col.queen.hunger > 0.45 && col.queenTender < 0 && (col.foodStock > 0.5 || a.crop >= 0.3)) return yield* feedQueen(a, w);
 
   const larva = hungriestLarva(w);
-  if (larva && (col.reserve > 0.5 || a.crop >= 0.3) && rng.chance(0.8)) return yield* feedLarva(a, w, larva);
+  if (larva && (col.reserve > 0.5 || a.crop >= 0.3) && w.rng.chance(0.8)) return yield* feedLarva(a, w, larva);
 
   return yield* tendBrood(a, w);
 }
@@ -254,7 +253,7 @@ function hungriestLarva(w: World): Item | null {
   for (const c of w.nest.chamberOfType('larva'))
     for (const it of w.colony.byChamber[c.id])
       if (it.type === 'larva' && it.free && it.hunger > bh) {
-        bh = it.hunger + rng.range(0, 0.3);
+        bh = it.hunger + w.rng.range(0, 0.3);
         best = it;
       }
   return best;
@@ -278,7 +277,7 @@ function* carryBrood(a: Ant, w: World, it: Item, label: Text): Routine {
   if (dropped) col.addToChamber(dropped, target, spot);
   a.note(w, label);
   a.activity = L('act.tidyBrood');
-  yield { k: 'room', chamber: target.id, time: rng.range(1.5, 4) };
+  yield { k: 'room', chamber: target.id, time: w.rng.range(1.5, 4) };
 }
 
 function* helpEclose(a: Ant, w: World, pupa: Item): Routine {
@@ -299,10 +298,10 @@ function* fetchFood(a: Ant, w: World): Generator<Command, 'crop' | 'solid' | nul
   if (a.crop >= 0.3) return 'crop';
   const store = col.foodChamber();
   yield* goHome(a);
-  yield { k: 'room', chamber: store.id, time: rng.range(0.8, 1.6), point: col.pileSpot(store, 'food') };
+  yield { k: 'room', chamber: store.id, time: w.rng.range(0.8, 1.6), point: col.pileSpot(store, 'food') };
   const kind = col.takeFood(0.45);
   if (kind) {
-    const piece = new Item('food');
+    const piece = w.colony.newItem('food');
     piece.foodKind = kind;
     col.pickUp(a, piece);
     return 'solid';
@@ -338,12 +337,12 @@ function* feedLarva(a: Ant, w: World, larva: Item): Routine {
   if (larva.type === 'larva') {
     larva.hunger = 0;
     larva.feeds++;
-    if (rng.chance(0.15)) col.addToChamber(new Item('waste'), w.nest.chambers[larva.chamber]);
+    if (w.rng.chance(0.15)) col.addToChamber(w.colony.newItem('waste'), w.nest.chambers[larva.chamber]);
     a.note(w, L(how === 'crop' ? 'note.fedLarvaCrop' : 'note.fedLarvaSolid', { n: larva.feeds }));
   }
   if (larva.claimedBy === a.id) larva.claimedBy = -1;
   a.activity = L('act.tendLarvae');
-  yield { k: 'room', chamber: larva.chamber, time: rng.range(2, 5) };
+  yield { k: 'room', chamber: larva.chamber, time: w.rng.range(2, 5) };
 }
 
 function* feedQueen(a: Ant, w: World): Routine {
@@ -365,7 +364,7 @@ function* feedQueen(a: Ant, w: World): Routine {
   col.queen.note(w, L('note.fedBy', { id: a.id }));
   a.note(w, L('note.fedQueen'));
   a.activity = L('act.groomQueen');
-  yield { k: 'room', chamber: qc.id, time: rng.range(3, 8) };
+  yield { k: 'room', chamber: qc.id, time: w.rng.range(3, 8) };
 }
 
 function* tendBrood(a: Ant, w: World): Routine {
@@ -373,26 +372,26 @@ function* tendBrood(a: Ant, w: World): Routine {
   const options = broodChambers(w).filter((c) => col.byChamber[c.id].some((i) => i.isBrood));
   yield* goHome(a);
   // 嗉囊空了的保育蚁会向路过的同伴讨要甜液，用来反哺幼虫
-  if (a.crop < 0.2 && a.room >= 0 && rng.chance(0.3) && (yield* solicit(a, w, L('reason.stockUp')))) return;
+  if (a.crop < 0.2 && a.room >= 0 && w.rng.chance(0.3) && (yield* solicit(a, w, L('reason.stockUp')))) return;
   // 蚁后身边总围着一圈侍从工蚁，为它梳理、舔舐并传递蚁后信息素
-  if (rng.chance(0.18)) {
+  if (w.rng.chance(0.18)) {
     const qc = chamber(w, 'queen');
     a.activity = L('act.goQueen');
     yield { k: 'room', chamber: qc.id, time: 0.1 };
     a.activity = L('act.attendQueen');
     const near = col.queen.pos.clone();
-    near.x += rng.range(-1.6, 1.6);
-    near.z += rng.range(-1.6, 1.6);
-    yield { k: 'room', chamber: qc.id, time: rng.range(10, 25), point: near };
+    near.x += w.rng.range(-1.6, 1.6);
+    near.z += w.rng.range(-1.6, 1.6);
+    yield { k: 'room', chamber: qc.id, time: w.rng.range(10, 25), point: near };
     return;
   }
   if (options.length === 0) return yield* rest(a, w);
-  const c = rng.pick(options);
+  const c = w.rng.pick(options);
   const clean = c.type === 'egg' ? 'act.cleanEggs' : c.type === 'larva' ? 'act.cleanLarvae' : 'act.cleanPupae';
   a.activity = L('act.goTo', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = L(clean);
-  yield { k: 'room', chamber: c.id, time: rng.range(8, 18) };
+  yield { k: 'room', chamber: c.id, time: w.rng.range(8, 18) };
 }
 
 // ---------------- 内务蚁 ----------------
@@ -402,36 +401,36 @@ function* maintenanceRoutine(a: Ant, w: World): Routine {
   if (wantsToEat(a, w)) return yield* eat(a, w);
 
   const job = w.weather.plugJob(w);
-  if (job && rng.chance(0.8)) return yield* plugEntrance(a, w, job);
+  if (job && w.rng.chance(0.8)) return yield* plugEntrance(a, w, job);
   // 入口封着或地面还湿时，只做巢内的工作
   if (w.weather.keepIn) {
     const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste', here(a, w));
-    if (waste && rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
-    if (a.crop > 0.6 && rng.chance(0.5)) return yield* distributeCrop(a, w);
+    if (waste && w.rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
+    if (a.crop > 0.6 && w.rng.chance(0.5)) return yield* distributeCrop(a, w);
     return yield* patrolNest(a, w);
   }
 
   const corpse = findCorpse(a, w);
-  if (corpse && rng.chance(0.85)) return yield* carryOut(a, w, corpse, L('act.carryCorpseOut'));
+  if (corpse && w.rng.chance(0.85)) return yield* carryOut(a, w, corpse, L('act.carryCorpseOut'));
 
   const waste = col.findItem((i) => i.type === 'waste' && col.chamberType(i.chamber) !== 'waste', here(a, w));
-  if (waste && rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
+  if (waste && w.rng.chance(0.7)) return yield* carryWasteInside(a, w, waste);
 
   const wc = chamber(w, 'waste');
-  if (col.countIn(wc.id, 'waste') >= 4 && rng.chance(0.6)) {
+  if (col.countIn(wc.id, 'waste') >= 4 && w.rng.chance(0.6)) {
     const it = col.byChamber[wc.id].find((i) => i.type === 'waste' && i.free);
     if (it) return yield* carryOut(a, w, it, L('act.carryWasteOut'));
   }
 
   // 有扩建工程时大量投入挖掘，否则只缓慢延长现有隧道
   const D = CONFIG.defense;
-  if (w.predators.threatEntrance >= 0 && w.predators.guardsOut < D.maxGuards && rng.chance(D.guardProb)) return yield* guard(a, w, true);
+  if (w.predators.threatEntrance >= 0 && w.predators.guardsOut < D.maxGuards && w.rng.chance(D.guardProb)) return yield* guard(a, w, true);
 
   const digP = col.expansion.project ? 0.45 : 0.15;
-  const r = rng.next();
+  const r = w.rng.next();
   if (r < digP) return yield* dig(a, w);
   if (r < digP + 0.25 && !w.clock.isNight) return yield* guard(a, w);
-  if (a.crop > 0.6 && rng.chance(0.5)) return yield* distributeCrop(a, w);
+  if (a.crop > 0.6 && w.rng.chance(0.5)) return yield* distributeCrop(a, w);
   return yield* patrolNest(a, w);
 }
 
@@ -444,7 +443,7 @@ function* plugEntrance(a: Ant, w: World, job: PlugJob): Routine {
   yield { k: 'goto', node: e.node };
   a.activity = L(job.open ? 'act.unplug' : 'act.plug', { ent: e.label });
   do {
-    yield { k: 'wait', time: rng.range(3, 5) };
+    yield { k: 'wait', time: w.rng.range(3, 5) };
     w.weather.workPlug(job, w);
     a.note(w, L(job.open ? 'note.unplugged' : 'note.plugged', { ent: e.label }));
   } while (job.open === (w.weather.phase === 'clear') && (job.open ? e.plug > 0 : e.plug < 1));
@@ -506,7 +505,7 @@ function* carryOut(a: Ant, w: World, it: Item, label: Text): Routine {
     return;
   }
   const m = col.midden;
-  yield { k: 'walk', x: m.x + rng.range(-1.5, 1.5), z: m.z + rng.range(-1.5, 1.5), r: 1.2 };
+  yield { k: 'walk', x: m.x + w.rng.range(-1.5, 1.5), z: m.z + w.rng.range(-1.5, 1.5), r: 1.2 };
   const d = col.release(a);
   if (d) col.dropAtMidden(d);
   col.stats.wasteRemoved++;
@@ -532,30 +531,30 @@ function* dig(a: Ant, w: World): Routine {
   const room = w.nest.nodes[node].chamber;
   if (spot && room !== undefined) yield { k: 'room', chamber: room, time: 0.3, point: spot };
   a.activity = L(!spot ? (project ? 'act.digTunnelNew' : 'act.digTunnel') : ex.enlarging() ? 'act.digEdge' : 'act.digRoom');
-  yield { k: 'wait', time: rng.range(3, 6) };
+  yield { k: 'wait', time: w.rng.range(3, 6) };
   a.digNode = -1;
   ex.excavate(node);
   if (w.weather.keepIn) {
     a.activity = L('act.packSoilSealed');
-    yield { k: 'wait', time: rng.range(2, 3) };
+    yield { k: 'wait', time: w.rng.range(2, 3) };
     col.stats.soilExcavated++;
     a.note(w, L(project ? 'note.soilWallProject' : 'note.soilWall'));
     return;
   }
-  const soil = new Item('soil');
+  const soil = w.colony.newItem('soil');
   col.pickUp(a, soil);
   col.stats.soilExcavated++;
   a.activity = L('act.carrySoil');
   if ((yield { k: 'exit', giveUp: true }) === 'blocked') {
     a.activity = L('act.packSoilBlocked');
-    yield { k: 'wait', time: rng.range(2, 3) };
+    yield { k: 'wait', time: w.rng.range(2, 3) };
     const d = col.release(a);
     if (d) col.destroy(d);
     a.note(w, L('note.soilBlocked'));
     return;
   }
   const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
-  const ang = rng.range(0, TAU);
+  const ang = w.rng.range(0, TAU);
   yield { k: 'walk', x: ent.x + Math.cos(ang) * 3, z: ent.z + Math.sin(ang) * 3, r: 0.8 };
   const d = col.release(a);
   if (d) col.dropOnMound(d, ent);
@@ -574,7 +573,7 @@ function* guard(a: Ant, w: World, threat = false): Routine {
   const ent = threat && ti >= 0 ? w.nest.entrances[ti] : w.nest.nearestEntrance(a.pos.x, a.pos.z);
   a.activity = L(threat ? 'act.guardingThreat' : 'act.guarding');
   a.note(w, L(threat ? 'note.guardThreat' : 'note.guard', { ent: ent.label }));
-  yield { k: 'patrol', x: ent.x, z: ent.z, radius: threat ? 7 : 4.5, time: rng.range(25, 60) };
+  yield { k: 'patrol', x: ent.x, z: ent.z, radius: threat ? 7 : 4.5, time: w.rng.range(25, 60) };
   a.guarding = false;
   a.activity = L('act.guardEnd');
   yield { k: 'enter' };
@@ -586,21 +585,21 @@ function* loiter(a: Ant, w: World): Routine {
   a.activity = L('act.loiterOut');
   yield { k: 'exit' };
   const ent = w.nest.nearestEntrance(a.pos.x, a.pos.z);
-  const ang = rng.range(0, TAU);
-  const d = rng.range(LO.offset[0], LO.offset[1]);
-  a.activity = L(rng.chance(0.5) ? 'act.patrolTerritory' : 'act.bask');
-  yield { k: 'patrol', x: ent.x + Math.cos(ang) * d, z: ent.z + Math.sin(ang) * d, radius: rng.range(LO.radius[0], LO.radius[1]), time: rng.range(LO.time[0], LO.time[1]) };
+  const ang = w.rng.range(0, TAU);
+  const d = w.rng.range(LO.offset[0], LO.offset[1]);
+  a.activity = L(w.rng.chance(0.5) ? 'act.patrolTerritory' : 'act.bask');
+  yield { k: 'patrol', x: ent.x + Math.cos(ang) * d, z: ent.z + Math.sin(ang) * d, radius: w.rng.range(LO.radius[0], LO.radius[1]), time: w.rng.range(LO.time[0], LO.time[1]) };
   a.activity = L('act.loiterEnd');
   yield { k: 'enter' };
 }
 
 function* patrolNest(a: Ant, w: World): Routine {
   yield* goHome(a);
-  const c = rng.pick(w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
+  const c = w.rng.pick(w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
   a.activity = L('act.inspect', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = L('act.cleanRoom', { room: c.label });
-  yield { k: 'room', chamber: c.id, time: rng.range(8, 20) };
+  yield { k: 'room', chamber: c.id, time: w.rng.range(8, 20) };
 }
 
 // ---------------- 觅食蚁 ----------------
@@ -616,15 +615,15 @@ function pickHerd(a: Ant, w: World): AphidColony | null {
   const aph = w.aphids;
   if (a.herd >= 0) {
     const c = aph.byId(a.herd);
-    if (c && rng.chance(0.8)) return c;
+    if (c && w.rng.chance(0.8)) return c;
     if (!c) a.herd = -1;
   }
-  if (a.scout || !rng.chance(0.3)) return null;
+  if (a.scout || !w.rng.chance(0.3)) return null;
   const known = aph.colonies.filter((c) => c.discovered && tenders(w, c) < 4 + c.count / 8);
   if (!known.length) return null;
   let total = 0;
   for (const c of known) total += c.honeydew + 0.5;
-  let r = rng.next() * total;
+  let r = w.rng.next() * total;
   for (const c of known) {
     r -= c.honeydew + 0.5;
     if (r <= 0) return c;
@@ -637,19 +636,19 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   const now = w.clock.seconds;
   // 储备耗尽时，觅食蚁不会留在巢里挨饿，而是出去在食物源处进食
   if (wantsToEat(a, w) && (col.reserve > 3 || a.crop >= 0.1)) return yield* eat(a, w);
-  if (a.domain === 'nest' && a.crop > 0.3 && a.room >= 0 && rng.chance(0.5)) return yield* offerCrop(a, w, 3);
+  if (a.domain === 'nest' && a.crop > 0.3 && a.room >= 0 && w.rng.chance(0.5)) return yield* offerCrop(a, w, 3);
   const surfaceT = w.soil.temperatureAt(0);
   const excited = a.excitedUntil > now;
-  if (a.domain === 'nest' && ((w.clock.isNight && rng.chance(excited ? 0.3 : 0.6)) || surfaceT < 8)) {
+  if (a.domain === 'nest' && ((w.clock.isNight && w.rng.chance(excited ? 0.3 : 0.6)) || surfaceT < 8)) {
     return yield* rest(a, w, L(surfaceT < 8 ? 'act.restCold' : 'act.restNight'));
   }
   // 储备越充足，返巢蚁越难把食物交出去，出巢觅食的积极性随之下降；被同伴激发时则更容易出巢
   const satiation = Math.min(0.9, Math.max(0, (col.reserve - 150) / 200)) * (a.scout ? 0.5 : 1) * (excited ? 0.3 : 1);
-  if (a.domain === 'nest' && rng.chance(satiation)) {
-    if (a.crop > 0.6 && rng.chance(0.4)) return yield* distributeCrop(a, w);
+  if (a.domain === 'nest' && w.rng.chance(satiation)) {
+    if (a.crop > 0.6 && w.rng.chance(0.4)) return yield* distributeCrop(a, w);
     const LO = CONFIG.loiter;
     const calm = !w.clock.isNight && w.weather.damp === 0 && w.predators.threatEntrance < 0 && surfaceT >= LO.minTemp;
-    if (calm && rng.chance(LO.chance)) return yield* loiter(a, w);
+    if (calm && w.rng.chance(LO.chance)) return yield* loiter(a, w);
     return yield* rest(a, w, L('act.restFull'));
   }
 
@@ -658,9 +657,9 @@ function* foragerRoutine(a: Ant, w: World): Routine {
     return yield* rest(a, w, L(P === 'rain' ? 'act.restRaining' : P === 'overcast' ? 'act.restOvercast' : 'act.restDrying'));
   }
   // 雨后入口刚清开：侦察蚁先出去，其余觅食蚁随地面变干陆续出巢
-  if (a.domain === 'nest' && !a.scout && rng.chance(w.weather.damp)) return yield* rest(a, w, L('act.restDamp'));
+  if (a.domain === 'nest' && !a.scout && w.rng.chance(w.weather.damp)) return yield* rest(a, w, L('act.restDamp'));
 
-  if (a.domain === 'nest' && w.predators.threatEntrance >= 0 && rng.chance(CONFIG.defense.holdBackProb)) {
+  if (a.domain === 'nest' && w.predators.threatEntrance >= 0 && w.rng.chance(CONFIG.defense.holdBackProb)) {
     return yield* rest(a, w, L('act.restSpider'));
   }
 
@@ -706,7 +705,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   }
   if (found.kind === 'sugar') a.crop = 1;
   else {
-    const piece = new Item('food');
+    const piece = w.colony.newItem('food');
     piece.foodKind = found.kind;
     col.pickUp(a, piece);
   }
@@ -730,7 +729,7 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   col.storeFood(a);
   a.note(w, L('note.storedFood'));
   a.activity = L('act.linger');
-  yield { k: 'room', chamber: store.id, time: rng.range(2, 6) };
+  yield { k: 'room', chamber: store.id, time: w.rng.range(2, 6) };
 }
 
 /** 蚜虫放牧：爬上寄主植物，拍打蚜虫收集蜜露；蜜露不多时留下守护蚜虫 */
@@ -741,7 +740,7 @@ function* tendAphids(a: Ant, w: World, c: AphidColony, arrived: boolean): Routin
     yield { k: 'exit' };
   }
   if (!arrived) {
-    const ang = rng.range(0, TAU);
+    const ang = w.rng.range(0, TAU);
     a.activity = L('act.goPlant');
     yield { k: 'walk', x: c.x + Math.cos(ang) * 1.6, z: c.z + Math.sin(ang) * 1.6, r: 0.6 };
   }
@@ -749,7 +748,7 @@ function* tendAphids(a: Ant, w: World, c: AphidColony, arrived: boolean): Routin
   const ang = Math.atan2(a.pos.z - c.z, a.pos.x - c.x);
   a.activity = L(guard ? 'act.guardAphids' : 'act.milkAphids');
   c.lastTended = w.clock.seconds;
-  yield { k: 'climb', x: c.x, z: c.z, angle: ang, r: c.stemRadius, top: rng.range(c.bandLo, c.bandHi) - 0.3, stay: guard ? rng.range(25, 45) : rng.range(6, 10) };
+  yield { k: 'climb', x: c.x, z: c.z, angle: ang, r: c.stemRadius, top: w.rng.range(c.bandLo, c.bandHi) - 0.3, stay: guard ? w.rng.range(25, 45) : w.rng.range(6, 10) };
   c.lastTended = w.clock.seconds;
   a.herd = c.id;
   const amt = Math.min(1 - a.crop, c.honeydew);

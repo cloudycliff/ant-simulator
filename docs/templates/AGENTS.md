@@ -14,7 +14,7 @@
 - 界面文字不直接写在代码里：中文写进 `src/games/<name>/i18n/zh.ts`（键以它为准），英文写进 `en.ts`。界面用 `t(键, 参数)`；模拟层用 `L(键, 参数)` 记下延迟翻译的文字，显示时再 `tr()`。游戏的键不能和框架重名，改写框架文字写进 `overrides.ts`。改了词典跑 `npx tsx scripts/i18ncheck.ts`
 - 注释只写代码本身表达不了的约束，不写“下一行做什么”
 - 模拟层（`src/core/sim` 和游戏的世界）不能依赖 WebGL 或 DOM，要能在 Node 里跑无界面测试
-- 模拟只用世界自己的 `Rng(seed)`，同一个编号、同样的操作结果相同
+- 模拟只用世界的 `rng` 和 `ids`（内核给的，会进存档），不用 `Math.random` 和模块级计数器；同一个编号、同样的操作结果相同
 - 数值放进 `src/games/<name>/config.ts`；框架数值在 `src/core/config.ts`。写在代码里的数值要同步登记到 `docs/BALANCE.md`
 
 ## 完成一轮开发后

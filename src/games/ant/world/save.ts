@@ -19,6 +19,8 @@ export interface SaveData {
   /** 较早的存档里有保存时的游戏时刻，如“第3天 14:20”；现在由 clock.seconds 算出 */
   stamp?: string;
   clock: { seconds: number; speed: number };
+  /** 模拟随机数的状态，较早的存档没有，读进来后的运行就不能复现 */
+  rng?: number;
   nest: NestSave;
   colony: ColonySave;
   food: FoodSave;

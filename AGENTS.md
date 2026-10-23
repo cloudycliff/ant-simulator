@@ -12,6 +12,7 @@
 - 界面文字不直接写在代码里：中文写进 `src/games/ant/i18n/zh.ts`（键以它为准），英文写进 `src/games/ant/i18n/en.ts`，两边都要有；只有框架代码用的文字写进 `src/core/i18n/` 的两份词典。界面用 `t(键, 参数)` 取文字；模拟层用 `L(键, 参数)` 记下延迟翻译的 `Text`，显示时再 `tr()`（DECISIONS T-040）。改了词典跑 `npx tsx scripts/i18ncheck.ts`
 - 注释只写代码本身表达不了的约束，不写“下一行做什么”
 - 模拟层（`src/core/sim`、`src/games/ant/sim`、`src/games/ant/world`、`src/games/ant/nest/nest.ts`）不能依赖 WebGL 或 DOM，要能在 Node 中运行 `scripts/games/ant/simtest.ts`
+- 模拟里的随机只用 `w.rng`，新对象的编号用 `w.ids.next(类型)`（物品用 `colony.newItem`）；不要用 `Math.random` 和模块级计数器，否则同一个存档读两次跑出来不一样（`savetest` 会查）。只影响画面的随机可以用 `Math.random`
 - 物品位置变化必须通过 `Colony` 的方法，不要直接改 `Item.place`
 - 数值优先放进 `src/games/ant/config.ts`（主循环、后台运行、画质、自动保存这类框架数值在 `src/core/config.ts`）；写在代码里的数值要同步登记到 `docs/BALANCE.md`
 

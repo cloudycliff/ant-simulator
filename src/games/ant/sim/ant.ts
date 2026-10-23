@@ -4,7 +4,6 @@ import { asText, L, type Text } from '../../../core/i18n';
 import { GraphWalker, tunnelFloor } from '../../../core/move/graph';
 import { Skirt, alignToGround, turnToward } from '../../../core/move/surface';
 import { clamp } from '../../../core/util/math';
-import { rng } from '../../../core/util/random';
 import type { NestEdge } from '../nest/nest';
 import type { World } from '../world/world';
 import type { Item } from './items';
@@ -35,8 +34,6 @@ const _c = new THREE.Vector3();
 const _t = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _n = new THREE.Vector3();
-
-let nextAntId = 1;
 
 export interface AntSave {
   id: number;
@@ -70,25 +67,26 @@ export interface AntSave {
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 export class Ant {
-  id = nextAntId++;
+  id: number;
   role: Role;
   scout = false;
-  ageDays: number;
-  lifespan: number;
-  hunger = rng.range(0, 0.4);
+  // 构造函数里才抽随机数的数值字段也先给 0：没有初值的字段先是 undefined，V8 就不再按浮点数原地存放，3000 只时每步慢约 9%
+  ageDays = 0;
+  lifespan = 0;
+  hunger = 0;
   health = 1;
   alive = true;
-  size = rng.range(0.86, 1.08);
+  size = 0;
 
   domain: 'surface' | 'nest' = 'nest';
   pos = new THREE.Vector3();
   fwd = new THREE.Vector3(1, 0, 0);
   up = new THREE.Vector3(0, 1, 0);
   moving = false;
-  gait = rng.range(0, 6.28);
+  gait = 0;
 
   // 地表运动
-  heading = rng.range(-Math.PI, Math.PI);
+  heading = 0;
   private entranceTarget = -1;
   private pathNoise = 0;
   /** 觅食地点记忆（黑毛蚁觅食蚁具有地点忠诚性） */
@@ -99,7 +97,7 @@ export class Ant {
   room = -1;
   /** 在隧道网络里的位置（房间里时 node 是 -1） */
   readonly walk = new GraphWalker<NestEdge>();
-  private lane = rng.range(-0.15, 0.75);
+  private lane = 0;
   /** 隧道里为避开同伴而偏离 lane 的横向距离（隧道半径的倍数） */
   private side = 0;
   /** Colony.separate 的临时量：沿边坐标、横向坐标、横向推力 */
@@ -107,7 +105,7 @@ export class Ant {
   sepLat = 0;
   sepPush = 0;
   /** 个体步速差异：同时出发的同伴不会一直并排走 */
-  private pace = rng.range(0.88, 1.12);
+  private pace = 0;
   private localTarget = new THREE.Vector3();
   private navTarget = new THREE.Vector3();
   private pauseT = 0;
@@ -132,7 +130,7 @@ export class Ant {
   /** 分工调整后待切换的职别，在当前任务结束后生效 */
   nextRole: Role | null = null;
   /** 行为年龄相对真实日龄的偏移：同龄工蚁转换分工有早有晚 */
-  ageBias = rng.gauss(0, CONFIG.polyethism.ageJitterDays);
+  ageBias = 0;
   /** 触角接触、交哺时原地停留的剩余秒数 */
   holdT = 0;
   /** 被水洼挡住的累计时间，超过阈值后蹚水通过 */
@@ -148,7 +146,7 @@ export class Ant {
   alarmT = 0;
   private alarmX = 0;
   private alarmZ = 0;
-  private nextAlarmCheck = rng.range(0, 0.5);
+  private nextAlarmCheck = 0;
   private taskActivity: Text = L('act.idle');
   /** 正在撕咬的狼蛛 */
   mobTarget = -1;
@@ -162,7 +160,7 @@ export class Ant {
   private tempAt = 0;
   private tempDomain: 'surface' | 'nest' = 'nest';
   private skirtNav = new Skirt();
-  nextContactAt = rng.range(0, 10);
+  nextContactAt = 0;
   contacts = 0;
   shares = 0;
   /** 被满载归来的同伴激发、更想出巢觅食的截止时刻 */
@@ -177,11 +175,22 @@ export class Ant {
   private climbR0 = 0;
   private climbY0 = 0;
 
-  constructor(role: Role, ageDays: number) {
+  constructor(role: Role, ageDays: number, w: World, id = w.ids.next('ant')) {
+    const r = w.rng;
+    this.id = id;
     this.role = role;
     this.ageDays = ageDays;
+    this.hunger = r.range(0, 0.4);
+    this.size = r.range(0.86, 1.08);
+    this.gait = r.range(0, 6.28);
+    this.heading = r.range(-Math.PI, Math.PI);
+    this.lane = r.range(-0.15, 0.75);
+    this.pace = r.range(0.88, 1.12);
+    this.ageBias = r.gauss(0, CONFIG.polyethism.ageJitterDays);
+    this.nextAlarmCheck = r.range(0, 0.5);
+    this.nextContactAt = r.range(0, 10);
     const [a, b] = CONFIG.colony.workerLifespanDays;
-    this.lifespan = role === 'queen' ? 9999 : rng.range(a, b);
+    this.lifespan = role === 'queen' ? 9999 : r.range(a, b);
   }
 
   toSave(w: World): AntSave {
@@ -217,9 +226,8 @@ export class Ant {
 
   /** 读档：恢复个体状态和位置，任务协程从头开始。走在隧道中途的蚂蚁放到最近的节点上，爬在植物上的放回地面 */
   static fromSave(s: AntSave, w: World): Ant {
-    const a = new Ant(s.role, s.age);
-    a.id = s.id;
-    nextAntId = Math.max(nextAntId, s.id + 1);
+    const a = new Ant(s.role, s.age, w, s.id);
+    w.ids.seen('ant', s.id);
     a.scout = s.scout;
     a.lifespan = s.life;
     a.hunger = s.hunger;
@@ -291,7 +299,7 @@ export class Ant {
     this.domain = 'nest';
     this.room = chamber;
     this.walk.at(-1);
-    w.nest.randomFloorPoint(c, rng.next.bind(rng), this.pos);
+    w.nest.randomFloorPoint(c, () => w.rng.next(), this.pos);
     this.localTarget.copy(this.pos);
     this.navTarget.copy(this.pos);
     this.fwd.set(Math.cos(this.heading), 0, Math.sin(this.heading));
@@ -383,7 +391,7 @@ export class Ant {
     const D = CONFIG.defense;
     const src = w.alarm.strongest(this.pos.x, this.pos.z);
     if (!src || src.level < D.respondLevel) return;
-    this.alarmT = rng.range(D.defendSec[0], D.defendSec[1]);
+    this.alarmT = w.rng.range(D.defendSec[0], D.defendSec[1]);
     this.alarmX = src.x;
     this.alarmZ = src.z;
     this.taskActivity = this.activity;
@@ -417,7 +425,7 @@ export class Ant {
       const dz = this.alarmZ - this.pos.z;
       const far = dx * dx + dz * dz > 2.25;
       this.activity = L('act.searchEnemy');
-      this.surfaceMove(dt, w, far ? Math.atan2(dz, dx) : this.heading + rng.gauss(0, 1) * 2 * Math.sqrt(dt), 6, far ? D.rushSpeed : 0.7);
+      this.surfaceMove(dt, w, far ? Math.atan2(dz, dx) : this.heading + w.rng.gauss(0, 1) * 2 * Math.sqrt(dt), 6, far ? D.rushSpeed : 0.7);
     }
     if (this.alarmT <= 0) {
       this.activity = this.taskActivity;
@@ -601,7 +609,7 @@ export class Ant {
       this.timer = cmd.time;
       this.pauseT = 0;
       if (cmd.point) this.localTarget.copy(cmd.point);
-      else w.nest.randomFloorPoint(c, rng.next.bind(rng), this.localTarget);
+      else w.nest.randomFloorPoint(c, () => w.rng.next(), this.localTarget);
     }
     this.timer -= dt;
     if (this.pauseT > 0) {
@@ -611,8 +619,8 @@ export class Ant {
     const arrived = this.moveOnFloor(this.localTarget, this.nestSpeed(w) * dt * 0.7, c.floor.y);
     if (arrived) {
       if (cmd.point) return this.timer <= 0;
-      this.pauseT = rng.range(0.6, 4.5);
-      w.nest.randomFloorPoint(c, rng.next.bind(rng), this.localTarget);
+      this.pauseT = w.rng.range(0.6, 4.5);
+      w.nest.randomFloorPoint(c, () => w.rng.next(), this.localTarget);
     }
     return this.timer <= 0 && !cmd.point;
   }
@@ -625,7 +633,7 @@ export class Ant {
       let best = w.nest.entrances[0];
       let bd = Infinity;
       for (const e of open.length ? open : w.nest.entrances) {
-        const d = w.nest.routeLength(from, e.node) * rng.range(0.8, 1.25);
+        const d = w.nest.routeLength(from, e.node) * w.rng.range(0.8, 1.25);
         if (d < bd) {
           bd = d;
           best = e;
@@ -653,8 +661,8 @@ export class Ant {
       this.activity = this.taskActivity;
     }
     this.placeOnSurface(ent.x, ent.z, w);
-    this.heading = Math.atan2(ent.z, ent.x) + rng.range(-1.6, 1.6);
-    if (ent.x === 0 && ent.z === 0) this.heading = rng.range(-Math.PI, Math.PI);
+    this.heading = Math.atan2(ent.z, ent.x) + w.rng.range(-1.6, 1.6);
+    if (ent.x === 0 && ent.z === 0) this.heading = w.rng.range(-Math.PI, Math.PI);
     this.memoryChecked = false;
     return true;
   }
@@ -735,7 +743,7 @@ export class Ant {
       }
     }
     if (Math.hypot(nx, nz) > CONFIG.world.forageRadius) {
-      this.heading = Math.atan2(-this.pos.z, -this.pos.x) + rng.range(-0.6, 0.6);
+      this.heading = Math.atan2(-this.pos.z, -this.pos.x) + w.rng.range(-0.6, 0.6);
       return;
     }
     this.pos.set(nx, w.terrain.heightAt(nx, nz) + w.predators.liftAt(nx, nz), nz);
@@ -751,7 +759,7 @@ export class Ant {
     if (first) {
       const e = w.nest.nearestEntrance(this.pos.x, this.pos.z);
       this.entranceTarget = w.nest.entrances.indexOf(e);
-      this.pathNoise = rng.range(-0.25, 0.25);
+      this.pathNoise = w.rng.range(-0.25, 0.25);
     }
     const ent = w.nest.entrances[this.entranceTarget];
     const dx = ent.x - this.pos.x;
@@ -765,7 +773,7 @@ export class Ant {
       return true;
     }
     // 路径整合：直接朝向巢口，误差随距离减小
-    this.pathNoise += rng.gauss(0, 0.6) * dt;
+    this.pathNoise += w.rng.gauss(0, 0.6) * dt;
     this.pathNoise *= 0.995;
     const desired = Math.atan2(dz, dx) + this.pathNoise * Math.min(1, d / 30);
     this.surfaceMove(dt, w, desired, 4);
@@ -810,12 +818,12 @@ export class Ant {
       if (dx * dx + dz * dz < 16) {
         this.memoryChecked = true;
         this.memory = null;
-      } else desired = Math.atan2(dz, dx) + rng.gauss(0, 0.15);
+      } else desired = Math.atan2(dz, dx) + w.rng.gauss(0, 0.15);
     } else {
       desired = this.followTrail(w);
     }
     if (desired === null) {
-      this.heading += rng.gauss(0, 1) * 1.4 * Math.sqrt(dt);
+      this.heading += w.rng.gauss(0, 1) * 1.4 * Math.sqrt(dt);
       if (this.scout && w.pheromone.sampleHome(x + Math.cos(this.heading) * 4, z + Math.sin(this.heading) * 4) > 0.3) {
         desired = this.leastMarked(w);
       }
@@ -861,7 +869,7 @@ export class Ant {
         bestA = a;
       }
     }
-    return best > 0.06 ? bestA + rng.gauss(0, 0.1) : null;
+    return best > 0.06 ? bestA + w.rng.gauss(0, 0.1) : null;
   }
 
   private stepWalk(dt: number, w: World, cmd: Extract<Command, { k: 'walk' }>): boolean {
@@ -869,7 +877,7 @@ export class Ant {
     const dx = cmd.x - this.pos.x;
     const dz = cmd.z - this.pos.z;
     if (dx * dx + dz * dz < cmd.r * cmd.r) return true;
-    this.surfaceMove(dt, w, Math.atan2(dz, dx) + rng.gauss(0, 0.2), 5);
+    this.surfaceMove(dt, w, Math.atan2(dz, dx) + w.rng.gauss(0, 0.2), 5);
     return false;
   }
 
@@ -881,12 +889,12 @@ export class Ant {
       this.pauseT -= dt;
       return this.timer <= 0;
     }
-    if (rng.chance(dt * 0.25)) this.pauseT = rng.range(0.5, 3);
+    if (w.rng.chance(dt * 0.25)) this.pauseT = w.rng.range(0.5, 3);
     const dx = cmd.x - this.pos.x;
     const dz = cmd.z - this.pos.z;
     let desired: number | null = null;
     if (dx * dx + dz * dz > cmd.radius * cmd.radius) desired = Math.atan2(dz, dx);
-    else this.heading += rng.gauss(0, 1) * 4 * Math.sqrt(dt);
+    else this.heading += w.rng.gauss(0, 1) * 4 * Math.sqrt(dt);
     this.surfaceMove(dt, w, desired, 4, 0.7);
     return this.timer <= 0;
   }

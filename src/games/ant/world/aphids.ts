@@ -1,17 +1,16 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
 import type { Rng } from '../../../core/util/random';
+import type { IdPool } from '../../../core/sim/ids';
 import type { Plant, Vegetation } from './vegetation';
 
 const MAX_VISIBLE = 80;
 /** 被照料的判定时长（秒）：这段时间内有工蚁来过 */
 const TENDED_WINDOW = 90;
 
-let nextAphidId = 1;
 
 /** 寄主植物嫩茎上的一群蚜虫。蚜虫吸食韧皮部汁液，把多余的糖分以蜜露形式排出。 */
 export class AphidColony {
-  id = nextAphidId++;
   honeydew = 0;
   discovered = false;
   lastTended = -1e9;
@@ -19,6 +18,7 @@ export class AphidColony {
   private slots: { a: number; y: number; tone: number }[] = [];
 
   constructor(
+    public id: number,
     public plant: Plant,
     public count: number,
     /** 蚜虫聚集的茎段（世界坐标高度） */
@@ -57,7 +57,7 @@ export class AphidManager {
   private shown: number[] = [];
   private dropShown: number[] = [];
 
-  constructor(veg: Vegetation, rng: Rng) {
+  constructor(veg: Vegetation, rng: Rng, ids: IdPool) {
     const C = CONFIG.aphid;
     const hosts = veg.plants
       .filter((p) => p.host || Math.hypot(p.x, p.z) < 80)
@@ -66,7 +66,7 @@ export class AphidManager {
     for (const p of hosts) {
       const lo = p.baseY + p.height * rng.range(0.5, 0.6);
       const hi = p.baseY + p.height * rng.range(0.78, 0.9);
-      this.colonies.push(new AphidColony(p, Math.round(rng.range(C.initialCount[0], C.initialCount[1])), lo, hi, rng));
+      this.colonies.push(new AphidColony(ids.next('aphid'), p, Math.round(rng.range(C.initialCount[0], C.initialCount[1])), lo, hi, rng));
     }
 
     // 梨形的蚜虫身体：一端略尖

@@ -15,7 +15,7 @@ src/
   core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/core/layercheck.mjs）——
     config.ts           ENGINE：主循环步长与帧预算、后台运行、画质档位与帧率、自动保存间隔
     util/
-      random.ts         Rng（可设种子的随机数）、Noise2D（梯度噪声、分形噪声）；`rng` 为运行时共享实例
+      random.ts         Rng（可设种子、可存档的随机数）、Noise2D（梯度噪声、分形噪声）
       math.ts           clamp / lerp / smoothstep / wrapAngle 等
     i18n/
       index.ts          Text（延迟翻译的文字）、L / t / tr、当前语言；Messages（所有键，游戏用声明合并补充）、registerDicts
@@ -27,8 +27,9 @@ src/
       lang.ts           选择界面语言（网址参数、上次的选择、浏览器语言）与切换
       saveSlot.ts       SaveSlot：localStorage 里的一个存档位（完整存档 + 一份小摘要），存档和摘要的类型由游戏给出
     sim/                不依赖 WebGL 和 DOM
-      simulation.ts     Simulation：模拟内核。时钟、按登记顺序每步推进的子系统、存档登记、最近事件、advance（固定步长、帧预算、实际倍速）
-      saves.ts          SaveRegistry：存档的各部分（字段名、保存、恢复、是否可选），读档按登记顺序恢复
+      simulation.ts     Simulation：模拟内核。时钟、随机数 rng、编号 ids、按登记顺序每步推进的子系统、存档登记、最近事件、advance（固定步长、帧预算、实际倍速）
+      ids.ts            IdPool：每类对象各自的编号计数，归世界所有并进存档
+      saves.ts          SaveRegistry：存档的各部分（字段名、保存、恢复、是否可选），读档按登记顺序恢复；`addLast` 的部分最后恢复
       entities.ts       EntityRegistry：每类对象的位置、相机观察距离、能否跟随、读档后编号是否还对得上；选中、飞过去、跟随、事件定位都查它
       events.ts         EventLog：最近事件（时刻、文字、涉及的对象、位置），对象的位置由游戏提供
       clock.ts          SimClock：游戏日、时刻、昼夜；一天多长、几点开局由游戏传入
@@ -336,7 +337,7 @@ npm run check:ui      # 构建 + 浏览器测试 + 各屏幕布局截图，约 6
 node scripts/check.mjs --all               # 全部
 node scripts/check.mjs --update-baseline   # 模拟行为有意改变时，用这次的输出更新基线
 ```
-每项一行“通过 / 失败、耗时、摘要”，失败的项接着打印输出的最后 30 行，有失败时退出码非零。模拟基线是 `SIM_SEED=7` 跑 3000 秒的 `simtest` 输出，去掉耗时后必须逐行相同：只是重构时它应该不变；有意改了行为就加 `--update-baseline`，把基线文件的变化连同提交一起看，并把指标变化写进 `docs/PROGRESS.md`。GitHub Actions 上缺少基线文件时直接判失败。基线和 Node 的版本绑定：Windows 和 Linux 上同一版本逐行相同，Node 22 和 24 跑出来从第一个游戏日晚上起就不同了（数学函数的末位差异被放大）。CI 用 `.nvmrc` 里的版本，升级 Node 时要一起更新基线。
+每项一行“通过 / 失败、耗时、摘要”，失败的项接着打印输出的最后 30 行，有失败时退出码非零。模拟基线是默认世界跑 3000 秒的 `simtest` 输出，去掉耗时后必须逐行相同：只是重构时它应该不变；有意改了行为就加 `--update-baseline`，把基线文件的变化连同提交一起看，并把指标变化写进 `docs/PROGRESS.md`。GitHub Actions 上缺少基线文件时直接判失败。基线和 Node 的版本绑定：Windows 和 Linux 上同一版本逐行相同，Node 22 和 24 跑出来从第一个游戏日晚上起就不同了（数学函数的末位差异被放大）。CI 用 `.nvmrc` 里的版本，升级 Node 时要一起更新基线。
 
 ### 无界面模拟
 ```
@@ -344,7 +345,7 @@ npx tsx scripts/games/ant/simtest.ts [模拟秒数，默认 1200]
 ```
 每 1/8 进度输出一次：人口、巢外数量、储食室与社会胃、幼体数、各职别实际/目标人数、蛹的位置、拥挤度、房间数、扩建进度、每个蚜虫群（数量、`*` 表示已被发现、积存蜜露）、两种信息素总量、累计统计、平均每步耗时，以及当前最常见的 12 种行为。第一行的每步耗时包含 JIT 预热，偏高属于正常。
 
-模拟随机数默认用当前时间做种子，每次结果不同。设环境变量 `SIM_SEED`（如 `$env:SIM_SEED=7`）后结果可复现，除了耗时以外逐行相同，重构前后可以直接对比输出。
+同一个世界每次运行的结果都一样（除了耗时），重构前后可以直接对比输出；设环境变量 `SEED`（如 `$env:SEED=12`）换一个世界。
 
 在 PowerShell 里重定向输出会变成 UTF-16 乱码，用 `cmd /c "npx tsx scripts/games/ant/simtest.ts 6000 > shots\simtest.txt"` 保留 UTF-8。
 
