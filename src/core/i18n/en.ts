@@ -91,7 +91,7 @@ export const coreEn: Record<keyof typeof coreZh, Entry> = {
   'tool.exit': 'Exit',
   'tool.place': 'Place here',
   'tool.rotate': 'Rotate',
-  'tool.tapHint': 'Tap the ground to choose a spot, then tap “Place here”',
+  'tool.tapHint': 'Tap the ground to choose a spot (drag the ring to adjust), then tap “Place here”',
   'tool.clickGround': 'Pick a spot on the ground',
   'info.deselect': 'Deselect',
   'info.follow': 'Follow',

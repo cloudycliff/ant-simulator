@@ -121,8 +121,12 @@ try {
   await g.ev(`document.querySelector('[data-a="tool"][data-v="0"]').click()`);
   await sleep(300);
   const n0 = await g.ev(`world.food.sources.length`);
-  await tap(195, 500);
-  await sleep(400);
+  // 换几个点，直到预览圈变绿（能放），镜头落在哪里每次略有不同
+  for (const [x, y] of [[195, 500], [140, 460], [250, 460], [140, 560], [250, 560], [195, 420]]) {
+    await tap(x, y);
+    await sleep(400);
+    if (await g.ev(`hud.tools.ringMat.color.getHex() === 0x8be07a`)) break;
+  }
   const place = await g.ev(`!!document.querySelector('#tool [data-a="toolPlace"]')`);
   const n1 = await g.ev(`world.food.sources.length`);
   check('工具：点地面只选位置，出现“放在这里”', place && n1 === n0, { place, n0, n1 });
@@ -132,6 +136,25 @@ try {
   const n2 = await g.ev(`world.food.sources.length`);
   const gone = await g.ev(`!document.querySelector('#tool [data-a="toolPlace"]')`);
   check('工具：点“放在这里”后放下食物', n2 === n0 + 1 && gone, { n2, toast: await g.ev(`document.getElementById('toast').textContent`) });
+  // 再选一个位置，拖动预览圈（不放下）
+  await tap(195, 500);
+  await sleep(400);
+  const pend = () => g.ev(`hud.tools.pending?.toArray() ?? null`);
+  const ring = () => g.ev(`(() => { const v = hud.tools.pending.clone().project(camera); return [(v.x * 0.5 + 0.5) * innerWidth, (-v.y * 0.5 + 0.5) * innerHeight]; })()`);
+  const q0 = await pend();
+  a = await cam();
+  await gesture([[195, 500]], [[255, 420]]);
+  await sleep(100);
+  const q1 = await pend();
+  const r1 = await ring();
+  b = await cam();
+  const follows = q0 && q1 && Math.hypot(q1[0] - q0[0], q1[2] - q0[2]) > 0.5 && Math.hypot(r1[0] - 255, r1[1] - 420) < 20;
+  check('工具：按住预览圈拖动，预览跟着手指，镜头不动', follows && moved(a, b) < 1e-6, { q0, q1, ring: r1.map((v) => v.toFixed(0)), cam: moved(a, b) });
+  a = await cam();
+  await gesture([[100, 330]], [[100, 250]]);
+  b = await cam();
+  const q2 = await pend();
+  check('工具：在预览圈外拖动仍是平移镜头', moved(a, b) > 0.5 && q2 && Math.hypot(q2[0] - q1[0], q2[2] - q1[2]) < 1e-6, { cam: moved(a, b).toFixed(2) });
   await g.ev(`document.querySelector('#tool [data-a="toolexit"]').click()`);
 
   // 手机布局：用触摸点底栏和菜单

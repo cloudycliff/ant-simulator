@@ -329,6 +329,25 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
     }
     select(session.pick(x, y, touch ? TOUCH_PICK_PX : undefined));
   };
+  // 触屏没有悬停：选好位置后，按在预览圈上拖动就让它跟着手指走
+  const grabPt = new THREE.Vector3();
+  const toScreen = (p: THREE.Vector3): [number, number] => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    grabPt.copy(p).project(camera);
+    return [rect.left + ((grabPt.x + 1) / 2) * rect.width, rect.top + ((1 - grabPt.y) / 2) * rect.height];
+  };
+  controller.onTouchDragStart = (x, y) => {
+    const p = tools && tools.active >= 0 ? tools.pending : null;
+    const opt = tools?.current;
+    if (!p || !opt) return false;
+    const [cx, cy] = toScreen(p);
+    const [ex, ey] = toScreen(new THREE.Vector3(p.x + Math.max(opt.radius, (opt.len ?? 0) / 2), p.y, p.z));
+    return Math.hypot(x - cx, y - cy) < Math.max(TOUCH_PICK_PX * 1.5, Math.hypot(ex - cx, ey - cy));
+  };
+  controller.onTouchDrag = (x, y) => {
+    const p = groundPoint(x, y, groundPt);
+    if (p && tools?.pending) tools.pending.copy(p);
+  };
   controller.onDoubleClick = (x, y, touch) => {
     if (tools && tools.active >= 0) return;
     const s = session.pick(x, y, touch ? TOUCH_PICK_PX : undefined);

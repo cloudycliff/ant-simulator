@@ -37,6 +37,10 @@ export class CameraController {
   onClick: ((x: number, y: number, touch: boolean) => void) | null = null;
   onDoubleClick: ((x: number, y: number, touch: boolean) => void) | null = null;
   onUserMove: (() => void) | null = null;
+  /** 单指按下时问一次：返回 true 表示这次拖动归调用方（比如拖动工具预览），镜头不动；第二根手指落下就交还镜头 */
+  onTouchDragStart: ((x: number, y: number) => boolean) | null = null;
+  onTouchDrag: ((x: number, y: number) => void) | null = null;
+  private claimed = false;
   private touches = new Map<number, { x: number; y: number; x0: number; y0: number }>();
   private tap: { x: number; y: number; moved: number; multi: boolean } | null = null;
   private lastTap = { t: -1e9, x: 0, y: 0 };
@@ -134,7 +138,9 @@ export class CameraController {
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
     if (this.touches.size === 1) {
       this.tap = { x: e.clientX, y: e.clientY, moved: 0, multi: false };
+      this.claimed = this.onTouchDragStart?.(e.clientX, e.clientY) ?? false;
     } else {
+      this.claimed = false;
       if (this.tap) this.tap.multi = true;
       this.startTwo();
     }
@@ -150,6 +156,7 @@ export class CameraController {
     if (this.touches.size === 1) {
       if (!this.tap) return;
       this.tap.moved += Math.abs(dx) + Math.abs(dy);
+      if (this.claimed) return this.onTouchDrag?.(e.clientX, e.clientY);
       if (this.tap.moved < TAP_SLOP) return;
       this.fly = null;
       if (this.mode === 'follow') {
@@ -168,6 +175,7 @@ export class CameraController {
     if (this.touches.size >= 2) this.startTwo();
     else this.two = this.twoStart = null;
     if (this.touches.size > 0) return;
+    this.claimed = false;
     const tap = this.tap;
     this.tap = null;
     if (!ended || !tap || tap.multi || tap.moved >= TAP_SLOP) return;

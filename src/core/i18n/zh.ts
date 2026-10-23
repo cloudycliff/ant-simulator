@@ -90,7 +90,7 @@ export const coreZh = {
   'tool.exit': '退出',
   'tool.place': '放在这里',
   'tool.rotate': '旋转',
-  'tool.tapHint': '点地面选好位置，再点“放在这里”',
+  'tool.tapHint': '点地面选好位置（可以按住预览圈拖动），再点“放在这里”',
   'tool.clickGround': '请点击地面',
   'info.deselect': '取消选择',
   'info.follow': '跟随观察',

@@ -48,7 +48,7 @@ src/
       volume.ts         VolumeSpace：一个盒子（鱼缸、饲养箱）。从上方看点在顶面，隔着侧壁看点在底面，看向水中没碰到底面时取视线在盒中那段的中点
     ui/
       camera.ts         自由飞行 / 跟随相机、平滑飞向目标；鼠标和触屏手势（单指平移、双指缩放旋转俯仰、点按与双击）分开处理；离地高度和活动范围取自 Space
-      tools.ts          ToolController：当前工具与选项、放置预览圈（绿 / 红）、触屏先记下 pending 位置；工具做什么由游戏的 run 决定
+      tools.ts          ToolController：当前工具与选项、放置预览圈（绿 / 红）、触屏先记下 pending 位置，按住预览圈拖动可以挪（`CameraController.onTouchDragStart` 认领这次单指拖动）；工具做什么由游戏的 run 决定
       chart.ts          drawChart：按天的折线图
       html.ts           面板 HTML 的小工具（进度条、颜色、首字母大写、转义、“多久以前”）
     app/
@@ -393,7 +393,7 @@ npx tsx -e "import { World } from './src/games/ant/world/world'; const w = new W
 
 ### 触屏与鼠标操作、各种屏幕的截图
 ```
-node scripts/ui/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置、底栏与菜单、转横屏
+node scripts/ui/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置与拖动预览圈、底栏与菜单、转横屏
 node scripts/ui/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置；窗口变窄切到手机布局再切回
 node scripts/ui/pwatest.mjs     # 先 npm run build：清单、图标、安装条件、离线缓存、断网刷新、主屏幕入口、双击打开的单文件
 node scripts/ui/saveui.mjs      # 存档：Ctrl+S 保存、重新打开后恢复种子、蚂蚁数、房间数和时间；中英文页面标题
