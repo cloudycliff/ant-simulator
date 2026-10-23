@@ -40,6 +40,7 @@ npx tsx scripts/games/ant/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 npx tsx scripts/games/ant/crowdtest.ts      # 3000 只工蚁时休息室、蚁丘和隧道有多挤
 npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查
 node scripts/core/layercheck.mjs       # 依赖方向检查：框架层 src/core 不能导入游戏 src/games
+node scripts/core/apicheck.mjs         # 框架的每个导出都写进了 docs/API.md
 npx tsx scripts/core/coretest.ts       # 框架层单元测试
 npx tsx scripts/games/aquarium/aquatest.ts       # 鱼缸示例的无界面检查
 ```
@@ -116,4 +117,5 @@ Cloudflare 后台的 Worker 项目 `cyber-ant` 连接了这个 GitHub 仓库：�
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 代码结构、模拟与渲染机制、扩展指南、验证工具 |
 | [docs/BALANCE.md](docs/BALANCE.md) | 数值参数一览与调参历史 |
 | [docs/FRAMEWORK.md](docs/FRAMEWORK.md) | 怎样用 `src/core` 框架做一个新的模拟游戏 |
+| [docs/API.md](docs/API.md) | 框架对外接口：游戏能用的每个名字和它的约定 |
 | [docs/templates/](docs/templates/) | 新项目用的文档骨架（AGENTS 和上面五份） |

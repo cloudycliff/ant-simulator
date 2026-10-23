@@ -64,6 +64,7 @@ const FAST_STEPS = [
   { name: '类型检查（源码）', argv: [TSC, '--noEmit'] },
   { name: '类型检查（脚本）', argv: [TSC, '--noEmit', '-p', 'tsconfig.scripts.json'] },
   { name: '依赖方向', argv: ['scripts/core/layercheck.mjs'] },
+  { name: '接口说明', argv: ['scripts/core/apicheck.mjs'], judge: lastLine(/个导出都有说明/) },
   { name: '框架单元测试', argv: tsx('scripts/core/coretest.ts') },
   { name: '界面文字', argv: tsx('scripts/i18ncheck.ts') },
   { name: '鱼缸示例', argv: tsx('scripts/games/aquarium/aquatest.ts'), judge: lastLine(/模拟 \d+ 秒/) },

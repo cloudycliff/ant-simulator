@@ -54,7 +54,13 @@ src/
     app/
       game.ts           GameModule（游戏声明：标题、相机、存档、空间、mount）与 GameSession（场景对象、视图开关、工具、点选、每帧更新、面板内容）
       shell.ts          Shell：界面外壳。顶栏（状态、性能、画质、帮助、存档、语言、GitHub，速度、后台运行、视图、工具）、主面板、信息面板、事件列表、帮助、统计、图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
-      app.ts            runApp：启动（语言、渲染器、相机、读档）、选中与跟随、按键、网址参数、自动保存、后台运行、主循环
+      app.ts            runApp：按顺序组装下面几份；App：运行中的外壳（场景、相机、session、Shell）和选中、飞过去、跟随、点到表面、使用工具
+      boot.ts           渲染器；读档或新开局（?seed=、?new=1、?skip=）
+      saving.ts         SaveControl：手动保存，定时、切到后台、关闭页面时自动保存，读档和重新开始时重新载入页面
+      actions.ts        runAction：按钮、按键、面板里的动作，外壳不认识的交给游戏
+      input.ts          点击、双击、触屏拖动预览圈、快捷键、窗口尺寸变化
+      urlParams.ts      ?cam=、?hour=、?select=、?view= 和游戏自己的参数
+      loop.ts           主循环；页面隐藏时的后台运行和回来时的提示
   games/ant/            —— 蚂蚁游戏的内容 ——
     game.ts             antGame：蚂蚁游戏模块；mount 搭场景、登记透视 / 信息素 / 分工着色 / 草丛四个视图开关、每帧同步视图
     config.ts           配置与常量（职别名称、颜色）；调参优先改这里。导入它时顺带登记游戏的词典
@@ -117,6 +123,7 @@ scripts/
   i18ncheck.ts          界面文字检查：两个游戏和框架的中英文占位符一致，游戏的键不和框架重名，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
   core/
     layercheck.mjs      依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
+    apicheck.mjs        接口说明检查：core 的每个导出都写进了 docs/API.md，游戏只用“给游戏用的”部分
     coretest.ts         框架层单元测试：图上行走、地表转向与绕行、行为协程、高度场和体积空间求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
   games/ant/            蚂蚁游戏的无界面测试，失败时退出码非零
     simtest.ts          无界面模拟测试
@@ -139,16 +146,16 @@ scripts/
     extract-shots.mjs   从浏览器捕获结果中提取截图
     icons.mjs           从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
 .github/workflows/check.yml  推送和拉取请求时在 GitHub Actions 上跑 npm run check（不含浏览器测试）
-docs/                   本文档目录；FRAMEWORK.md 讲怎样用框架做新游戏，templates/ 是新项目的文档骨架
+docs/                   本文档目录；FRAMEWORK.md 讲怎样用框架做新游戏，API.md 是框架对外接口的清单，templates/ 是新项目的文档骨架
 ```
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/core/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-056。改了 `core` 要跑框架层单元测试 `npx tsx scripts/core/coretest.ts`。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/core/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-056。改了 `core` 要跑框架层单元测试 `npx tsx scripts/core/coretest.ts`。游戏能用的名字列在 [API.md](API.md)，`scripts/core/apicheck.mjs` 检查 `core` 的导出都写进去了、游戏没有用“框架内部”的名字（T-068）。
 
 ### 游戏模块与界面外壳
 
-`main.ts` 只有一行 `runApp(antGame)`。一个游戏是一个 `GameModule`（`core/app/game.ts`）：标题、相机参数和开局视角、`create(seed)` 建世界、存档的读写和摘要、`space(world)`、`mount(ctx)`。`runApp` 负责和游戏无关的部分：语言、渲染器、相机控制、读档和自动保存、选中 / 飞过去 / 跟随（查实体注册表）、按键、网址参数、后台运行、画质、主循环；`mount` 把场景对象加进去，返回一个 `GameSession`：
+`main.ts` 只有一行 `runApp(antGame)`。一个游戏是一个 `GameModule`（`core/app/game.ts`）：标题、相机参数和开局视角、`create(seed)` 建世界、存档的读写和摘要、`space(world)`、`mount(ctx)`。`runApp` 负责和游戏无关的部分：语言、渲染器、相机控制、读档和自动保存、选中 / 飞过去 / 跟随（查实体注册表）、按键、网址参数、后台运行、画质、主循环。这些按职责分在 `core/app` 的几个文件里，都以 `App`（运行中的外壳）为第一个参数，和 T-060 拆蚂蚁的写法一样（T-068）。`mount` 把场景对象加进去，返回一个 `GameSession`：
 
 - `views`：视图开关（名字、按键、网址参数 `?view=` 用的名字、手机底栏的图标、当前状态、切换）。顶栏、视图面板、按键都按这张表生成；`syncViews` 在任何开关变化后调用一次
 - `tools`：`ToolController` 或 `null`（没有工具的游戏不显示工具栏）

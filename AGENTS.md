@@ -4,7 +4,7 @@
 1. 读 `docs/PROGRESS.md`，了解当前状态和已知问题
 2. 读 `docs/ROADMAP.md`，确认要做的是哪个阶段的哪一项
 3. 涉及架构或数值时，读 `docs/ARCHITECTURE.md` 和 `docs/BALANCE.md`；不要推翻 `docs/DECISIONS.md` 中已采纳的决策，除非需求方同意
-4. 要做新游戏或改 `src/core` 的接口时，读 `docs/FRAMEWORK.md`；新游戏的文档从 `docs/templates/` 复制
+4. 要做新游戏或改 `src/core` 的接口时，读 `docs/FRAMEWORK.md` 和 `docs/API.md`（新增或改动 `core` 的导出要同时写进 API.md，`apicheck` 会检查）；新游戏的文档从 `docs/templates/` 复制
 
 ## 约定
 - 代码注释用中文；标识符用英文

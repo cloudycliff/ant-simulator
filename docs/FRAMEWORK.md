@@ -2,7 +2,7 @@
 
 `src/core` 是给“观察型生命模拟”用的框架：一个 3D 的小世界，里面有很多自己行动的个体；时间按固定步长推进，有倍速和昼夜；玩家飞着看、点选、跟随、看统计，用工具干预。蚂蚁游戏（`src/games/ant`）和鱼缸示例（`src/games/aquarium`）都建在它上面。本文讲怎样再做一个，比如蜂巢、白蚁、生态瓶。
 
-框架怎么分出来的见 DECISIONS T-049 到 T-056；各模块的细节见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+框架怎么分出来的见 DECISIONS T-049 到 T-056；每个对外的名字和它的约定见 [API.md](API.md)；各模块的细节见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 框架给什么
 
@@ -120,7 +120,7 @@ export const hiveSave = {
 ### 8. 验证
 
 - 自己的无界面测试放在 `scripts/games/<name>/`，照 `scripts/games/aquarium/aquatest.ts`，失败时设 `process.exitCode = 1`；然后加进 `scripts/check.mjs` 的步骤列表
-- `npm run check` 全部通过：类型检查、依赖方向、框架单元测试、界面文字、各个游戏的无界面测试和蚂蚁游戏的模拟基线。改了 `src/core` 时它同时回归了已有的游戏；动了外壳再跑 `npm run check:ui`
+- `npm run check` 全部通过：类型检查、依赖方向、接口说明（游戏只用了 API.md 里“给游戏用的”名字）、框架单元测试、界面文字、各个游戏的无界面测试和蚂蚁游戏的模拟基线。改了 `src/core` 时它同时回归了已有的游戏；动了外壳再跑 `npm run check:ui`
 - 截图，照 `scripts/games/aquarium/aquashots.mjs`：桌面和竖屏手机，白天、夜里、选中、工具、英文
 
 ## 还没有的

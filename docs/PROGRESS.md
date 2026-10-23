@@ -13,7 +13,7 @@
 - 画质默认“自动”（电脑高、手机中，持续卡顿时降档），可手动选高 / 中 / 低 / 省电；帧率最高 60，暂停不操作时降到 15（DECISIONS T-047）
 - 网页版可以添加到手机主屏幕，像应用一样打开，断网也能玩（DECISIONS T-048）
 - 手机和平板可以用地图式手势操作（DECISIONS T-044）；手机上（横竖屏）换成一行顶栏 + 底栏 + 抽屉的布局，平板沿用桌面布局并加大按钮（DECISIONS T-045）
-- 代码量：`src/` 下约 14970 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 1670 行。`src/core` 是可复用的框架层（约 3600 行），`src/games/ant` 是蚂蚁游戏（约 9200 行），`src/games/aquarium` 是检验框架用的鱼缸示例（约 1200 行）。框架重构已完成（DECISIONS T-049 到 T-056），怎样用框架做新游戏见 [FRAMEWORK.md](FRAMEWORK.md)
+- 代码量：`src/` 下约 16300 行 TypeScript 和 CSS（含中英文词典），`scripts/` 约 2400 行。`src/core` 是可复用的框架层（约 3900 行），`src/games/ant` 是蚂蚁游戏（约 10200 行），`src/games/aquarium` 是检验框架用的鱼缸示例（约 1200 行）。框架重构已完成（DECISIONS T-049 到 T-056），怎样用框架做新游戏见 [FRAMEWORK.md](FRAMEWORK.md)，对外接口见 [API.md](API.md)
 - 鱼缸示例：https://cyber-ant.cloudycliff.workers.dev/aquarium.html
 - 构建：`npm run build` 通过，游戏是单个 `dist/index.html`（约 790 KB），双击即可运行；鱼缸是 `dist/aquarium.html`（约 570 KB）；`dist/` 里另有网页版用的清单、离线缓存脚本和图标
 - 性能：1000 只蚂蚁每个模拟步约 0.35 ms，3000 只约 1.7 ms（含蚂蚁避让）；无头 Chrome 中 3000 只保持 60 FPS（DECISIONS T-031、T-032）
@@ -735,3 +735,13 @@
 - `savetest` 加接续检查：读档后位置、活动说明、爬植物的只数和原世界相同，再跑 5 秒至少一半还在 1 cm 以内；按整数步数推进，避免浮点累加让两边多走或少走一步
 
 **结果**：读档后再跑 5 秒，晴天 616/1021 只、下雨中途 710/1020 只还和原世界在一起（原来 74 只、69 只）。存档大了约 6%。`npm run check` 15 项通过，基线不变
+
+### 2026-10-23 · 外壳按职责拆开；框架对外接口清单
+
+**实现**（DECISIONS T-068）
+- `core/app/app.ts`（506 行）拆成 `app.ts`（`runApp` 和 `App`）、`boot.ts`、`saving.ts`、`actions.ts`、`input.ts`、`urlParams.ts`、`loop.ts`，行为不变
+- 新增 `docs/API.md`：框架每个导出的说明，分“给游戏用的”（游戏现在用到 59 个）和“框架内部”
+- 新增 `scripts/core/apicheck.mjs`，加进 `npm run check`：导出没写进 API.md、游戏用了内部的名字、文中的文件不存在都会报错
+- `aquashots` 的手机喂食截图改点鱼缸中间（原来点在鱼缸上方，一直没喂上）
+
+**结果**：`npm run check` 16 项、`npm run check:ui` 8 项通过；鱼缸截图正常，手机上点选喂食成功

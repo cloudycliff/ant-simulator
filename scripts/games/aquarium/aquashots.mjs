@@ -24,7 +24,7 @@ const SCENES = {
       await p.ev(`document.querySelector('[data-a="tool"][data-v="0"]').click()`);
       await sleep(300);
       if (touch) {
-        await p.tap(w / 2, h * 0.4);
+        await p.tap(w / 2, h * 0.5);
         await sleep(300);
         await p.ev(`document.querySelector('#tool [data-a="toolPlace"]')?.click()`);
       } else await click(p, w / 2, h * 0.4);
