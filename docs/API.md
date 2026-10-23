@@ -107,7 +107,8 @@
   - `title`、`subtitle`、`loading`（生成世界时显示的文字）、`repoUrl`、`installable`
   - `camera`：视角、裁剪面、开局视角（`CameraPose`，可以是宽高比的函数，竖屏退远些）
   - `configure(params)`：建世界之前读网址参数，返回 true 时不读存档
-  - `create(seed)`、`space(world)`、`mount(ctx)`
+  - `create(seed, saved?)`：读档时 `saved` 是随后要交给 `save.read` 的存档，世界的生成参数要跟着存档走时（比如开局人口）在这里先设好；新开局时为空
+  - `space(world)`、`mount(ctx)`
   - `save`：`slot`；`write(world, savedAt)`；`read(world, d)`，把存档套到用 `d.seed` 刚建的世界上，失败时抛错（外壳会改为开新局）；`problem(d)`，存档不能用时返回原因；`meta(d)`；`describe(meta)`，存档面板里的一句摘要
 - `GameSave`：存档至少有 `seed`；`camera` 由外壳在保存时写入
 - `GameContext`：`mount` 拿到的 `world`、`scene`、`camera`、`dom`、`space`、`toast`、`select`、`following`

@@ -18,6 +18,8 @@ export interface SaveData {
   savedAt: number;
   /** 较早的存档里有保存时的游戏时刻，如“第3天 14:20”；现在由 clock.seconds 算出 */
   stamp?: string;
+  /** 开局工蚁数，决定入口和初始蚁穴的样子；较早的存档没有，按 1000 只 */
+  workers?: number;
   clock: { seconds: number; speed: number };
   /** 模拟随机数的状态，较早的存档没有，读进来后的运行就不能复现 */
   rng?: number;
@@ -43,7 +45,7 @@ export interface SaveData {
  * 各部分在 World 的构造函数里登记（w.saves），字段名和 SaveData 一致。
  */
 export function saveWorld(w: World, savedAt: number): SaveData {
-  return { version: SAVE_VERSION, seed: w.seed, savedAt, ...w.saves.save() } as unknown as SaveData;
+  return { version: SAVE_VERSION, seed: w.seed, workers: w.initialWorkers, savedAt, ...w.saves.save() } as unknown as SaveData;
 }
 
 export interface AntSaveMeta extends SaveMeta {

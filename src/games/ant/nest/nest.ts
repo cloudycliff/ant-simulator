@@ -133,10 +133,13 @@ export class Nest {
 
   /** 生成前调用：在地形上登记入口土丘 */
   static entranceLayout(): { x: number; z: number; main: boolean; label: Text }[] {
-    return [
+    const list = [
       { x: 0, z: 0, main: true, label: L('entrance.main') },
       { x: 9.5, z: -6.5, main: false, label: L('entrance.side') },
     ];
+    // 在垃圾室和浅层休息室之间的空当里，离开局就有的房间都够远
+    if (CONFIG.colony.initialWorkers >= CONFIG.nest.thirdEntranceAt) list.push({ x: -1, z: -13, main: false, label: L('entrance.third') });
+    return list;
   }
 
   generate(seed: number): void {
@@ -211,11 +214,13 @@ export class Nest {
       const target = jn.pos.clone().add(new THREE.Vector3(Math.cos(d.ang) * total, drop, Math.sin(d.ang) * total));
       this.planFace(junctions[d.j], target, r, CONFIG.nest.tunnelRadius * 0.9, 1.5, d.len, false);
     }
+    const second = this.entrances[2] ? this.digSecondShaft(this.entrances[2].node, junctions, shaftR, r) : [];
     // 开局蚂蚁多时多挖几间休息室，从浅处挖起：觅食蚁进出巢都要歇，挖在深处就得穿过整条竖井
     const extra = Math.round(Math.max(0, CONFIG.colony.initialWorkers - 1000) / CONFIG.nest.workersPerExtraRest);
+    const anchors = [...second, ...junctions];
     for (let k = 0, placed = 0; placed < extra && k < extra * 80; k++) {
-      // 浅处放不下时先离分岔点远一些（隧道长一点），再往深处
-      const j = junctions[Math.floor(r.next() * Math.min(junctions.length, 3 + k / 40))];
+      // 浅处放不下时先离分岔点远一些（隧道长一点），再往深处，最深到第四个分岔点；还放不下就少挖几间
+      const j = anchors[Math.floor(r.next() * Math.min(second.length + 4, 3 + second.length + k / 40))];
       const jn = this.nodes[j];
       const rx = r.range(7, 8.5);
       const rz = rx * r.range(0.75, 0.88);
@@ -232,6 +237,58 @@ export class Nest {
     }
 
     this.computeRouting();
+  }
+
+  /** 第三入口下的浅竖井：往外斜着向下、避开已有房间，再横向接回主竖井；返回沿途的分岔点 */
+  private digSecondShaft(entrance: number, main: number[], radius: number, r: Rng): number[] {
+    const y0 = this.terrain.baseHeight(0, 0);
+    const top = this.nodes[entrance].pos;
+    const out = new THREE.Vector3(top.x, 0, top.z).normalize();
+    const list: number[] = [];
+    let prev = entrance;
+    for (const d of [7, 15, 23]) {
+      const from = this.nodes[prev].pos;
+      let found: { to: THREE.Vector3; path: Path } | null = null;
+      for (let i = 0; i < 16 && !found; i++) {
+        const to = new THREE.Vector3(from.x + out.x * 3.5 + r.range(-3, 3), y0 - d, from.z + out.z * 3.5 + r.range(-3, 3));
+        const path = this.makePath(from, to, r, 1.6);
+        if (this.tunnelClear(path, radius + 1.5, 0)) found = { to, path };
+      }
+      if (!found) break;
+      const j = this.addNode('junction', found.to);
+      this.addTunnel(prev, j, r, radius, true, 0, found.path);
+      list.push(j);
+      prev = j;
+    }
+    if (!list.length) {
+      this.addTunnel(entrance, main[1], r, CONFIG.nest.tunnelRadius, true, 2.5);
+      return list;
+    }
+    // 从最深的分岔点接到深度最接近的主竖井分岔点，路上有房间就换浅一点的；靠近主竖井那头本来就挨着各房间的门
+    let link: { a: number; b: number; path: Path } | null = null;
+    for (let i = list.length - 1; i >= 0 && !link; i--) {
+      const a = this.nodes[list[i]].pos;
+      const b = main.reduce((p, j) => (Math.abs(this.nodes[j].pos.y - a.y) < Math.abs(this.nodes[p].pos.y - a.y) ? j : p));
+      const path = this.makePath(a, this.nodes[b].pos, r, 1.2);
+      if (this.tunnelClear(path, radius + 1, 4) || i === 0) link = { a: list[i], b, path };
+    }
+    this.addTunnel(link!.a, link!.b, r, radius, false, 0, link!.path);
+    return list;
+  }
+
+  /** 隧道中心线离已有房间和工作面的规划路径都至少 pad 远；末端 skip 以内不查 */
+  private tunnelClear(path: Path, pad: number, skip: number): boolean {
+    for (let i = 0; i < path.points.length; i++) {
+      if (path.length - path.cum[i] < skip) break;
+      const p = path.points[i];
+      for (const c of this.chambers) {
+        if (p.y < c.floor.y - pad || p.y > c.floor.y + c.ry + pad) continue;
+        const ang = Math.atan2(p.z - c.floor.z, p.x - c.floor.x);
+        if (Math.hypot(p.x - c.floor.x, p.z - c.floor.z) < this.ellipseRadius(c.rx, c.rz, c.yaw, ang) + pad) return false;
+      }
+      for (const f of this.faces) for (const q of f.full.points) if (q.distanceTo(p) < pad + 1) return false;
+    }
+    return true;
   }
 
   /** 是否靠近某个工作面还没挖到的那段规划路径 */
@@ -385,8 +442,8 @@ export class Nest {
     return id;
   }
 
-  private addTunnel(a: number, b: number, r: Rng, radius: number, isShaft: boolean, wobble: number): void {
-    const { points, cum, length } = this.makePath(this.nodes[a].pos, this.nodes[b].pos, r, wobble);
+  private addTunnel(a: number, b: number, r: Rng, radius: number, isShaft: boolean, wobble: number, path?: Path): void {
+    const { points, cum, length } = path ?? this.makePath(this.nodes[a].pos, this.nodes[b].pos, r, wobble);
     const id = this.edges.length;
     this.edges.push({ id, a, b, points, cum, length, radius, isShaft, rev: 0 });
     this.nodes[a].edges.push(id);

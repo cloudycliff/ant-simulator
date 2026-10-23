@@ -279,7 +279,7 @@ requestAnimationFrame
 
 ### 存档（`world/save.ts`）
 
-页面启动时 `runApp` 先 `create(seed)`（即 `new World(seed)`），有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号；随机数和编号计数由 `Simulation` 用 `addLast` 登记，在这些之后恢复。设计取舍见 DECISIONS T-027。
+页面启动时 `runApp` 先 `create(seed, saved)`（读档时先按存档里的开局工蚁数设好 CONFIG，再 `new World(seed)`），有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号；随机数和编号计数由 `Simulation` 用 `addLast` 登记，在这些之后恢复。设计取舍见 DECISIONS T-027。
 
 行为协程不进存档（生成器不能序列化）。存的是当前这条指令和它的执行进度（`AntSave.step`，隧道里还有 `GraphWalker.toSave` 的位置），读档后 `Ant.restoreStep` 用 `Behavior.resume` 接着做完这一步，之后开新任务；构造时随机抽的个体差异（`ind`）和增援、躲避这类短暂状态（`fx`）也进存档，蚁群另存几个周期计时（`ColonySave.clocks`）。新增指令种类或指令执行时用到的蚂蚁字段时，要在 `stepSave` / `restoreStep` 里补上，`savetest` 的接续检查会抓到漏掉的（T-067）。搬运中的物品随蚂蚁存档（`AntSave.carry` 是物品编号），读档后还在它嘴里，`Colony.newRoutine` 先交给 `finishCarry`：按物品种类把它送到该去的地方（食物进储食室、土粒按扩建工程倒掉、尸体和巢外垃圾运出去、巢内垃圾进垃圾室、幼体进对应房间）。新增一种可搬运的物品时要在 `finishCarry` 里补一个分支（T-059）。
 
@@ -310,6 +310,8 @@ requestAnimationFrame
 - 房间按 `specs` 表挂在分岔点上（类型、所在分岔点、方向角、距离、尺寸）。房间是底部被压平的椭球，门开在地板边缘、朝向分岔点。最后一行是第一个分岔点旁、大石块下的向阳育幼室
 - 侧入口接到第二个分岔点；另有 3 条盲端隧道作为挖掘工作面（`DigFace`，开局已挖出一段，之后会继续延长）
 - 开局工蚁多于 1000 只时（网址参数 `ants=`），每多 200 只多挖一间工蚁休息室，从最浅的几个分岔点找空位，放不下时先把房间放远一些、再往深处；主竖井半径按 √(只数 / 1000) 加宽，最多 1.7 倍（T-065）。1000 只时这一步不取随机数，蚁穴和原来完全相同
+- 开局工蚁达到 2000 只时（`nest.thirdEntranceAt`），`entranceLayout` 多一个第三入口（土丘在地形里），`digSecondShaft` 从它往外斜着挖一条约 23 cm 深的浅竖井：每段试几个落点，用 `tunnelClear` 避开房间和工作面的规划路径，最深的分岔点横向接回深度最接近的主竖井分岔点（路上有房间就换浅一层）。加挖的休息室从新竖井和主竖井最浅的三个分岔点里挑，最深到 34 cm（T-069）
+- 入口不在存档里，所以 `SaveData.workers` 记下开局工蚁数，`antGame.create` 读档时先按它设好再生成世界
 - 用 Floyd 算法算出所有节点对之间的下一跳（`nextHop`，`core/move/graph.ts` 的 `Routes`）；节点增减或移动后重算
 - 生成后，`World` 把距离半径大于 3 的石块 3 cm 以内的房间标记为 `underStone`
 

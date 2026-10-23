@@ -46,6 +46,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'chamberDesc.winter': 'The deepest part of the nest, with a stable temperature all year round. In autumn and winter the whole colony moves in here and goes dormant.',
   'entrance.main': 'main entrance',
   'entrance.side': 'side entrance',
+  'entrance.third': 'third entrance',
   'loc.surface': 'surface',
   'loc.shaft': 'main shaft',
   'loc.tunnel': 'tunnel',

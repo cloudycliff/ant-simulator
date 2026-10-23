@@ -100,7 +100,7 @@ export const hiveSave = {
 
 - `title` / `subtitle` / `loading`、`repoUrl`
 - `camera`：视角、裁剪面、开局视角。开局视角可以是宽高比的函数，竖屏手机退远一些
-- `create(seed)`、`save`（上面的存档位加 `describe`：存档面板里的一句摘要）、`space(world)`
+- `create(seed, saved?)`（读档时收到要读的存档，生成参数要跟存档走时在这里设）、`save`（上面的存档位加 `describe`：存档面板里的一句摘要）、`space(world)`
 - `installable`：要能添加到主屏幕才设。页面要有自己的清单，`public/sw.js` 现在只缓存蚂蚁游戏的页面，第二个可安装的游戏要给它自己的离线缓存脚本
 - `mount(ctx)` 返回 `GameSession`：
   - `views`：视图开关（名字、按键、`?view=` 的名字、手机底栏图标、状态、切换），按钮、按键、视图面板都由外壳生成

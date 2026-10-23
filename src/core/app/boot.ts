@@ -43,7 +43,7 @@ export function openWorld<W extends Simulation<R>, R extends EntityRef, D extend
   let out: OpenedWorld<W>;
   if (saved && !problem) {
     try {
-      const world = game.create(saved.seed);
+      const world = game.create(saved.seed, saved);
       S.read(world, saved);
       out = { world, seed: saved.seed, message: t('toast.loaded', { stamp: tr(world.clock.stamp()) }), camera: saved.camera };
     } catch (e) {

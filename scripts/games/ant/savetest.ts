@@ -1,6 +1,7 @@
 // 存档往返测试：运行一段时间后存档，读进新世界，对比关键指标，再各自继续运行
 // 用法：npx tsx scripts/games/ant/savetest.ts [存档前模拟秒数，默认 1900] [tunnel|chamber：继续运行到扩建处于该阶段再存档]
 import { tr } from '../../../src/core/i18n';
+import { CONFIG, setInitialWorkers } from '../../../src/games/ant/config';
 import { World } from '../../../src/games/ant/world/world';
 import { loadWorld, saveWorld, type SaveData } from '../../../src/games/ant/world/save';
 
@@ -169,5 +170,22 @@ const mc2 = metrics(c);
 const diverged = Object.keys(mb2).filter((k) => mb2[k] !== mc2[k]);
 console.log(`同一个存档再读一次、同样跑 1200 秒：${diverged.length ? `${diverged.join('、')} 不同` : '和第一次完全相同'}`);
 if (diverged.length) problems.push(`同一个存档两次读档后的运行不同（${diverged.join('、')}）`);
+
+// 开局工蚁多的世界多一个入口：读档时先按存档里的开局工蚁数生成（和 game.ts 的 create 一样），入口才对得上
+const defaultWorkers = CONFIG.colony.initialWorkers;
+setInitialWorkers(CONFIG.nest.thirdEntranceAt);
+const big = new World(data.seed);
+run(big, 20);
+const bigData = JSON.parse(JSON.stringify(saveWorld(big, Date.now()))) as SaveData;
+setInitialWorkers(defaultWorkers);
+if (bigData.workers) setInitialWorkers(bigData.workers);
+const big2 = new World(bigData.seed);
+loadWorld(big2, bigData);
+const ents = big2.nest.entrances.map((e) => big2.nest.nodes[e.node].kind);
+console.log(`开局 ${bigData.workers} 只的存档：读档后入口 ${ents.length} 个，蚂蚁 ${big2.colony.ants.length}/${big.colony.ants.length} 只`);
+if (ents.length !== big.nest.entrances.length || ents.some((k) => k !== 'entrance')) problems.push('开局工蚁多的存档读档后入口不对');
+if (big2.colony.ants.length !== big.colony.ants.length) problems.push('开局工蚁多的存档读档后蚂蚁数不同');
+problems.push(...check(big2));
+setInitialWorkers(defaultWorkers);
 console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
 if (problems.length) process.exitCode = 1;

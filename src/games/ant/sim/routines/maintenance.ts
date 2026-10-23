@@ -240,7 +240,8 @@ export function* loiter(a: Ant, w: World): Routine {
 
 function* patrolNest(a: Ant, w: World): Routine {
   yield* goHome(a);
-  const c = nearerOf(a, w, w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
+  const rooms = w.nest.chambers.filter((x) => x.ready && x.type !== 'queen');
+  const c = nearerOf(a, w, rooms, Math.max(2, Math.round(rooms.length / CONFIG.crowd.patrolPerPick)));
   a.activity = L('act.inspect', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = L('act.cleanRoom', { room: c.label });

@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import { CONFIG } from './config';
+import { CONFIG, setInitialWorkers } from './config';
 import { ENGINE } from '../../core/config';
 import { t, tr } from '../../core/i18n';
 import type { GameContext, GameModule, GameSession, ViewToggle } from '../../core/app/game';
@@ -28,11 +28,13 @@ export const antGame: GameModule<World, GameRef, SaveData, AntSaveMeta> = {
   configure(params) {
     const n = Number(params.get('ants'));
     if (!(n > 0)) return false;
-    CONFIG.colony.initialWorkers = Math.min(5000, n);
-    CONFIG.colony.maxPopulation = Math.max(CONFIG.colony.maxPopulation, CONFIG.colony.initialWorkers + 200);
+    setInitialWorkers(Math.min(5000, n));
     return true;
   },
-  create: (seed) => new World(seed),
+  create: (seed, saved) => {
+    if (saved?.workers) setInitialWorkers(saved.workers);
+    return new World(seed);
+  },
   save: {
     slot: saveSlot,
     write: saveWorld,

@@ -15,11 +15,14 @@ export function chamber(w: World, t: Chamber['type']): Chamber {
 }
 
 /** 随机挑两间，去巢内路程较近的一间：既分散开，又不总是横穿整个蚁穴 */
-export function nearerOf(a: Ant, w: World, rooms: Chamber[]): Chamber {
+export function nearerOf(a: Ant, w: World, rooms: Chamber[], tries = 2): Chamber {
   const from = here(a, w);
-  const c1 = w.rng.pick(rooms);
-  const c2 = w.rng.pick(rooms);
-  return w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
+  let best = w.rng.pick(rooms);
+  for (let i = 1; i < tries; i++) {
+    const c = w.rng.pick(rooms);
+    if (w.nest.routeLength(from, c.door) < w.nest.routeLength(from, best.door)) best = c;
+  }
+  return best;
 }
 
 export function* goHome(a: Ant): Routine {
@@ -179,9 +182,10 @@ export function* eat(a: Ant, w: World): Routine {
 
 export function* rest(a: Ant, w: World, label: Text = L('act.rest')): Routine {
   yield* goHome(a);
-  // 随机挑两间休息室，去路程较近的一间
+  // 随机挑几间休息室，去路程最近的一间；休息室多时多挑几间，不然常要穿过整条竖井去深处那间
   const from = a.currentNode(w);
-  let c = nearerOf(a, w, w.nest.chamberOfType('rest').filter((x) => x.ready));
+  const rooms = w.nest.chamberOfType('rest').filter((x) => x.ready);
+  let c = nearerOf(a, w, rooms, Math.max(2, Math.round(rooms.length / CONFIG.crowd.restPerPick)));
   // 休息室挤满了就去最近的没挤满的房间；都挤满了才去最空的那间
   const col = w.colony;
   const cap = CONFIG.crowd.restDensity;

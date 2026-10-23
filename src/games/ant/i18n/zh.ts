@@ -40,6 +40,7 @@ export const zh = {
   'chamberDesc.winter': '位于蚁穴最深处，温度全年稳定。秋冬季整个蚁群会迁入这里进入滞育状态。',
   'entrance.main': '主入口',
   'entrance.side': '侧入口',
+  'entrance.third': '第三入口',
   'loc.surface': '地表',
   'loc.shaft': '主竖井',
   'loc.tunnel': '隧道',

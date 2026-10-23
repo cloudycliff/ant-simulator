@@ -28,7 +28,8 @@ export interface GameModule<W extends Simulation<R>, R extends EntityRef, D exte
   camera: { fov: number; near: number; far: number; pose: CameraPose | ((aspect: number) => CameraPose) };
   /** 创建世界之前读网址参数；返回 true 时不读存档、开新局 */
   configure?(params: URLSearchParams): boolean;
-  create(seed: number): W;
+  /** 读档时 saved 是要读的存档（随后交给 save.read），新开局时为空 */
+  create(seed: number, saved?: D): W;
   save: {
     slot: SaveSlot<D, M>;
     write(w: W, savedAt: number): D;

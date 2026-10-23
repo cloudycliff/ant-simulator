@@ -82,6 +82,10 @@ export const CONFIG = {
   crowd: {
     /** 休息室里每 cm² 可走地板超过这么多只时，改去越冬室、储食室里最不挤的一间歇着（蚂蚁身体间距 0.64 cm，约 2.8 只就挤满了） */
     restDensity: 2.2,
+    /** 去休息时随机挑几间休息室、去路程最近的一间：每这么多间挑一间，至少挑两间 */
+    restPerPick: 4,
+    /** 内务蚁巡视房间时同样挑，每这么多间挑一间 */
+    patrolPerPick: 6,
     /** 在一个入口外警戒、闲逛的蚂蚁超过这么多只时，巡逻和闲逛的范围按 √(只数 / moundRef) 放大，蚁群大了蚁丘也大 */
     moundRef: 120,
   },
@@ -308,8 +312,16 @@ export const CONFIG = {
     /** 开局工蚁多于 1000 只时，每多这么多只在浅层多挖一间工蚁休息室；主竖井半径按 √(只数 / 1000) 加宽，最多 shaftWiden 倍 */
     workersPerExtraRest: 200,
     shaftWiden: 1.7,
+    /** 开局工蚁达到这么多只时多开第三个入口，带一条浅竖井，加挖的休息室有三四成挂在它上面 */
+    thirdEntranceAt: 2000,
   },
 };
+
+/** 开局工蚁数决定入口和初始蚁穴，要在生成世界之前设好 */
+export function setInitialWorkers(n: number): void {
+  CONFIG.colony.initialWorkers = n;
+  CONFIG.colony.maxPopulation = Math.max(CONFIG.colony.maxPopulation, n + 200);
+}
 
 export type Role = 'queen' | 'nurse' | 'maintenance' | 'forager';
 

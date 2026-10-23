@@ -42,6 +42,8 @@ export class World extends Simulation<GameRef> {
   readonly alarm: AlarmField;
   readonly weather: WeatherSystem;
   readonly colony: Colony;
+  /** 开局工蚁数，入口和初始蚁穴按它生成 */
+  readonly initialWorkers = CONFIG.colony.initialWorkers;
 
   constructor(readonly seed: number = CONFIG.seed) {
     super(CONFIG.time.dayLength, CONFIG.time.startHour, seed);
