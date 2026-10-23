@@ -336,7 +336,7 @@ npm run check:ui      # 构建 + 浏览器测试 + 各屏幕布局截图，约 6
 node scripts/check.mjs --all               # 全部
 node scripts/check.mjs --update-baseline   # 模拟行为有意改变时，用这次的输出更新基线
 ```
-每项一行“通过 / 失败、耗时、摘要”，失败的项接着打印输出的最后 30 行，有失败时退出码非零。模拟基线是 `SIM_SEED=7` 跑 3000 秒的 `simtest` 输出，去掉耗时后必须逐行相同：只是重构时它应该不变；有意改了行为就加 `--update-baseline`，把基线文件的变化连同提交一起看，并把指标变化写进 `docs/PROGRESS.md`。GitHub Actions 上缺少基线文件时直接判失败。
+每项一行“通过 / 失败、耗时、摘要”，失败的项接着打印输出的最后 30 行，有失败时退出码非零。模拟基线是 `SIM_SEED=7` 跑 3000 秒的 `simtest` 输出，去掉耗时后必须逐行相同：只是重构时它应该不变；有意改了行为就加 `--update-baseline`，把基线文件的变化连同提交一起看，并把指标变化写进 `docs/PROGRESS.md`。GitHub Actions 上缺少基线文件时直接判失败。基线和 Node 的版本绑定：Windows 和 Linux 上同一版本逐行相同，Node 22 和 24 跑出来从第一个游戏日晚上起就不同了（数学函数的末位差异被放大）。CI 用 `.nvmrc` 里的版本，升级 Node 时要一起更新基线。
 
 ### 无界面模拟
 ```
