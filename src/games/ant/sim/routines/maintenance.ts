@@ -7,7 +7,7 @@ import type { PlugJob } from '../../world/weather';
 import type { World } from '../../world/world';
 import type { Ant, Routine } from '../ant';
 import { type Item, ITEM_NAMES } from '../items';
-import { chamber, distributeCrop, eat, goHome, goToItem, here, stillMine, wantsToEat } from './common';
+import { chamber, distributeCrop, eat, goHome, goToItem, here, nearerOf, stillMine, wantsToEat } from './common';
 
 // ---------------- 内务蚁 ----------------
 
@@ -238,7 +238,7 @@ export function* loiter(a: Ant, w: World): Routine {
 
 function* patrolNest(a: Ant, w: World): Routine {
   yield* goHome(a);
-  const c = w.rng.pick(w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
+  const c = nearerOf(a, w, w.nest.chambers.filter((x) => x.ready && x.type !== 'queen'));
   a.activity = L('act.inspect', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };
   a.activity = L('act.cleanRoom', { room: c.label });

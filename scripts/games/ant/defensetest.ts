@@ -31,8 +31,18 @@ function busiestSpot(): { x: number; z: number; n: number } {
 
 /** outskirts：蚂蚁稀少的外围，狼蛛可能吃饱了才走，只要求有蚂蚁响应 */
 function run(label: string, x: number, z: number, secs: number, outskirts = false): void {
-  const r = w.placePredator('spider', x, z);
+  // 那一点被食物、石块占着时在附近换个点
+  let r = w.placePredator('spider', x, z);
+  for (let i = 0; !r.ok && i < 12; i++) {
+    const ang = (i / 12) * Math.PI * 2;
+    r = w.placePredator('spider', x + Math.cos(ang) * 2, z + Math.sin(ang) * 2);
+    if (r.ok) [x, z] = [x + Math.cos(ang) * 2, z + Math.sin(ang) * 2];
+  }
   console.log(`\n== ${label}：(${x.toFixed(0)}, ${z.toFixed(0)}) ${r.msg ? tr(r.msg) : ''}`);
+  if (!r.ok) {
+    problems.push(`${label}：放不下狼蛛`);
+    return;
+  }
   const s = w.predators.spiders[w.predators.spiders.length - 1];
   const st = w.colony.stats;
   const p0 = st.preyed;

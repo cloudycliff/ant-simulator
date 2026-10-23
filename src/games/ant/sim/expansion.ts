@@ -164,9 +164,10 @@ export class NestExpansion {
     const b = col.broodCounts();
     // 幼体多时优先扩建育幼空间，否则扩建工蚁休息室
     const type: ChamberType = b.egg + b.larva + b.pupa > col.ants.length * 0.22 ? 'larva' : 'rest';
-    const anchors = nest.nodes.filter((n) => n.kind === 'junction' && nest.surfaceY - n.pos.y > 8);
+    const anchors = nest.nodes.filter((n) => n.kind === 'junction' && nest.surfaceY - n.pos.y > 8).sort((p, q) => q.pos.y - p.pos.y);
     for (let k = 0; k < 60; k++) {
-      const jn = this.w.rng.pick(anchors);
+      // 休息室先在浅处找地方（觅食蚁进出巢都要歇），找不到再往深处
+      const jn = type === 'rest' ? anchors[Math.min(anchors.length - 1, Math.floor(this.w.rng.next() * (2 + k / 10)))] : this.w.rng.pick(anchors);
       const rx = type === 'larva' ? this.w.rng.range(8, 10) : this.w.rng.range(7, 8.5);
       const rz = rx * this.w.rng.range(0.75, 0.88);
       const ry = this.w.rng.range(2.6, 3.2);

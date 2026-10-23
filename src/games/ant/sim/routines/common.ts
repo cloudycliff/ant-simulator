@@ -14,6 +14,14 @@ export function chamber(w: World, t: Chamber['type']): Chamber {
   return w.nest.chamberOfType(t)[0];
 }
 
+/** 随机挑两间，去巢内路程较近的一间：既分散开，又不总是横穿整个蚁穴 */
+export function nearerOf(a: Ant, w: World, rooms: Chamber[]): Chamber {
+  const from = here(a, w);
+  const c1 = w.rng.pick(rooms);
+  const c2 = w.rng.pick(rooms);
+  return w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
+}
+
 export function* goHome(a: Ant): Routine {
   if (a.domain === 'surface') yield { k: 'enter' };
 }
@@ -172,15 +180,16 @@ export function* eat(a: Ant, w: World): Routine {
 export function* rest(a: Ant, w: World, label: Text = L('act.rest')): Routine {
   yield* goHome(a);
   // 随机挑两间休息室，去路程较近的一间
-  const rooms = w.nest.chamberOfType('rest');
   const from = a.currentNode(w);
-  const c1 = w.rng.pick(rooms);
-  const c2 = w.rng.pick(rooms);
-  let c = w.nest.routeLength(from, c1.door) <= w.nest.routeLength(from, c2.door) ? c1 : c2;
-  // 休息室挤满了就去别的不太挤的房间歇着
+  let c = nearerOf(a, w, w.nest.chamberOfType('rest').filter((x) => x.ready));
+  // 休息室挤满了就去最近的没挤满的房间；都挤满了才去最空的那间
   const col = w.colony;
-  if (col.roomDensity(c) > CONFIG.crowd.restDensity) {
-    for (const o of w.nest.chambers) if (o.ready && REST_SPILL.includes(o.type) && col.roomDensity(o) < col.roomDensity(c)) c = o;
+  const cap = CONFIG.crowd.restDensity;
+  if (col.roomDensity(c) > cap) {
+    const spill = w.nest.chambers.filter((o) => o.ready && REST_SPILL.includes(o.type));
+    const roomy = spill.filter((o) => col.roomDensity(o) <= cap);
+    if (roomy.length) c = roomy.reduce((p, o) => (w.nest.routeLength(from, o.door) < w.nest.routeLength(from, p.door) ? o : p));
+    else for (const o of spill) if (col.roomDensity(o) < col.roomDensity(c)) c = o;
   }
   a.activity = L('act.goTo', { room: c.label });
   yield { k: 'room', chamber: c.id, time: 0.1 };

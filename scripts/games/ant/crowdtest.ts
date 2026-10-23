@@ -1,5 +1,5 @@
 /**
- * 拥挤测试：以 3000 只工蚁开局跑一个游戏日，每 2.4 游戏小时统计休息室的密度、巢口附近地表和隧道里身体明显重叠的蚂蚁对数。
+ * 拥挤测试：以 3000 只工蚁开局（蚁穴按人口多挖休息室、加宽竖井）跑一个游戏日，每 2.4 游戏小时统计休息室的密度、巢口附近地表和隧道里身体明显重叠的蚂蚁对数。
  * 开局的蚂蚁是一次性摆进房间的，第一次统计不计入检查。
  * npx tsx scripts/games/ant/crowdtest.ts [工蚁数，默认 3000] [模拟秒数，默认 600]
  */
@@ -9,9 +9,10 @@ import { World } from '../../../src/games/ant/world/world';
 
 const n = Number(process.argv[2] ?? 3000);
 const secs = Number(process.argv[3] ?? 600);
-/** 休息室每 cm² 可走地板上最多几只；巢口 15 cm 以内的地表最多几对重叠 */
+/** 休息室每 cm² 可走地板上最多几只；巢口 15 cm 以内的地表、隧道里各最多几对重叠 */
 const MAX_REST = Number(process.env.MAX_REST ?? 2.6);
 const MAX_MOUND = Number(process.env.MAX_MOUND ?? 300);
+const MAX_TUNNEL = Number(process.env.MAX_TUNNEL ?? 1500);
 CONFIG.colony.initialWorkers = n;
 CONFIG.colony.maxPopulation = Math.max(CONFIG.colony.maxPopulation, n + 200);
 CONFIG.weather.rainPerDay = 0;
@@ -21,6 +22,7 @@ const near: typeof w.colony.ants = [];
 const problems: string[] = [];
 let worstRest = 0;
 let worstMound = 0;
+let worstTunnel = 0;
 
 function report(check: boolean): void {
   const room = new Map<number, { n: number; over: number }>();
@@ -59,7 +61,10 @@ function report(check: boolean): void {
     if (t === 'rest' && check) worstRest = Math.max(worstRest, max);
     return `${tr(cs[0].label).replace(/\d+$/, '')} ${cnt} 只（最挤 ${max.toFixed(1)}/cm²，重叠 ${over}）`;
   });
-  if (check) worstMound = Math.max(worstMound, mound);
+  if (check) {
+    worstMound = Math.max(worstMound, mound);
+    worstTunnel = Math.max(worstTunnel, tunnel);
+  }
   console.log(`${tr(w.clock.stamp())} 巢口 15 cm 内 ${moundN} 只、重叠 ${mound}；隧道重叠 ${tunnel}；${parts.join('；')}`);
 }
 
@@ -71,6 +76,7 @@ for (let i = 0; i <= Math.round(secs / step); i++) {
 }
 if (worstRest > MAX_REST) problems.push(`休息室最挤 ${worstRest.toFixed(1)} 只/cm²（上限 ${MAX_REST}）`);
 if (worstMound > MAX_MOUND) problems.push(`巢口附近重叠 ${worstMound} 对（上限 ${MAX_MOUND}）`);
-console.log(`休息室最挤 ${worstRest.toFixed(1)} 只/cm²，巢口附近最多重叠 ${worstMound} 对`);
+if (worstTunnel > MAX_TUNNEL) problems.push(`隧道里重叠 ${worstTunnel} 对（上限 ${MAX_TUNNEL}）`);
+console.log(`休息室最挤 ${worstRest.toFixed(1)} 只/cm²，巢口附近最多重叠 ${worstMound} 对，隧道里最多 ${worstTunnel} 对`);
 console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
 if (problems.length) process.exitCode = 1;

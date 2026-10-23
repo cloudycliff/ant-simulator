@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
 import { Routes, samplePolyline } from '../../../core/move/graph';
+import { clamp } from '../../../core/util/math';
 import { Rng } from '../../../core/util/random';
 import type { Terrain } from '../world/terrain';
 
@@ -161,9 +162,11 @@ export class Nest {
       jz += r.range(-2.5, 2.5);
       junctions.push(this.addNode('junction', new THREE.Vector3(jx, y0 - d, jz)));
     }
+    const crowd = CONFIG.colony.initialWorkers / 1000;
+    const shaftR = CONFIG.nest.shaftRadius * clamp(Math.sqrt(crowd), 1, CONFIG.nest.shaftWiden);
     let prev = this.entrances[0].node;
     for (const j of junctions) {
-      this.addTunnel(prev, j, r, CONFIG.nest.shaftRadius, true, 1.6);
+      this.addTunnel(prev, j, r, shaftR, true, 1.6);
       prev = j;
     }
     // 侧入口接入第二个分岔点
@@ -208,8 +211,32 @@ export class Nest {
       const target = jn.pos.clone().add(new THREE.Vector3(Math.cos(d.ang) * total, drop, Math.sin(d.ang) * total));
       this.planFace(junctions[d.j], target, r, CONFIG.nest.tunnelRadius * 0.9, 1.5, d.len, false);
     }
+    // 开局蚂蚁多时多挖几间休息室，从浅处挖起：觅食蚁进出巢都要歇，挖在深处就得穿过整条竖井
+    const extra = Math.round(Math.max(0, CONFIG.colony.initialWorkers - 1000) / CONFIG.nest.workersPerExtraRest);
+    for (let k = 0, placed = 0; placed < extra && k < extra * 80; k++) {
+      // 浅处放不下时先离分岔点远一些（隧道长一点），再往深处
+      const j = junctions[Math.floor(r.next() * Math.min(junctions.length, 3 + k / 40))];
+      const jn = this.nodes[j];
+      const rx = r.range(7, 8.5);
+      const rz = rx * r.range(0.75, 0.88);
+      const ry = r.range(2.6, 3.2);
+      const ang = r.range(0, Math.PI * 2);
+      const dist = Math.max(rx, rz) + r.range(4, 7 + Math.min(12, k / 8));
+      const floor = jn.pos.clone().add(new THREE.Vector3(Math.cos(ang) * dist, -r.range(1, 3), Math.sin(ang) * dist));
+      if (Math.hypot(floor.x, floor.z) > 40 || !this.isClear(floor, rx, rz, ry, jn.pos) || this.nearFace(floor, Math.max(rx, rz) + 2)) continue;
+      const yaw = r.range(0, Math.PI);
+      const door = this.addNode('door', this.doorPosition(floor, rx, rz, yaw, jn.pos));
+      this.addChamber('rest', floor, rx, rz, ry, yaw, door, true);
+      this.addTunnel(j, door, r, CONFIG.nest.tunnelRadius, false, 2.2);
+      placed++;
+    }
 
     this.computeRouting();
+  }
+
+  /** 是否靠近某个工作面还没挖到的那段规划路径 */
+  private nearFace(p: THREE.Vector3, d: number): boolean {
+    return this.faces.some((f) => f.full.points.some((q) => Math.abs(q.y - p.y) < 6 && Math.hypot(q.x - p.x, q.z - p.z) < d));
   }
 
   /** 门在地板边缘，朝向连接它的分岔点 */

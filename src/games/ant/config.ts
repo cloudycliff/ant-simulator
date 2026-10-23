@@ -283,6 +283,9 @@ export const CONFIG = {
   nest: {
     tunnelRadius: 1.0,
     shaftRadius: 1.25,
+    /** 开局工蚁多于 1000 只时，每多这么多只在浅层多挖一间工蚁休息室；主竖井半径按 √(只数 / 1000) 加宽，最多 shaftWiden 倍 */
+    workersPerExtraRest: 200,
+    shaftWiden: 1.7,
   },
 };
 
