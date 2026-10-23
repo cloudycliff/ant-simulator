@@ -8,7 +8,7 @@ import type { FoodKind } from '../world/food';
 import { Ant, type AntSave, type Routine } from './ant';
 import { NestExpansion, type ExpansionSave } from './expansion';
 import { Item, type ItemSave, type ItemType } from './items';
-import { routineFor, shelter } from './routines';
+import { finishCarry, routineFor, shelter } from './routines';
 import { SpatialHash } from '../../../core/sim/spatial';
 import type { SimEventSave } from '../../../core/sim/events';
 import type { GameRef } from '../world/entities';
@@ -208,9 +208,11 @@ export class Colony {
     };
   }
 
-  /** 读档：在蚁穴结构恢复之后调用。被搬运中的物品直接送到它的目的地 */
+  /** 读档：在蚁穴结构恢复之后调用。搬运中的物品交还给拿着它的蚂蚁；找不到人的（较早的存档）直接送到目的地 */
   restore(s: ColonySave): void {
     this.ants = s.ants.map((as) => Ant.fromSave(as, this.w));
+    const carriers = new Map<number, Ant>();
+    s.ants.forEach((as, i) => as.carry !== undefined && carriers.set(as.carry, this.ants[i]));
     const queen = this.ants.find((a) => a.role === 'queen');
     if (!queen) throw new Error(t('save.noQueen'));
     this.queen = queen;
@@ -234,7 +236,9 @@ export class Colony {
     }
     for (const it of carried) {
       it.place = 'none';
-      if (it.type === 'corpse') this.dropAtMidden(it);
+      const ant = carriers.get(it.id);
+      if (ant) this.pickUp(ant, it);
+      else if (it.type === 'corpse') this.dropAtMidden(it);
       else if (it.type !== 'soil') this.addToChamber(it, this.targetChamberFor(it));
     }
     this.eggCredit = s.eggCredit;
@@ -258,6 +262,7 @@ export class Colony {
   }
 
   newRoutine(ant: Ant): Routine {
+    if (ant.carrying) return finishCarry(ant, this.w);
     if (ant.nextRole && !ant.carrying) this.applyRole(ant);
     if (ant.domain === 'surface' && !ant.carrying && ant.role !== 'queen' && this.w.weather.keepIn) return shelter(ant, this.w);
     return routineFor(ant, this.w);

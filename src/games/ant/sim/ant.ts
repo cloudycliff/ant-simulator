@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG, type Role } from '../config';
 import { asText, L, type Text } from '../../../core/i18n';
 import { GraphWalker, tunnelFloor } from '../../../core/move/graph';
+import { Behavior, type Routine as CoreRoutine } from '../../../core/sim/behavior';
 import { Skirt, alignToGround, turnToward } from '../../../core/move/surface';
 import { clamp } from '../../../core/util/math';
 import type { NestEdge } from '../nest/nest';
@@ -22,7 +23,7 @@ export type Command =
   /** 沿植物茎爬到 top 高度，停留 stay 秒后爬回地面 */
   | { k: 'climb'; x: number; z: number; angle: number; r: number; top: number; stay: number };
 
-export type Routine = Generator<Command, void, unknown>;
+export type Routine = CoreRoutine<Command>;
 
 /** t 是模拟秒数；较早的存档里 t 和 msg 都是拼好的中文 */
 export interface LogEntry {
@@ -62,6 +63,8 @@ export interface AntSave {
   contacts: number;
   shares: number;
   log: { t: number | string; msg: Text | string }[];
+  /** 手里拿着的物品编号；较早的存档没有，读档时那些物品直接送到目的地 */
+  carry?: number;
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
@@ -116,11 +119,8 @@ export class Ant {
   /** 进食失败后在此模拟时刻之前不再尝试进食 */
   eatRetryAt = 0;
 
-  cmd: Command | null = null;
-  private cmdInit = false;
+  readonly behavior = new Behavior<Command>();
   private timer = 0;
-  private result: unknown = undefined;
-  routine: Routine | null = null;
   activity: Text = L('act.idle');
   log: LogEntry[] = [];
 
@@ -221,10 +221,11 @@ export class Ant {
       contacts: this.contacts,
       shares: this.shares,
       log: this.log.slice(0, 4),
+      ...(this.carrying ? { carry: this.carrying.id } : {}),
     };
   }
 
-  /** 读档：恢复个体状态和位置，任务协程从头开始。走在隧道中途的蚂蚁放到最近的节点上，爬在植物上的放回地面 */
+  /** 读档：恢复个体状态和位置，任务协程从头开始（手里的东西由 Colony.restore 交还，先送到再选新任务）。走在隧道中途的蚂蚁放到最近的节点上，爬在植物上的放回地面 */
   static fromSave(s: AntSave, w: World): Ant {
     const a = new Ant(s.role, s.age, w, s.id);
     w.ids.seen('ant', s.id);
@@ -363,22 +364,10 @@ export class Ant {
         return;
       }
     }
-    for (let guard = 0; guard < 4; guard++) {
-      if (!this.cmd) {
-        if (!this.routine) this.routine = w.colony.newRoutine(this);
-        const r = this.routine.next(this.result);
-        this.result = undefined;
-        if (r.done) {
-          this.routine = null;
-          continue;
-        }
-        this.cmd = r.value;
-        this.cmdInit = false;
-      }
-      const done = this.step(dt, w, this.cmd);
-      if (!done) break;
-      this.cmd = null;
-    }
+    this.behavior.run(
+      () => w.colony.newRoutine(this),
+      (cmd, first) => this.step(dt, w, cmd, first),
+    );
     if (this.domain === 'nest') this.smoothNest(dt);
   }
 
@@ -435,16 +424,13 @@ export class Ant {
 
   /** 强制中断当前协程（死亡或任务失效时） */
   abort(): void {
-    this.routine = null;
-    this.cmd = null;
+    this.behavior.abort();
     this.exitBlocked = false;
     this.plugging = -1;
     this.guarding = false;
   }
 
-  private step(dt: number, w: World, cmd: Command): boolean {
-    const first = !this.cmdInit;
-    this.cmdInit = true;
+  private step(dt: number, w: World, cmd: Command, first: boolean): boolean {
     this.moving = false;
     switch (cmd.k) {
       case 'goto':
@@ -647,7 +633,7 @@ export class Ant {
       const other = w.nest.entrances.findIndex((e) => e.plug < 1);
       if (other >= 0) this.entranceTarget = other;
       else if (giveUp) {
-        this.result = 'blocked';
+        this.behavior.result = 'blocked';
         return true;
       } else if (!this.exitBlocked) {
         this.exitBlocked = true;
@@ -673,8 +659,21 @@ export class Ant {
     this.heading = this.skirtNav.steer(this.pos.x, this.pos.z, this.heading, cx, cz);
   }
 
+  /** 朝 heading 方向 hugProbe 以内有硬障碍 */
+  private blockedToward(w: World, heading: number): boolean {
+    const c = Math.cos(heading);
+    const s = Math.sin(heading);
+    const P = CONFIG.ant.hugProbe;
+    for (let d = P / 3; d <= P + 1e-6; d += P / 3) if (w.veg.obstacleAt(this.pos.x + c * d, this.pos.z + s * d, 0.35, true)) return true;
+    return false;
+  }
+
   private surfaceMove(dt: number, w: World, desired: number | null, turnRate = 5, speedMul = 1): void {
-    if (desired !== null) this.heading = turnToward(this.heading, desired, turnRate, dt);
+    if (desired !== null) {
+      const A = CONFIG.ant;
+      if (this.skirtNav.following(A.hugMax) && this.blockedToward(w, desired)) this.heading = this.skirtNav.hug(this.heading, A.hugRate, dt);
+      else this.heading = turnToward(this.heading, desired, turnRate, dt);
+    }
     const wetHere = w.water.at(this.pos.x, this.pos.z);
     const pit = w.predators.pitAt(this.pos.x, this.pos.z);
     let pdx = 0;
@@ -735,7 +734,14 @@ export class Ant {
       this.skirt(ob.x, ob.z);
       nx = this.pos.x + Math.cos(this.heading) * step;
       nz = this.pos.z + Math.sin(this.heading) * step;
-      const ob2 = w.veg.obstacleAt(nx, nz, 0.3, true);
+      let ob2 = w.veg.obstacleAt(nx, nz, 0.3, true);
+      // 树枝是一串小圆：沿一个圆的切线会撞进下一个圆，被推回去就卡在两圆之间的凹口，改沿两圆连线滑过去
+      if (ob2 && ob2 !== ob) {
+        this.skirt((ob.x + ob2.x) / 2, (ob.z + ob2.z) / 2);
+        nx = this.pos.x + Math.cos(this.heading) * step;
+        nz = this.pos.z + Math.sin(this.heading) * step;
+        ob2 = w.veg.obstacleAt(nx, nz, 0.3, true);
+      }
       if (ob2) {
         const a = Math.atan2(nz - ob2.z, nx - ob2.x);
         nx = ob2.x + Math.cos(a) * (ob2.r + 0.4);
@@ -790,7 +796,7 @@ export class Ant {
     if (first) this.timer = cmd.time;
     this.timer -= dt;
     if (this.timer <= 0) {
-      this.result = null;
+      this.behavior.result = null;
       return true;
     }
     const x = this.pos.x;
@@ -801,14 +807,14 @@ export class Ant {
     if (food) {
       const d = Math.hypot(food.x - x, food.z - z);
       if (d < food.radius + 0.5) {
-        this.result = food;
+        this.behavior.result = food;
         return true;
       }
       desired = Math.atan2(food.z - z, food.x - x);
     } else if (aphid) {
       // 植物茎是障碍物，走到茎旁约 1.7 单位处就算到达
       if (Math.hypot(aphid.x - x, aphid.z - z) < 1.9) {
-        this.result = aphid;
+        this.behavior.result = aphid;
         return true;
       }
       desired = Math.atan2(aphid.z - z, aphid.x - x);
@@ -956,7 +962,7 @@ export class Ant {
 
   /** 正在植物茎上（爬升、停留或下降中） */
   get climbing(): boolean {
-    return this.cmd?.k === 'climb' && this.cmdInit;
+    return this.behavior.cmd?.k === 'climb' && this.behavior.started;
   }
 
   /** 携带物在上颚处的位置 */

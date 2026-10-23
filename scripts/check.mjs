@@ -4,6 +4,7 @@
 //   node scripts/check.mjs --ui            构建后跑浏览器测试；开发服务器没开时自己起一个
 //   node scripts/check.mjs --all           全部
 //   node scripts/check.mjs --update-baseline   模拟行为有意改变时，用这次的输出更新基线
+//   node scripts/check.mjs --only=基线,存档   只跑名字里含这些词的项
 // 输出都按 UTF-8 收集，不经过终端的编码转换，所以基线在哪台机器上录都一样
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -99,7 +100,9 @@ async function devServer() {
   return p;
 }
 
-const steps = ONLY_UI ? UI_STEPS : [...FAST_STEPS, ...(FAST ? [] : NODE_STEPS), ...(ALL ? UI_STEPS : [])];
+const ONLY = process.argv.find((a) => a.startsWith('--only='))?.slice(7).split(',');
+const picked = ONLY ? [...FAST_STEPS, ...NODE_STEPS, ...UI_STEPS].filter((s) => ONLY.some((o) => s.name.includes(o))) : null;
+const steps = picked ?? (ONLY_UI ? UI_STEPS : [...FAST_STEPS, ...(FAST ? [] : NODE_STEPS), ...(ALL ? UI_STEPS : [])]);
 const results = [];
 let server = null;
 try {

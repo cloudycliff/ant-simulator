@@ -79,22 +79,29 @@ console.log(`存档 ${(json.length / 1024).toFixed(0)} KB，序列化 ${(t1 - t0
 const sizes = Object.entries(data).map(([k, v]) => `${k} ${(JSON.stringify(v).length / 1024).toFixed(0)}`);
 console.log(`各部分（KB）：${sizes.join('  ')}`);
 
-/** 读档后必须原样恢复的指标（物品数、储备和信息素会因读档时搬运中的东西直接送到或丢掉而变） */
-const EXACT = ['ants', 'brood', 'chambers', 'edges', 'sources', 'aphids', 'placed', 'puddles', 'weather'];
+/** 读档后必须原样恢复的指标 */
+const EXACT = ['ants', 'outside', 'brood', 'items', 'food', 'liquid', 'chambers', 'edges', 'project', 'sources', 'aphids', 'pheromone', 'placed', 'puddles', 'predators', 'stats', 'weather'];
 const problems: string[] = [];
 const ma = metrics(a);
 const mb = metrics(b);
 console.log('\n指标            原世界 | 读档后');
 for (const k of Object.keys(ma)) console.log(`${k.padEnd(10)} ${ma[k]} | ${mb[k]}${ma[k] === mb[k] ? '' : '   ← 不同'}`);
 for (const k of EXACT) if (ma[k] !== mb[k]) problems.push(`读档后 ${k} 不同`);
-const inTransit = a.colony.ants.filter((x) => x.carrying).length;
-if (Math.abs(a.colony.items.size - b.colony.items.size) > inTransit) problems.push(`读档后物品数差 ${a.colony.items.size - b.colony.items.size}，超过搬运中的 ${inTransit} 件`);
+const carryA = a.colony.ants.filter((x) => x.carrying).length;
+const carryB = b.colony.ants.filter((x) => x.carrying).length;
+console.log(`搬运中的物品：原世界 ${carryA} 件，读档后 ${carryB} 件`);
+if (carryA !== carryB) problems.push('读档后搬运中的物品数不同');
+const held = b.colony.ants.filter((x) => x.carrying).map((x) => [x, x.carrying!] as const);
 const bad1 = check(b);
 console.log('一致性检查：', bad1.join('；') || '通过');
 problems.push(...bad1);
 
 run(a, 1200);
-run(b, 1200);
+run(b, 300);
+const stuck = held.filter(([x, it]) => x.alive && x.carrying === it).length;
+console.log(`读档时搬运中的 ${held.length} 件，300 秒后还拿在原来的蚂蚁手里：${stuck} 件`);
+if (stuck) problems.push(`读档后有 ${stuck} 件东西一直没送到`);
+run(b, 900);
 const ma2 = metrics(a);
 const mb2 = metrics(b);
 console.log('\n再运行 1200 秒');

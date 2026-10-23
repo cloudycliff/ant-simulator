@@ -120,6 +120,10 @@ export const CONFIG = {
     /** 隧道里前后相距不到该值、左右不到 0.4 的同伴算挨得太近，各自横向让开 */
     tunnelGap: 0.9,
     speedSurface: 3.2,
+    /** 贴边绕行：朝障碍一侧弯的角速度（弧度/秒）、目标方向前方探测的距离、最长连续贴边秒数 */
+    hugRate: 2.5,
+    hugProbe: 2.5,
+    hugMax: 25,
     speedNest: 2.4,
     hungerPerDay: 0.4,
     eatAmount: 0.25,

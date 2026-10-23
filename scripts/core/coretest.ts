@@ -1,5 +1,5 @@
 /**
- * 框架层的单元测试，不依赖任何游戏：图上行走、地表转向与绕行、空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
+ * 框架层的单元测试，不依赖任何游戏：图上行走、地表转向与绕行、行为协程、空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
  * npx tsx scripts/core/coretest.ts
  */
 import * as THREE from 'three';
@@ -11,6 +11,7 @@ import { SaveRegistry } from '../../src/core/sim/saves';
 import { Simulation } from '../../src/core/sim/simulation';
 import { GraphWalker, Routes, samplePolyline, type GraphEdge } from '../../src/core/move/graph';
 import { Skirt, turnToward } from '../../src/core/move/surface';
+import { Behavior } from '../../src/core/sim/behavior';
 
 let failed = 0;
 const check = (name: string, ok: boolean, info?: unknown) => {
@@ -69,6 +70,48 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
     if (flipped < 0 && near(Math.cos(h - h1), -1, 1e-9)) flipped = i;
   }
   check('一直走不出去时约 3 秒后换方向', flipped >= 29 && flipped <= 31, flipped);
+  for (let i = 0; i < 20; i++) s.track(5, 5, 0.1);
+  check('被困反向后离开障碍再碰上，仍保持新方向', near(Math.cos(s.steer(-1, 0, h1, 0, 0) - h), 1, 1e-9));
+  for (let i = 0; i < 220; i++) s.track(9, 9, 0.1);
+  check('保持期过后按朝向重新选择', near(Math.cos(s.steer(-1, 0, h1, 0, 0) - h1), 1, 1e-9));
+  // 在 (-1, 0) 绕圆心 (0, 0)，朝障碍是 0 方向
+  check('贴边时朝障碍一侧弯', Math.cos(s.hug(h1, 2, 0.5)) > 0.8 && s.following(25));
+  for (let i = 0; i < 16; i++) s.track(-1, 0, 0.1);
+  check('一段时间没碰到障碍就不再贴边', !s.following(25));
+}
+
+// ---------------- 行为协程 ----------------
+{
+  type Cmd = { k: string; n: number };
+  const b = new Behavior<Cmd>();
+  const log: string[] = [];
+  let made = 0;
+  function* routine(): Generator<Cmd, void, unknown> {
+    made++;
+    const got = yield { k: 'a', n: 2 };
+    log.push(`got ${got}`);
+    yield { k: 'b', n: 1 };
+  }
+  const left = new Map<Cmd, number>();
+  const exec = (c: Cmd, first: boolean) => {
+    if (first) left.set(c, c.n);
+    log.push(`${c.k}${first ? '!' : ''}`);
+    const n = left.get(c)! - 1;
+    left.set(c, n);
+    if (n > 0) return false;
+    if (c.k === 'a') b.result = 42;
+    return true;
+  };
+  b.run(routine, exec);
+  b.run(routine, exec);
+  check('命令跨帧执行，完成后同一帧接着下一条、结果传回协程，协程结束后同一帧开始新协程', log.join(' ') === 'a! a got 42 b! a!' && made === 2, log.join(' '));
+  log.length = 0;
+  b.run(routine, exec, 2);
+  check('每帧最多执行 maxCmds 条命令', made === 2 && log.join(' ') === 'a got 42 b!', log.join(' '));
+  b.abort();
+  log.length = 0;
+  b.run(routine, exec, 1);
+  check('abort 丢掉当前命令和协程，下一帧从新协程开头开始', made === 3 && log.join(' ') === 'a!' && b.started, log.join(' '));
 }
 
 // ---------------- 高度场空间 ----------------

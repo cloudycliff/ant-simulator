@@ -29,6 +29,7 @@ src/
     sim/                不依赖 WebGL 和 DOM
       simulation.ts     Simulation：模拟内核。时钟、随机数 rng、编号 ids、按登记顺序每步推进的子系统、存档登记、最近事件、advance（固定步长、帧预算、实际倍速）
       ids.ts            IdPool：每类对象各自的编号计数，归世界所有并进存档
+      behavior.ts       Behavior：行为协程内核。生成器 yield 指令，运动层逐帧执行，完成后把结果传回协程，一帧最多推进几条
       saves.ts          SaveRegistry：存档的各部分（字段名、保存、恢复、是否可选），读档按登记顺序恢复；`addLast` 的部分最后恢复
       entities.ts       EntityRegistry：每类对象的位置、相机观察距离、能否跟随、读档后编号是否还对得上；选中、飞过去、跟随、事件定位都查它
       events.ts         EventLog：最近事件（时刻、文字、涉及的对象、位置），对象的位置由游戏提供
@@ -40,7 +41,7 @@ src/
       quality.ts        画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
     move/               运动方式，不依赖 DOM
       graph.ts          图上行走：Routes（所有节点对的最短路）、GraphWalker（在哪条边上、走了多远、一跳一跳走向目标）、折线边取点、圆管隧道底部的落脚点
-      surface.ts        地表运动：限速转向、贴合地面、Skirt（沿圆形障碍绕行，被困时反向）
+      surface.ts        地表运动：限速转向、贴合地面、Skirt（沿圆形障碍贴边绕行，被困时反向并保持一段时间）
     space/
       space.ts          Space：相机能去的范围、某处的表面高度、视线和表面的交点；相机、点选、工具都通过它
       heightfield.ts    HeightfieldSpace：一张高度场的地面（沿视线步进再二分求交点）
@@ -106,7 +107,7 @@ scripts/
   i18ncheck.ts          界面文字检查：两个游戏和框架的中英文占位符一致，游戏的键不和框架重名，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
   core/
     layercheck.mjs      依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
-    coretest.ts         框架层单元测试：图上行走、地表转向与绕行、高度场和体积空间求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
+    coretest.ts         框架层单元测试：图上行走、地表转向与绕行、行为协程、高度场和体积空间求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
   games/ant/            蚂蚁游戏的无界面测试，失败时退出码非零
     simtest.ts          无界面模拟测试
     baseline/           simtest 在固定编号下的输出，check.mjs 拿它逐行对比
@@ -206,6 +207,8 @@ requestAnimationFrame
 
 ### 蚂蚁的两层结构
 
+两层由 `Ant.behavior`（`core/sim/behavior.ts` 的 `Behavior<Command>`）接起来：`Ant.update` 调用 `behavior.run(下一个协程, 执行一条指令)`，协程跑完时向 `Colony.newRoutine` 要下一个。指令的结果写在 `behavior.result`，作为 `yield` 的返回值交给协程；`behavior.started` 表示当前指令已经开始执行（`first` 参数由它而来）；`Ant.abort` 丢掉协程和指令。
+
 **运动层**（`Ant.step`）。每帧执行当前指令，完成后返回 `true`：
 
 | 指令 | 含义 |
@@ -220,7 +223,7 @@ requestAnimationFrame
 | `climb {x, z, angle, r, top, stay}` | 走到植物茎秆旁，沿茎秆爬到 `top` 高度停留 `stay` 秒，再爬下来 |
 | `wait {time}` | 原地停留 |
 
-和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`，再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则仍写在 `Ant.surfaceMove` 里。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
+和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`，再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`：碰到障碍沿切线走，之后只要朝目标方向 `hugProbe` 以内还挡着，就用 `Skirt.hug` 朝障碍一侧弯着贴边走，而不是转回目标；树枝这类成串的圆，切线撞进下一个圆时沿两圆中点的切线滑过去。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则仍写在 `Ant.surfaceMove` 里。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
 
 **行为层**（`routines.ts`）。每个职别一个入口协程，按优先级（带随机性）选择一项任务：
 
@@ -255,7 +258,9 @@ requestAnimationFrame
 
 ### 存档（`world/save.ts`）
 
-页面启动时 `runApp` 先 `create(seed)`（即 `new World(seed)`），有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号。设计取舍见 DECISIONS T-027。
+页面启动时 `runApp` 先 `create(seed)`（即 `new World(seed)`），有存档就 `loadWorld` 套上去，然后才创建视图。存档放在 `saveSlot`（`SaveSlot<SaveData, AntSaveMeta>`，键 `cyber-ant-save`），摘要由 `saveMeta` 生成。`saveWorld` 是存档头（版本、种子、保存时间）加上 `World.saves` 登记的各部分，`loadWorld` 检查版本和种子后按登记顺序恢复。读档顺序：时钟 → 蚁穴结构 → 玩家障碍物 → 水洼 → 天敌 → 食物源 → 蚜虫群 → 信息素 → 蚁群（蚂蚁、物品、扩建工程）。蚁群必须最后恢复，因为蚂蚁的位置和物品所在的房间都引用蚁穴的节点和房间编号；随机数和编号计数由 `Simulation` 用 `addLast` 登记，在这些之后恢复。设计取舍见 DECISIONS T-027。
+
+行为协程不进存档，读档后每只蚂蚁从新任务开始。搬运中的物品随蚂蚁存档（`AntSave.carry` 是物品编号），读档后还在它嘴里，`Colony.newRoutine` 先交给 `finishCarry`：按物品种类把它送到该去的地方（食物进储食室、土粒按扩建工程倒掉、尸体和巢外垃圾运出去、巢内垃圾进垃圾室、幼体进对应房间）。新增一种可搬运的物品时要在 `finishCarry` 里补一个分支（T-059）。
 
 ### 主循环与后台运行
 
@@ -298,7 +303,7 @@ requestAnimationFrame
 **新增一个任务**
 1. 在 `routines.ts` 写一个 `function*`，用 `yield` 下达指令
 2. 在对应职别的协程里按优先级调用它
-3. 取物品前先设置 `claimedBy`，到达后用 `stillMine` 确认；放弃任务时释放认领
+3. 取物品前先设置 `claimedBy`，到达后用 `stillMine` 确认；放弃任务时释放认领。拿起之后的送货部分写成单独的子协程（`yield*` 调用），读档后 `finishCarry` 也用它
 4. 设置 `a.activity = L('act.键', 参数)`（信息面板显示）；关键事件用 `a.note(w, L('note.键'))` 记进个体日志。新键在 `zh.ts` 和 `en.ts` 里都要加
 
 **新增一个职别**
@@ -336,6 +341,7 @@ npm run check:fast    # 只跑类型检查、依赖方向、框架单元测试�
 npm run check:ui      # 构建 + 浏览器测试 + 各屏幕布局截图，约 6 分钟；没开开发服务器时自己起一个
 node scripts/check.mjs --all               # 全部
 node scripts/check.mjs --update-baseline   # 模拟行为有意改变时，用这次的输出更新基线
+node scripts/check.mjs --only=存档,框架     # 只跑名字含这些片段的项，排查时用
 ```
 每项一行“通过 / 失败、耗时、摘要”，失败的项接着打印输出的最后 30 行，有失败时退出码非零。模拟基线是默认世界跑 3000 秒的 `simtest` 输出，去掉耗时后必须逐行相同：只是重构时它应该不变；有意改了行为就加 `--update-baseline`，把基线文件的变化连同提交一起看，并把指标变化写进 `docs/PROGRESS.md`。GitHub Actions 上缺少基线文件时直接判失败。基线和 Node 的版本绑定：Windows 和 Linux 上同一版本逐行相同，Node 22 和 24 跑出来从第一个游戏日晚上起就不同了（数学函数的末位差异被放大）。CI 用 `.nvmrc` 里的版本，升级 Node 时要一起更新基线。
 

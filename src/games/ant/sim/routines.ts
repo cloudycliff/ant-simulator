@@ -269,6 +269,14 @@ function* carryBrood(a: Ant, w: World, it: Item, label: Text): Routine {
     return;
   }
   col.pickUp(a, it);
+  const target = yield* deliverBrood(a, w, it, label);
+  a.activity = L('act.tidyBrood');
+  yield { k: 'room', chamber: target.id, time: w.rng.range(1.5, 4) };
+}
+
+/** 把手里的幼体放进它该去的房间 */
+function* deliverBrood(a: Ant, w: World, it: Item, label: Text): Generator<Command, Chamber, unknown> {
+  const col = w.colony;
   const target = col.targetChamberFor(it);
   const spot = col.pileSpot(target, it.type);
   a.activity = label;
@@ -276,8 +284,7 @@ function* carryBrood(a: Ant, w: World, it: Item, label: Text): Routine {
   const dropped = col.release(a);
   if (dropped) col.addToChamber(dropped, target, spot);
   a.note(w, label);
-  a.activity = L('act.tidyBrood');
-  yield { k: 'room', chamber: target.id, time: w.rng.range(1.5, 4) };
+  return target;
 }
 
 function* helpEclose(a: Ant, w: World, pupa: Item): Routine {
@@ -474,6 +481,11 @@ function* carryWasteInside(a: Ant, w: World, it: Item): Routine {
     return;
   }
   col.pickUp(a, it);
+  yield* deliverWasteInside(a, w);
+}
+
+function* deliverWasteInside(a: Ant, w: World): Routine {
+  const col = w.colony;
   const wc = chamber(w, 'waste');
   const spot = col.pileSpot(wc, 'waste');
   a.activity = L('act.carryWasteIn');
@@ -494,6 +506,12 @@ function* carryOut(a: Ant, w: World, it: Item, label: Text): Routine {
     return;
   }
   col.pickUp(a, it);
+  yield* takeOut(a, w, it, label);
+}
+
+/** 把手里的尸体或垃圾搬到巢外垃圾堆；入口全封住时放进垃圾室 */
+function* takeOut(a: Ant, w: World, it: Item, label: Text): Routine {
+  const col = w.colony;
   a.activity = label;
   if (a.domain === 'nest' && (yield { k: 'exit', giveUp: true }) === 'blocked') {
     const wc = chamber(w, 'waste');
@@ -544,6 +562,12 @@ function* dig(a: Ant, w: World): Routine {
   const soil = w.colony.newItem('soil');
   col.pickUp(a, soil);
   col.stats.soilExcavated++;
+  yield* dumpSoil(a, w, project);
+}
+
+/** 把挖出的土粒搬到巢外蚁丘上；入口全封住时压进隧道壁 */
+function* dumpSoil(a: Ant, w: World, project: boolean): Routine {
+  const col = w.colony;
   a.activity = L('act.carrySoil');
   if ((yield { k: 'exit', giveUp: true }) === 'blocked') {
     a.activity = L('act.packSoilBlocked');
@@ -723,13 +747,46 @@ function* foragerRoutine(a: Ant, w: World): Routine {
   a.delivered++;
   col.stats.foodCollected++;
   if (found.kind === 'sugar') return yield* unloadCrop(a, w);
+  const store = yield* storeCarriedFood(a, w);
+  a.activity = L('act.linger');
+  yield { k: 'room', chamber: store.id, time: w.rng.range(2, 6) };
+}
+
+function* storeCarriedFood(a: Ant, w: World): Generator<Command, Chamber, unknown> {
+  const col = w.colony;
   const store = col.foodChamber();
   a.activity = L('act.storeFood');
   yield { k: 'room', chamber: store.id, time: 0.3, point: col.pileSpot(store, 'food') };
   col.storeFood(a);
   a.note(w, L('note.storedFood'));
-  a.activity = L('act.linger');
-  yield { k: 'room', chamber: store.id, time: w.rng.range(2, 6) };
+  return store;
+}
+
+/**
+ * 读档时手里还拿着东西的蚂蚁先做这件事：按物品把它送到原来要去的地方。
+ * 去哪里只看物品和所在位置（协程不进存档），和原任务的目的地一致
+ */
+export function* finishCarry(a: Ant, w: World): Routine {
+  const it = a.carrying!;
+  switch (it.type) {
+    case 'food':
+      if (a.domain === 'surface') {
+        a.activity = L('act.returnFood');
+        yield { k: 'enter' };
+      }
+      yield* storeCarriedFood(a, w);
+      return;
+    case 'soil':
+      return yield* dumpSoil(a, w, false);
+    case 'corpse':
+      return yield* takeOut(a, w, it, L('act.carryCorpseOut'));
+    case 'waste':
+      if (a.domain === 'nest') return yield* deliverWasteInside(a, w);
+      return yield* takeOut(a, w, it, L('act.carryWasteOut'));
+    default:
+      yield* goHome(a);
+      yield* deliverBrood(a, w, it, L('act.carryBrood', { item: ITEM_NAMES[it.type], room: w.colony.targetChamberFor(it).label }));
+  }
 }
 
 /** 蚜虫放牧：爬上寄主植物，拍打蚜虫收集蜜露；蜜露不多时留下守护蚜虫 */
