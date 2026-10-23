@@ -41,13 +41,23 @@ function run(label: string, x: number, z: number, secs: number, outskirts = fals
   let maxResp = 0;
   let maxGuards = 0;
   let goneAt = -1;
-  for (let t = 0; t < secs; t += step) {
+  let threatAt = -1;
+  let threatEnd = -1;
+  let guardsAt = -1;
+  let guardsHomeAt = -1;
+  for (let t = 0; t < secs + 60; t += step) {
     w.advance(step);
     const resp = w.colony.ants.filter((a) => a.alarmT > 0).length;
     maxResp = Math.max(maxResp, resp);
     maxMob = Math.max(maxMob, s.mob);
     maxGuards = Math.max(maxGuards, w.predators.guardsOut);
     if (goneAt < 0 && !w.predators.spiders.includes(s)) goneAt = t;
+    const threat = w.predators.threatEntrance >= 0;
+    if (threat && threatAt < 0) threatAt = t;
+    if (threatAt >= 0 && guardsAt < 0 && w.predators.guardsOut >= 3) guardsAt = t;
+    if (threatAt >= 0 && !threat && threatEnd < 0) threatEnd = t;
+    if (threatEnd >= 0 && guardsHomeAt < 0 && w.predators.guardsOut === 0) guardsHomeAt = t;
+    if (t >= secs && (threatEnd < 0 || guardsHomeAt >= 0)) break;
     if (Math.round(t / step) % Math.round(5 / step) === 0) {
       console.log(
         `t=${t.toFixed(0).padStart(3)}s ${w.predators.spiders.includes(s) ? `${s.state.padEnd(6)} mob=${s.mob} harass=${s.harass.toFixed(1)} meals=${s.meals}` : '已离开'.padEnd(28)}` +
@@ -56,12 +66,22 @@ function run(label: string, x: number, z: number, secs: number, outskirts = fals
     }
   }
   console.log(`结果：被捕食 / 咬死 ${st.preyed - p0}，赶走 ${st.repelled - r0}，最多同时围攻 ${maxMob}，最多增援 ${maxResp}，最多警戒 ${maxGuards}，${goneAt >= 0 ? `${goneAt.toFixed(0)} 秒后离开` : '仍在场'}`);
+  if (threatAt >= 0) {
+    const arrive = guardsAt >= 0 ? guardsAt - threatAt : Infinity;
+    const linger = threatEnd >= 0 ? (guardsHomeAt >= 0 ? guardsHomeAt - threatEnd : Infinity) : 0;
+    console.log(`警戒：威胁出现后 ${arrive.toFixed(0)} 秒有 3 只在外警戒；威胁解除后 ${linger.toFixed(0)} 秒全部回巢`);
+    if (arrive > GUARD_ARRIVE) problems.push(`${label}：警戒 ${arrive.toFixed(0)} 秒才到位`);
+    if (linger > GUARD_LINGER) problems.push(`${label}：威胁解除 ${linger.toFixed(0)} 秒后还有警戒`);
+  }
   if (w.predators.spiders.includes(s)) w.predators.remove(s);
   if (maxResp === 0 && !(outskirts && maxGuards > 0)) problems.push(`${label}：没有蚂蚁响应警报`);
   if (goneAt < 0 && !outskirts) problems.push(`${label}：狼蛛 ${secs} 秒内没有离开`);
 }
 
 const problems: string[] = [];
+/** 入口受威胁后几秒内要有 3 只出来警戒；威胁解除后几秒内要全部回巢（围攻处的警报约 20 秒才散） */
+const GUARD_ARRIVE = Number(process.env.GUARD_ARRIVE ?? 10);
+const GUARD_LINGER = Number(process.env.GUARD_LINGER ?? 35);
 
 const spot = busiestSpot();
 console.log(`热身 ${warm} 秒，最密集处 ${spot.n} 只`);

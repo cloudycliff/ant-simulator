@@ -1,13 +1,35 @@
-/** 蚁群里个体之间的互动：保持间距、触角接触、按需调整分工。Colony.update 调用 */
+/** 蚁群里个体之间的互动：保持间距、触角接触、按需调整分工、招呼警戒。Colony.update 和 PredatorManager 调用 */
 import { CONFIG, type Role } from '../config';
 import { L } from '../../../core/i18n';
 import { clamp, lerp, smoothstep } from '../../../core/util/math';
 import type { Ant } from './ant';
 import { avoid, measureTunnel, shiftSide } from './antNest';
 import type { Colony } from './colony';
+import { guard } from './routines/maintenance';
 
 const ROLE_ORDER: Record<Role, number> = { queen: -1, nurse: 0, maintenance: 1, forager: 2 };
 const bySepS = (a: Ant, b: Ant) => a.sepS - b.sepS;
+
+/**
+ * 狼蛛刚逼近某个入口时，离入口最近的几只空手内务蚁放下手头的事出来警戒。
+ * 不这样的话要等它们各自做完手头的任务（几十秒）才会挑到警戒
+ */
+export function callGuards(col: Colony, entrance: number): void {
+  const w = col.w;
+  if (w.weather.keepIn) return;
+  const n = Math.min(CONFIG.defense.callGuards, CONFIG.defense.maxGuards - w.predators.guardsOut);
+  if (n <= 0) return;
+  const node = w.nest.entrances[entrance].node;
+  const picked = col.ants
+    .filter((a) => a.role === 'maintenance' && a.alive && a.domain === 'nest' && !a.carrying && a.plugging < 0 && !a.guarding)
+    .map((a) => ({ a, d: w.nest.routeLength(a.currentNode(w), node) }))
+    .sort((p, q) => p.d - q.d)
+    .slice(0, n);
+  for (const { a } of picked) {
+    a.abort();
+    a.behavior.start(guard(a, w, true));
+  }
+}
 
 /**
  * 让工蚁和身边的同伴保持间距。隧道里按所在的边分组、按沿边位置排序，只比较前后 tunnelGap 以内的同伴，

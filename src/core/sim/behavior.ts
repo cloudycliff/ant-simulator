@@ -40,6 +40,13 @@ export class Behavior<C> {
     }
   }
 
+  /** 丢掉当前协程和指令，下一帧从 r 开始（比如有急事要临时调派） */
+  start(r: Routine<C>): void {
+    this.routine = r;
+    this.cmd = null;
+    this.result = undefined;
+  }
+
   /** 放弃当前任务，下一帧开新任务 */
   abort(): void {
     this.routine = null;

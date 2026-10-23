@@ -200,7 +200,13 @@ export function* guard(a: Ant, w: World, threat = false): Routine {
   const ent = threat && ti >= 0 ? w.nest.entrances[ti] : w.nest.nearestEntrance(a.pos.x, a.pos.z);
   a.activity = L(threat ? 'act.guardingThreat' : 'act.guarding');
   a.note(w, L(threat ? 'note.guardThreat' : 'note.guard', { ent: ent.label }));
-  yield { k: 'patrol', x: ent.x, z: ent.z, radius: threat ? 7 : 4.5, time: w.rng.range(25, 60) };
+  const D = CONFIG.defense;
+  if (threat) {
+    // 分段巡逻，每段结束看一眼威胁还在不在；狼蛛走了就回巢
+    const until = w.clock.seconds + w.rng.range(25, 60);
+    do yield { k: 'patrol', x: ent.x, z: ent.z, radius: 7, time: D.guardCheckSec };
+    while (w.clock.seconds < until && w.predators.threatEntrance >= 0);
+  } else yield { k: 'patrol', x: ent.x, z: ent.z, radius: 4.5, time: w.rng.range(25, 60) };
   a.guarding = false;
   a.activity = L('act.guardEnd');
   yield { k: 'enter' };

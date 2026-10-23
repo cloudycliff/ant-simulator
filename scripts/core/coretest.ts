@@ -112,6 +112,13 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
   log.length = 0;
   b.run(routine, exec, 1);
   check('abort 丢掉当前命令和协程，下一帧从新协程开头开始', made === 3 && log.join(' ') === 'a!' && b.started, log.join(' '));
+  function* urgent(): Generator<Cmd, void, unknown> {
+    yield { k: 'z', n: 1 };
+  }
+  b.start(urgent());
+  log.length = 0;
+  b.run(routine, exec, 3);
+  check('start 换成指定的协程，它结束后再用 next 开新任务', made === 4 && log.join(' ') === 'z! a!', log.join(' '));
 }
 
 // ---------------- 高度场空间 ----------------

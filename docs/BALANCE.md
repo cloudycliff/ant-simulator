@@ -85,10 +85,12 @@
 | `defense.alarmHalfLife / alarmRadius / alarmMax` | 6 / 10 / 1.5 | 警报信息素半衰期（秒）、有效半径（cm）、单处强度上限 |
 | `defense.alarmOnAttack / mobEmit` | 1 / 0.5 | 狼蛛扑击时释放的警报强度；每只围攻工蚁每秒补充的强度 |
 | `defense.respondLevel / defendSec` | 0.15 / 15–30 | 闻到的浓度超过该值就去增援；增援持续秒数 |
+| `defense.calmSec` | 4 | 附近没有狼蛛、警报也低于 respondLevel 时，增援最多再持续的秒数 |
 | `defense.rushSpeed / chaseRange / biteRange` | 1.3 / 12 / 1.3 | 增援时速度倍数；发现狼蛛的距离、贴身撕咬的距离（cm） |
 | `defense.harassLimit / harassRecover` | 14 / 1 | 狼蛛被咬程度（工蚁数 × 秒）的上限，超过就逃走；没被咬时每秒恢复量 |
 | `defense.mobKillPerSec` | 0.025 | 围攻时每只工蚁每秒被咬死的概率 |
 | `defense.guardRadius / holdBackProb / guardProb / maxGuards` | 20 / 0.7 / 0.5 / 24 | 狼蛛离入口多近算威胁；受威胁时觅食蚁留巢的概率、内务蚁出巢警戒的概率与人数上限 |
+| `defense.callGuards / guardCheckSec` | 8 / 5 | 入口刚受威胁时立刻调派离入口最近的空手内务蚁数；警戒蚁每巡逻几秒看一次威胁还在不在 |
 | `defense.pitAvoidPad` | 1 | 记住陷阱的蚂蚁在陷阱半径外再留出的距离（cm） |
 | `weather.rainPerDay / firstRainDay` | 0.6 / 1 | 平均每天下雨次数（每游戏小时判定一次）；第一个游戏日不自然下雨 |
 | `weather.overcastSec / rainDays / rainStrength` | 25 / 0.1–0.25 / 0.45–1 | 下雨前转阴的秒数；一场雨的游戏日长度；雨势范围（> 0.75 显示为大雨） |

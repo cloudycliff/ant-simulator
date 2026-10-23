@@ -414,6 +414,9 @@ export class Ant {
       const dx = this.alarmX - this.pos.x;
       const dz = this.alarmZ - this.pos.z;
       const far = dx * dx + dz * dz > 2.25;
+      // 狼蛛走了、警报也散了，就不再四处搜寻
+      const src = w.alarm.strongest(this.pos.x, this.pos.z);
+      if (!src || src.level < D.respondLevel) this.alarmT = Math.min(this.alarmT, D.calmSec);
       this.activity = L('act.searchEnemy');
       surfaceMove(this, dt, w, far ? Math.atan2(dz, dx) : this.heading + w.rng.gauss(0, 1) * 2 * Math.sqrt(dt), 6, far ? D.rushSpeed : 0.7);
     }

@@ -5,6 +5,7 @@ import { clamp, TAU, wrapAngle } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import type { IdPool } from '../../../core/sim/ids';
 import type { Ant } from '../sim/ant';
+import { callGuards } from '../sim/colonySocial';
 import type { Terrain } from './terrain';
 import type { Vegetation } from './vegetation';
 import type { World } from './world';
@@ -227,6 +228,7 @@ export class PredatorManager {
       if (a.guarding) this.guardsOut++;
       if (!a.climbing) this.surface.push(a);
     }
+    const prevThreat = this.threatEntrance;
     this.threatEntrance = -1;
     let td = CONFIG.defense.guardRadius;
     for (const s of this.spiders) {
@@ -239,6 +241,7 @@ export class PredatorManager {
         }
       });
     }
+    if (this.threatEntrance >= 0 && prevThreat < 0) callGuards(w.colony, this.threatEntrance);
 
     const natural = this.spiders.filter((s) => !s.placed).length;
     if (natural < P.maxNaturalSpiders && this.spiders.length < P.maxSpiders && w.weather.phase === 'clear' && this.rng.chance(days * P.spiderPerDay)) {

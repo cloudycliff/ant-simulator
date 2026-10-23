@@ -198,6 +198,8 @@ export const CONFIG = {
     /** 闻到的浓度（强度 × 距离衰减）超过该值时赶去增援；增援持续秒数 */
     respondLevel: 0.15,
     defendSec: [15, 30] as [number, number],
+    /** 附近没有狼蛛、闻到的警报也低于 respondLevel 时，增援最多再持续这么多秒 */
+    calmSec: 4,
     /** 增援时的速度倍数；发现狼蛛的距离；贴身撕咬的距离 */
     rushSpeed: 1.3,
     chaseRange: 12,
@@ -214,6 +216,10 @@ export const CONFIG = {
     holdBackProb: 0.7,
     guardProb: 0.5,
     maxGuards: 24,
+    /** 威胁刚出现时，离那个入口最近的这么多只空手内务蚁放下手头的事出来警戒 */
+    callGuards: 8,
+    /** 警戒时每隔这么多秒看一眼威胁还在不在 */
+    guardCheckSec: 5,
     /** 爬出陷阱的蚂蚁记住它，此后绕开（陷阱半径之外再留的距离） */
     pitAvoidPad: 1,
   },

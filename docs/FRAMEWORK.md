@@ -67,7 +67,7 @@ export class Hive extends Simulation<HiveRef> {
   readonly behavior = new Behavior<Command>();
   update(dt) { this.behavior.run(() => pickTask(this), (cmd, first) => this.step(dt, cmd, first)); }
   ```
-  `step` 返回 `true` 表示这条指令做完，`behavior.result` 里放给协程的结果。协程不能存档，读档后从新任务开始；手里拿着东西的，读档后先把它送到（蚂蚁的做法见 DECISIONS T-059）。鱼的行为简单，鱼缸没用它
+  `step` 返回 `true` 表示这条指令做完，`behavior.result` 里放给协程的结果。有急事要临时调派时用 `behavior.start(协程)` 换掉当前任务，`abort()` 则放弃当前任务、下一帧另选。协程不能存档，读档后从新任务开始；手里拿着东西的，读档后先把它送到（蚂蚁的做法见 DECISIONS T-059）。鱼的行为简单，鱼缸没用它
 - **事件**：`this.events.push(L('ev.xxx', 参数), 涉及的对象, 位置)`，对象和位置都可以省略
 - **文字**：模拟里只用 `L()` 记下键和参数，界面显示时再翻译
 - 改完写一个无界面测试（照 `scripts/games/aquarium/aquatest.ts`）：跑几个游戏日，检查个体不越界、关键行为发生、存档往返一致、同编号可重现、英文文字没漏翻
