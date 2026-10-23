@@ -65,9 +65,18 @@ src/
       zh.ts             中文词典，也是游戏所有键的来源
       en.ts             英文词典（单复数等写成函数）
     sim/                —— 模拟层，不依赖 WebGL ——
-      ant.ts            Ant：个体状态 + 运动层（执行指令）
-      routines.ts       行为层：各职别的任务协程
-      colony.ts         Colony：种群、物品、幼体发育、食物储备、死亡、分工评估、接触、蛹的温度调节、统计历史
+      ant.ts            Ant：个体状态、存档、警报与增援、按指令分派给运动层
+      antNest.ts        运动层（巢内）：沿隧道走、房间里漫游、出巢、和同伴避让
+      antSurface.ts     运动层（地表）：绕障碍 / 水洼 / 陷阱、返巢、搜索、走到某处、巡逻、爬植物
+      routines/         行为层：各职别的任务协程
+        index.ts          routineFor（按职别选入口协程）、finishCarry（读档后送完手里的东西）
+        common.ts         共用片段：取物、交哺、进食、休息、躲雨
+        nurse.ts          蚁后、保育蚁
+        maintenance.ts    内务蚁：尸体和垃圾、挖掘、封堵入口、警戒、巡视
+        forager.ts        觅食蚁：搜索、取食、放牧蚜虫、返巢储存
+      colony.ts         Colony：种群、物品放置与索引、食物储备、产卵与羽化、死亡、读档、每步推进、统计历史
+      colonySocial.ts   个体之间：保持间距、触角接触、分工评估
+      colonyBrood.ts    幼体发育、蛹的温度调节、储食变质、地表物品分解
       items.ts          Item：卵/幼虫/蛹/食物/垃圾/土粒/尸体
       expansion.ts      NestExpansion：拥挤度、规划新房间、分配挖掘工作面、推进隧道和房间的挖掘
     world/
@@ -194,7 +203,7 @@ requestAnimationFrame
 8. 定时任务：分工评估（每 0.02 天）、蛹的房间选择（每 0.01 天）、统计采样（每游戏小时，最多 1440 个点）、扩建（每 0.05 天）
 
 ### 分工与社会胃
-- `Colony.reviewRoles` 计算 `targets`，按行为年龄给工蚁设置 `nextRole`；`newRoutine` 在开始下一项任务前应用它（`applyRole`）
+- `reviewRoles`（`colonySocial.ts`）计算 `targets`，按行为年龄给工蚁设置 `nextRole`；`newRoutine` 在开始下一项任务前应用它（`applyRole`）
 - 液体只存在 `Ant.crop`。交哺统一走 `Colony.share(from, to, amount)`；`findRoommate` 找同房间里可交哺的同伴
 - 交哺和触角接触时双方调用 `Ant.hold(t, 目标点)`：停顿并转向对方，期间 `update` 直接返回
 
@@ -223,9 +232,9 @@ requestAnimationFrame
 | `climb {x, z, angle, r, top, stay}` | 走到植物茎秆旁，沿茎秆爬到 `top` 高度停留 `stay` 秒，再爬下来 |
 | `wait {time}` | 原地停留 |
 
-和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`，再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`：碰到障碍沿切线走，之后只要朝目标方向 `hugProbe` 以内还挡着，就用 `Skirt.hug` 朝障碍一侧弯着贴边走，而不是转回目标；树枝这类成串的圆，切线撞进下一个圆时沿两圆中点的切线滑过去。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则仍写在 `Ant.surfaceMove` 里。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
+和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`，再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`：碰到障碍沿切线走，之后只要朝目标方向 `hugProbe` 以内还挡着，就用 `Skirt.hug` 朝障碍一侧弯着贴边走，而不是转回目标；树枝这类成串的圆，切线撞进下一个圆时沿两圆中点的切线滑过去。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则写在 `antSurface.ts` 的 `surfaceMove` 里。运动层是普通函数，第一个参数是蚂蚁（`stepGoto(a, dt, w, node)`），由 `Ant.step` 按指令分派；它们读写的字段在 `Ant` 里标了属于哪个文件。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
 
-**行为层**（`routines.ts`）。每个职别一个入口协程，按优先级（带随机性）选择一项任务：
+**行为层**（`routines/`）。每个职别一个入口协程，按优先级（带随机性）选择一项任务：
 
 | 职别 | 任务优先级 |
 |---|---|
@@ -248,13 +257,13 @@ requestAnimationFrame
 
 界面层（`core/ui/tools.ts` 的 `ToolController`）只负责选工具和给出地面点，执行交给游戏传入的 `run`（`games/ant/ui/tools.ts`），由它调用这些方法。玩家放的障碍物记在 `Vegetation.placed`，移除时整张避障网格重建；自然生成的石块和植物不能移除。
 
-天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `Ant.surfaceMove` 里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
+天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `surfaceMove`（`antSurface.ts`）里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
 
-防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines.ts` 里觅食蚁出巢前和内务蚁选任务时读取它们。
+防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines/` 里觅食蚁出巢前和内务蚁选任务时读取它们。
 
-天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `Soil`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`Ant.stepExit` 只走没封死的入口；全部封死时带 `giveUp` 的 `exit` 指令以结果 `'blocked'` 结束，由协程决定怎么处理手里的东西（T-036）。雨后的分批出巢由 `WeatherSystem.damp` 控制。
+天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `Soil`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`stepExit`（`antNest.ts`）只走没封死的入口；全部封死时带 `giveUp` 的 `exit` 指令以结果 `'blocked'` 结束，由协程决定怎么处理手里的东西（T-036）。雨后的分批出巢由 `WeatherSystem.damp` 控制。
 
-地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `Ant.surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
+地表避障：`Vegetation.obstacleAt(x, z, pad, solid)`。水洼也登记为避障圆（`kind: 'water'`），放置检查能看到它；移动时传 `solid = true` 跳过水洼，水洼由 `surfaceMove` 单独处理（先绕行，绕不开就蹚水）。
 
 ### 存档（`world/save.ts`）
 
@@ -301,7 +310,7 @@ requestAnimationFrame
 ## 扩展指南
 
 **新增一个任务**
-1. 在 `routines.ts` 写一个 `function*`，用 `yield` 下达指令
+1. 在 `routines/` 里对应职别的文件写一个 `function*`，用 `yield` 下达指令；几个职别都用的放 `common.ts`
 2. 在对应职别的协程里按优先级调用它
 3. 取物品前先设置 `claimedBy`，到达后用 `stillMine` 确认；放弃任务时释放认领。拿起之后的送货部分写成单独的子协程（`yield*` 调用），读档后 `finishCarry` 也用它
 4. 设置 `a.activity = L('act.键', 参数)`（信息面板显示）；关键事件用 `a.note(w, L('note.键'))` 记进个体日志。新键在 `zh.ts` 和 `en.ts` 里都要加

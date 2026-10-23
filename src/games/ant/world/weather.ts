@@ -2,6 +2,7 @@ import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
 import { clamp, smoothstep } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
+import { updateClimate } from '../sim/colonyBrood';
 import type { World } from './world';
 
 export type WeatherPhase = 'clear' | 'overcast' | 'rain';
@@ -149,7 +150,7 @@ export class WeatherSystem {
       c.wet = clamp(c.wet + (this.rain * runoff * open * W.floodRate * depthK - W.drainRate) * dt, 0, 1);
       if (before < W.floodedAt && c.wet >= W.floodedAt) {
         w.events.push(L('ev.flooded', { room: c.label }), { kind: 'chamber', id: c.id });
-        w.colony.updateClimate();
+        updateClimate(w.colony);
       } else if (before >= W.floodedAt && c.wet < W.floodedAt) w.events.push(L('ev.drained', { room: c.label }), { kind: 'chamber', id: c.id });
     }
   }
