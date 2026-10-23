@@ -1,4 +1,4 @@
-// 添加到主屏幕与离线测试：先 npm run build，再 node scripts/pwatest.mjs
+// 添加到主屏幕与离线测试：先 npm run build，再 node scripts/ui/pwatest.mjs
 // 自带一个静态服务器提供 dist/，测完安装条件和离线缓存后关掉服务器再刷新，看断网时能否打开
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

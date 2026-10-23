@@ -7,9 +7,16 @@ import { join } from 'node:path';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const BASE = 'http://localhost:5173/';
 
+/** 环境变量 CHROME 可以指定浏览器的路径 */
+const CHROME =
+  process.env.CHROME ??
+  { win32: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }[process.platform] ??
+  'google-chrome';
+
 export async function launch(port) {
-  const chrome = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', [
+  const chrome = spawn(CHROME, [
     '--headless=new',
+    ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${mkdtempSync(join(tmpdir(), 'cdp-'))}`,
     'about:blank',

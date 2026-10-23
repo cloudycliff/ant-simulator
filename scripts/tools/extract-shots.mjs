@@ -1,4 +1,4 @@
-// 从浏览器场景捕获结果中提取所有截图：node scripts/extract-shots.mjs <capture.txt> <输出前缀>
+// 从浏览器场景捕获结果中提取所有截图：node scripts/tools/extract-shots.mjs <capture.txt> <输出前缀>
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 

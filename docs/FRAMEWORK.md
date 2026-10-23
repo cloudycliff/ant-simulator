@@ -43,7 +43,7 @@ src/games/<name>/
 
 ### 1. 复制模板
 
-把 `src/games/aquarium` 复制成 `src/games/<name>`，`aquarium.html` 和 `src/aquarium.ts` 同样复制改名。在 `vite.config.ts` 里加一个 mode，在 `package.json` 的 `build` 后面接一条 `vite build --mode <name>`。`node scripts/layercheck.mjs` 会自动检查新目录：游戏不能导入别的游戏，`core` 不能导入游戏。
+把 `src/games/aquarium` 复制成 `src/games/<name>`，`aquarium.html` 和 `src/aquarium.ts` 同样复制改名。在 `vite.config.ts` 里加一个 mode，在 `package.json` 的 `build` 后面接一条 `vite build --mode <name>`。`node scripts/core/layercheck.mjs` 会自动检查新目录：游戏不能导入别的游戏，`core` 不能导入游戏。
 
 ### 2. 世界
 
@@ -65,7 +65,7 @@ export class Hive extends Simulation<HiveRef> {
 - **实体**：能选中、能出现在事件里的对象都登记。`pos` 返回 null 表示已经不在了；可跟随的要返回对象自己的位置；读档后编号会变的设 `unstable`
 - **事件**：`this.events.push(L('ev.xxx', 参数), 涉及的对象, 位置)`，对象和位置都可以省略
 - **文字**：模拟里只用 `L()` 记下键和参数，界面显示时再翻译
-- 改完写一个无界面测试（照 `scripts/aquatest.ts`）：跑几个游戏日，检查个体不越界、关键行为发生、存档往返一致、同编号可重现、英文文字没漏翻
+- 改完写一个无界面测试（照 `scripts/games/aquarium/aquatest.ts`）：跑几个游戏日，检查个体不越界、关键行为发生、存档往返一致、同编号可重现、英文文字没漏翻
 
 ### 3. 存档位
 
@@ -114,10 +114,9 @@ export const hiveSave = {
 
 ### 8. 验证
 
-- `npm run typecheck`、`node scripts/layercheck.mjs`、`npx tsx scripts/coretest.ts`、`npx tsx scripts/i18ncheck.ts`
-- 自己的无界面测试，照 `scripts/aquatest.ts`
-- 截图，照 `scripts/aquashots.mjs`：桌面和竖屏手机，白天、夜里、选中、工具、英文
-- 改了 `src/core` 的话，两个已有的游戏都要回归：蚂蚁游戏用固定编号跑 `simtest` 对比输出、跑浏览器测试；鱼缸跑 `aquatest`
+- 自己的无界面测试放在 `scripts/games/<name>/`，照 `scripts/games/aquarium/aquatest.ts`，失败时设 `process.exitCode = 1`；然后加进 `scripts/check.mjs` 的步骤列表
+- `npm run check` 全部通过：类型检查、依赖方向、框架单元测试、界面文字、各个游戏的无界面测试和蚂蚁游戏的模拟基线。改了 `src/core` 时它同时回归了已有的游戏；动了外壳再跑 `npm run check:ui`
+- 截图，照 `scripts/games/aquarium/aquashots.mjs`：桌面和竖屏手机，白天、夜里、选中、工具、英文
 
 ## 还没有的
 

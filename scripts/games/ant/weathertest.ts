@@ -1,10 +1,10 @@
 /**
  * 天气测试：热身后招来一场雨，观察觅食蚁返巢、入口封堵、信息素冲刷、浅层房间进水和雨后重开。
- * npx tsx scripts/weathertest.ts [热身秒数，默认 300] [观察秒数，默认 600]
+ * npx tsx scripts/games/ant/weathertest.ts [热身秒数，默认 300] [观察秒数，默认 600]
  */
-import { tr } from '../src/core/i18n';
-import { CONFIG } from '../src/games/ant/config';
-import { World } from '../src/games/ant/world/world';
+import { tr } from '../../../src/core/i18n';
+import { CONFIG } from '../../../src/games/ant/config';
+import { World } from '../../../src/games/ant/world/world';
 
 const warm = Number(process.argv[2] ?? 300);
 const secs = Number(process.argv[3] ?? 600);
@@ -71,3 +71,10 @@ console.log(
 console.log(`等在入口的原因：${blockedWhy}`);
 console.log('期间的事件：');
 for (const e of log) console.log(' ', e);
+const problems: string[] = [];
+if (minOut > out0 / 3) problems.push(`雨中巢外还有 ${minOut} 只（雨前 ${out0}）`);
+if (sealedAt < 0) problems.push('入口没有全部封住');
+if (rainEnd < 0) problems.push(`${secs} 秒内雨没停`);
+if (reopenAt < 0) problems.push('雨后入口没有重新打开');
+console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
+if (problems.length) process.exitCode = 1;

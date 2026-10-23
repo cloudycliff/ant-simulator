@@ -1,10 +1,10 @@
 /**
  * 防御测试：在蚂蚁来往多的地方和巢口附近各放一只狼蛛，观察警报、围攻、驱赶和入口警戒。
- * npx tsx scripts/defensetest.ts [热身秒数，默认 500]
+ * npx tsx scripts/games/ant/defensetest.ts [热身秒数，默认 500]
  */
-import { tr } from '../src/core/i18n';
-import { CONFIG } from '../src/games/ant/config';
-import { World } from '../src/games/ant/world/world';
+import { tr } from '../../../src/core/i18n';
+import { CONFIG } from '../../../src/games/ant/config';
+import { World } from '../../../src/games/ant/world/world';
 
 const warm = Number(process.argv[2] ?? 500);
 const w = new World();
@@ -56,7 +56,11 @@ function run(label: string, x: number, z: number, secs: number): void {
   }
   console.log(`结果：被捕食 / 咬死 ${st.preyed - p0}，赶走 ${st.repelled - r0}，最多同时围攻 ${maxMob}，最多增援 ${maxResp}，最多警戒 ${maxGuards}，${goneAt >= 0 ? `${goneAt.toFixed(0)} 秒后离开` : '仍在场'}`);
   if (w.predators.spiders.includes(s)) w.predators.remove(s);
+  if (maxResp === 0) problems.push(`${label}：没有蚂蚁响应警报`);
+  if (goneAt < 0) problems.push(`${label}：狼蛛 ${secs} 秒内没有离开`);
 }
+
+const problems: string[] = [];
 
 const spot = busiestSpot();
 console.log(`热身 ${warm} 秒，最密集处 ${spot.n} 只`);
@@ -68,3 +72,5 @@ for (let t = 0; t < 60; t += step) w.advance(step);
 const e2 = w.nest.entrances[1];
 const ang = Math.atan2(e2.z, e2.x);
 run(`${tr(e2.label)}外 16 cm`, e2.x + Math.cos(ang) * 16, e2.z + Math.sin(ang) * 16, 120);
+console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
+if (problems.length) process.exitCode = 1;

@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && vite build --mode aquarium",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
+    "check": "node scripts/check.mjs",
+    "check:fast": "node scripts/check.mjs --fast",
+    "check:ui": "node scripts/check.mjs --ui"
   },
   "dependencies": {
     "three": "^0.170.0"

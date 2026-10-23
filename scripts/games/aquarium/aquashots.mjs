@@ -1,7 +1,7 @@
 // 鱼缸示例的界面截图和几项浏览器里的检查：点选、喂食工具、手机抽屉
-// 用法：node scripts/aquashots.mjs [场景名的子串，可多个]；图片在 shots/aquarium/
+// 用法：node scripts/games/aquarium/aquashots.mjs [场景名的子串，可多个]；图片在 shots/aquarium/
 import { mkdirSync } from 'node:fs';
-import { BASE, launch, sleep } from './cdp.mjs';
+import { BASE, launch, sleep } from '../../ui/cdp.mjs';
 
 const VIEWPORTS = [
   ['desktop', 1280, 800, false],

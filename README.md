@@ -27,15 +27,19 @@
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # 类型检查 + 生产构建，输出单个文件 dist/index.html（并复制为根目录的 cyber-ant-farm.html）和鱼缸示例 dist/aquarium.html
-npx tsx scripts/simtest.ts 3000   # 无界面模拟 5 个游戏日（6000 为 10 天），检查行为与平衡
-npx tsx scripts/savetest.ts       # 存档往返测试
-npx tsx scripts/defensetest.ts    # 放入狼蛛，观察警报、围攻与入口警戒
-npx tsx scripts/weathertest.ts    # 招来一场雨，观察躲雨、封堵入口与进水
-npx tsx scripts/perftest.ts 3000  # 3000 只工蚁的模拟耗时
+npm run check      # 一键检查：类型、依赖方向、单元测试、文字、模拟基线和各项无界面测试（约 3 分钟）
+npm run check:ui   # 构建 + 无头 Chrome 里的页面测试和各屏幕布局截图（约 6 分钟）
+
+# 单独运行某项测试
+npx tsx scripts/games/ant/simtest.ts 3000   # 无界面模拟 5 个游戏日（6000 为 10 天），检查行为与平衡
+npx tsx scripts/games/ant/savetest.ts       # 存档往返测试
+npx tsx scripts/games/ant/defensetest.ts    # 放入狼蛛，观察警报、围攻与入口警戒
+npx tsx scripts/games/ant/weathertest.ts    # 招来一场雨，观察躲雨、封堵入口与进水
+npx tsx scripts/games/ant/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查
-node scripts/layercheck.mjs       # 依赖方向检查：框架层 src/core 不能导入游戏 src/games
-npx tsx scripts/coretest.ts       # 框架层单元测试
-npx tsx scripts/aquatest.ts       # 鱼缸示例的无界面检查
+node scripts/core/layercheck.mjs       # 依赖方向检查：框架层 src/core 不能导入游戏 src/games
+npx tsx scripts/core/coretest.ts       # 框架层单元测试
+npx tsx scripts/games/aquarium/aquatest.ts       # 鱼缸示例的无界面检查
 ```
 
 ### 不用服务器直接打开

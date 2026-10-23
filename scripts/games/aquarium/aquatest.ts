@@ -1,10 +1,10 @@
 /**
  * 鱼缸示例的无界面检查：鱼不出缸、喂食后会吃、开关灯和吃完的事件、存档往返、同编号可重现、英文文字没漏翻。
- * npx tsx scripts/aquatest.ts
+ * npx tsx scripts/games/aquarium/aquatest.ts
  */
-import { setLang, tr } from '../src/core/i18n';
-import { CONFIG } from '../src/games/aquarium/config';
-import { Tank, aqSave, type AqSaveData } from '../src/games/aquarium/tank';
+import { setLang, tr } from '../../../src/core/i18n';
+import { CONFIG } from '../../../src/games/aquarium/config';
+import { Tank, aqSave, type AqSaveData } from '../../../src/games/aquarium/tank';
 
 setLang('en');
 const STEP = 1 / 30;

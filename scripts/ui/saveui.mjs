@@ -1,5 +1,5 @@
 // 页面里的存档往返：Ctrl+S 保存 → 不带 new 重新打开 → 世界从存档恢复；页面标题随语言变化
-// 用法：node scripts/saveui.mjs [网址，默认 http://localhost:5173/]
+// 用法：node scripts/ui/saveui.mjs [网址，默认 http://localhost:5173/]
 import { BASE, launch, sleep } from './cdp.mjs';
 
 const ROOT = process.argv[2] ?? BASE;

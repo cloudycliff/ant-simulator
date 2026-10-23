@@ -1,11 +1,11 @@
 /**
  * 性能测试：以指定的工蚁数开局，统计每个模拟步各子系统的耗时。
- * npx tsx scripts/perftest.ts [工蚁数，默认 3000] [模拟秒数，默认 300]
+ * npx tsx scripts/games/ant/perftest.ts [工蚁数，默认 3000] [模拟秒数，默认 300]
  */
-import { tr } from '../src/core/i18n';
-import { ENGINE } from '../src/core/config';
-import { CONFIG } from '../src/games/ant/config';
-import { World } from '../src/games/ant/world/world';
+import { tr } from '../../../src/core/i18n';
+import { ENGINE } from '../../../src/core/config';
+import { CONFIG } from '../../../src/games/ant/config';
+import { World } from '../../../src/games/ant/world/world';
 
 const n = Number(process.argv[2] ?? 3000);
 const secs = Number(process.argv[3] ?? 300);

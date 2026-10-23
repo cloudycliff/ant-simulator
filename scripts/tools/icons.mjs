@@ -1,6 +1,6 @@
-// 从 src/assets/icon.svg 生成主屏幕图标到 public/。改了图标后运行：node scripts/icons.mjs
+// 从 src/assets/icon.svg 生成主屏幕图标到 public/。改了图标后运行：node scripts/tools/icons.mjs
 import { readFileSync } from 'node:fs';
-import { launch, sleep } from './cdp.mjs';
+import { launch, sleep } from '../ui/cdp.mjs';
 
 const svg = readFileSync('src/assets/icon.svg', 'utf8');
 const url = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;

@@ -1,5 +1,5 @@
 // 页面里的选中、跟随、飞过去、点击事件：这些都查实体注册表（DECISIONS T-053）
-// 用法：node scripts/selecttest.mjs [网址，默认 http://localhost:5173/]
+// 用法：node scripts/ui/selecttest.mjs [网址，默认 http://localhost:5173/]
 import { BASE, launch, sleep } from './cdp.mjs';
 
 const ROOT = process.argv[2] ?? BASE;

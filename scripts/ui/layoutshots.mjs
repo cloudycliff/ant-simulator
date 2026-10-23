@@ -1,5 +1,5 @@
 // 各种屏幕下的界面截图：手机 / 平板 / 桌面，横屏竖屏，几个典型场景
-// 用法：node scripts/layoutshots.mjs [视口名或场景名的子串，可多个] [--en]；图片在 shots/layout/
+// 用法：node scripts/ui/layoutshots.mjs [视口名或场景名的子串，可多个] [--en]；图片在 shots/layout/
 import { mkdirSync } from 'node:fs';
 import { BASE, launch, sleep } from './cdp.mjs';
 

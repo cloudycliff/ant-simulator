@@ -1,5 +1,5 @@
 // 依赖方向检查：src/core 不能导入 src/games 和 src/main.ts；一个游戏不能导入另一个游戏
-// 用法：node scripts/layercheck.mjs
+// 用法：node scripts/core/layercheck.mjs
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 

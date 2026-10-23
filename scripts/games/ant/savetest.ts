@@ -1,8 +1,8 @@
 // 存档往返测试：运行一段时间后存档，读进新世界，对比关键指标，再各自继续运行
-// 用法：npx tsx scripts/savetest.ts [存档前模拟秒数，默认 1900] [tunnel|chamber：继续运行到扩建处于该阶段再存档]
-import { tr } from '../src/core/i18n';
-import { World } from '../src/games/ant/world/world';
-import { loadWorld, saveWorld, type SaveData } from '../src/games/ant/world/save';
+// 用法：npx tsx scripts/games/ant/savetest.ts [存档前模拟秒数，默认 1900] [tunnel|chamber：继续运行到扩建处于该阶段再存档]
+import { tr } from '../../../src/core/i18n';
+import { World } from '../../../src/games/ant/world/world';
+import { loadWorld, saveWorld, type SaveData } from '../../../src/games/ant/world/save';
 
 const step = 1 / 30;
 const run = (w: World, sec: number) => {
@@ -79,11 +79,19 @@ console.log(`存档 ${(json.length / 1024).toFixed(0)} KB，序列化 ${(t1 - t0
 const sizes = Object.entries(data).map(([k, v]) => `${k} ${(JSON.stringify(v).length / 1024).toFixed(0)}`);
 console.log(`各部分（KB）：${sizes.join('  ')}`);
 
+/** 读档后必须原样恢复的指标（物品数、储备和信息素会因读档时搬运中的东西直接送到或丢掉而变） */
+const EXACT = ['ants', 'brood', 'chambers', 'edges', 'sources', 'aphids', 'placed', 'puddles', 'weather'];
+const problems: string[] = [];
 const ma = metrics(a);
 const mb = metrics(b);
 console.log('\n指标            原世界 | 读档后');
 for (const k of Object.keys(ma)) console.log(`${k.padEnd(10)} ${ma[k]} | ${mb[k]}${ma[k] === mb[k] ? '' : '   ← 不同'}`);
-console.log('一致性检查：', check(b).join('；') || '通过');
+for (const k of EXACT) if (ma[k] !== mb[k]) problems.push(`读档后 ${k} 不同`);
+const inTransit = a.colony.ants.filter((x) => x.carrying).length;
+if (Math.abs(a.colony.items.size - b.colony.items.size) > inTransit) problems.push(`读档后物品数差 ${a.colony.items.size - b.colony.items.size}，超过搬运中的 ${inTransit} 件`);
+const bad1 = check(b);
+console.log('一致性检查：', bad1.join('；') || '通过');
+problems.push(...bad1);
 
 run(a, 1200);
 run(b, 1200);
@@ -91,4 +99,9 @@ const ma2 = metrics(a);
 const mb2 = metrics(b);
 console.log('\n再运行 1200 秒');
 for (const k of Object.keys(ma2)) if (k !== 'stats') console.log(`${k.padEnd(10)} ${ma2[k]} | ${mb2[k]}`);
-console.log('一致性检查：', check(b).join('；') || '通过');
+const bad2 = check(b);
+console.log('一致性检查：', bad2.join('；') || '通过');
+problems.push(...bad2);
+if (b.colony.ants.length < 0.9 * a.colony.ants.length) problems.push('读档后的世界蚂蚁明显变少');
+console.log(problems.length ? `失败：${problems.join('；')}` : '全部通过');
+if (problems.length) process.exitCode = 1;

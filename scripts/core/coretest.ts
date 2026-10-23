@@ -1,16 +1,16 @@
 /**
  * 框架层的单元测试，不依赖任何游戏：图上行走、地表转向与绕行、空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
- * npx tsx scripts/coretest.ts
+ * npx tsx scripts/core/coretest.ts
  */
 import * as THREE from 'three';
-import { ENGINE } from '../src/core/config';
-import { L, registerDicts, tr } from '../src/core/i18n';
-import { HeightfieldSpace } from '../src/core/space/heightfield';
-import { VolumeSpace } from '../src/core/space/volume';
-import { SaveRegistry } from '../src/core/sim/saves';
-import { Simulation } from '../src/core/sim/simulation';
-import { GraphWalker, Routes, samplePolyline, type GraphEdge } from '../src/core/move/graph';
-import { Skirt, turnToward } from '../src/core/move/surface';
+import { ENGINE } from '../../src/core/config';
+import { L, registerDicts, tr } from '../../src/core/i18n';
+import { HeightfieldSpace } from '../../src/core/space/heightfield';
+import { VolumeSpace } from '../../src/core/space/volume';
+import { SaveRegistry } from '../../src/core/sim/saves';
+import { Simulation } from '../../src/core/sim/simulation';
+import { GraphWalker, Routes, samplePolyline, type GraphEdge } from '../../src/core/move/graph';
+import { Skirt, turnToward } from '../../src/core/move/surface';
 
 let failed = 0;
 const check = (name: string, ok: boolean, info?: unknown) => {

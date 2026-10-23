@@ -12,7 +12,7 @@ src/
   aquarium.ts           鱼缸示例的入口
   style.css             界面样式
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
-  core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/layercheck.mjs）——
+  core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/core/layercheck.mjs）——
     config.ts           ENGINE：主循环步长与帧预算、后台运行、画质档位与帧率、自动保存间隔
     util/
       random.ts         Rng（可设种子的随机数）、Noise2D（梯度噪声、分形噪声）；`rng` 为运行时共享实例
@@ -101,27 +101,36 @@ src/
     i18n/               鱼缸的词典和改写的框架文字
 public/                 原样复制到 dist/ 的网页版文件：manifest.webmanifest、sw.js（离线缓存）、主屏幕图标
 scripts/
-  layercheck.mjs        依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
-  coretest.ts           框架层单元测试：图上行走、地表转向与绕行、高度场和体积空间求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
-  aquatest.ts           鱼缸示例的无界面检查：鱼不出缸、喂食后会吃、开关灯和吃完的事件、存档往返、同编号可重现、英文文字
-  aquashots.mjs         鱼缸示例的截图（桌面、手机）：白天、夜里、选中的鱼、饥饿着色、统计、英文、喂食、手机抽屉
-  saveui.mjs            页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
-  selecttest.mjs        页面里的选中、跟随、按 F 取消、飞到房间、点击事件飞过去
-  simtest.ts            无界面模拟测试
-  tooltest.ts           干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
-  savetest.ts           存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
-  defensetest.ts        防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
-  weathertest.ts        天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
-  perftest.ts           性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
+  check.mjs             一键检查（npm run check / check:fast / check:ui），见“验证工具”一节
   i18ncheck.ts          界面文字检查：两个游戏和框架的中英文占位符一致，游戏的键不和框架重名，框架代码只用框架的键，改写不改占位符，英文模拟中没有漏翻的文字
-  extract-shots.mjs     从浏览器捕获结果中提取截图
-  icons.mjs             从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
+  core/
+    layercheck.mjs      依赖方向检查：core 不能导入 games 和 main.ts，游戏之间不能互相导入
+    coretest.ts         框架层单元测试：图上行走、地表转向与绕行、高度场和体积空间求交、存档登记、实体注册表、事件记录、模拟内核的推进、词典重名
+  games/ant/            蚂蚁游戏的无界面测试，失败时退出码非零
+    simtest.ts          无界面模拟测试
+    baseline/           simtest 在固定编号下的输出，check.mjs 拿它逐行对比
+    savetest.ts         存档往返测试：存档 → 读进新世界 → 对比指标与索引一致性 → 两边各自继续运行
+    tooltest.ts         干预工具测试：投食、放树枝和石块、浇水、各种非法放置，统计原地打转的蚂蚁
+    defensetest.ts      防御测试：在觅食路线上、巢口旁、侧入口外各放一只狼蛛，记录围攻、驱赶和入口警戒
+    weathertest.ts      天气测试：招来一场雨，记录返巢、封堵、信息素冲刷、进水和雨后重开
+    perftest.ts         性能测试：指定工蚁数量，统计每步耗时、各子系统占比和慢步
+  games/aquarium/
+    aquatest.ts         鱼缸示例的无界面检查：鱼不出缸、喂食后会吃、开关灯和吃完的事件、存档往返、同编号可重现、英文文字
+    aquashots.mjs       鱼缸示例的截图（桌面、手机）：白天、夜里、选中的鱼、饥饿着色、统计、英文、喂食、手机抽屉
+  ui/                   无头 Chrome 里的页面测试（需要开发服务器，pwatest 需要先构建）；cdp.mjs 是共用的连接代码，环境变量 CHROME 指定浏览器
+    saveui.mjs          页面里的存档往返：Ctrl+S 保存，重新打开后从存档恢复；页面标题随语言变化
+    selecttest.mjs      页面里的选中、跟随、按 F 取消、飞到房间、点击事件飞过去
+    touchtest.mjs 等    见“验证工具”一节
+  tools/
+    extract-shots.mjs   从浏览器捕获结果中提取截图
+    icons.mjs           从 src/assets/icon.svg 生成 public/ 下的主屏幕图标
+.github/workflows/check.yml  推送和拉取请求时在 GitHub Actions 上跑 npm run check（不含浏览器测试）
 docs/                   本文档目录；FRAMEWORK.md 讲怎样用框架做新游戏，templates/ 是新项目的文档骨架
 ```
 
 ## 分层
 
-`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-056。改了 `core` 要跑框架层单元测试 `npx tsx scripts/coretest.ts`。
+`src/core` 是框架层，打算给同类产品（蜂巢、白蚁、鱼缸、地表生态）复用；`src/games/ant` 是蚂蚁游戏的内容。依赖只能从游戏指向框架：`core` 不能导入 `games/` 和 `main.ts`，一个游戏也不能导入另一个游戏。`node scripts/core/layercheck.mjs` 检查这一点。框架需要游戏给的数值和类型时，由游戏在构造时传入（`SimClock` 的日长、`Environment` 的光照强度、`SpatialHash<T>`、`SaveSlot<D, M>`、`EntityRegistry` 里每类对象的位置和观察距离、相机和点选用的 `Space`），而不是框架去读游戏的配置。临时绕不开的依赖可以登记在脚本的 `PENDING` 里，拆掉后要删掉，列着却已经不存在的项也会报错。分层的计划见 DECISIONS T-049 到 T-056。改了 `core` 要跑框架层单元测试 `npx tsx scripts/core/coretest.ts`。
 
 ### 游戏模块与界面外壳
 
@@ -305,7 +314,7 @@ requestAnimationFrame
 
 **新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充；想让玩家能投放，再加进 `PLACEABLE_FOOD`。
 
-**新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上；新的子系统在 `World` 构造函数里用 `saves.add(字段名, 保存, 恢复)` 登记，并在 `SaveData` 里写上这个字段的类型。注意登记顺序就是读档顺序。结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时登记为可选（`saves.add` 的第四个参数），旧存档缺这一项就沿用新世界的初始状态。新的子系统要每步更新的，用 `addSystem(名字, 更新函数)` 登记，`perftest` 会自动统计它的耗时。用 `npx tsx scripts/savetest.ts` 检查读档前后指标一致。
+**新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上；新的子系统在 `World` 构造函数里用 `saves.add(字段名, 保存, 恢复)` 登记，并在 `SaveData` 里写上这个字段的类型。注意登记顺序就是读档顺序。结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时登记为可选（`saves.add` 的第四个参数），旧存档缺这一项就沿用新世界的初始状态。新的子系统要每步更新的，用 `addSystem(名字, 更新函数)` 登记，`perftest` 会自动统计它的耗时。用 `npx tsx scripts/games/ant/savetest.ts` 检查读档前后指标一致。
 
 **新增一种干预工具**：在 `World` 写一个带 `dry` 参数、返回 `ToolResult` 的方法，然后在 `games/ant/ui/tools.ts` 的 `TOOLS` 里加一项（名称、按键、选项），并在同一文件的 `run` 里调用。
 
@@ -319,22 +328,32 @@ requestAnimationFrame
 
 ## 验证工具
 
+### 一键检查
+```
+npm run check         # 快检 + 模拟基线 + 蚂蚁游戏的无界面测试，约 3 分钟
+npm run check:fast    # 只跑类型检查、依赖方向、框架单元测试、界面文字、鱼缸示例，约 10 秒
+npm run check:ui      # 构建 + 浏览器测试 + 各屏幕布局截图，约 6 分钟；没开开发服务器时自己起一个
+node scripts/check.mjs --all               # 全部
+node scripts/check.mjs --update-baseline   # 模拟行为有意改变时，用这次的输出更新基线
+```
+每项一行“通过 / 失败、耗时、摘要”，失败的项接着打印输出的最后 30 行，有失败时退出码非零。模拟基线是 `SIM_SEED=7` 跑 3000 秒的 `simtest` 输出，去掉耗时后必须逐行相同：只是重构时它应该不变；有意改了行为就加 `--update-baseline`，把基线文件的变化连同提交一起看，并把指标变化写进 `docs/PROGRESS.md`。GitHub Actions 上缺少基线文件时直接判失败。
+
 ### 无界面模拟
 ```
-npx tsx scripts/simtest.ts [模拟秒数，默认 1200]
+npx tsx scripts/games/ant/simtest.ts [模拟秒数，默认 1200]
 ```
 每 1/8 进度输出一次：人口、巢外数量、储食室与社会胃、幼体数、各职别实际/目标人数、蛹的位置、拥挤度、房间数、扩建进度、每个蚜虫群（数量、`*` 表示已被发现、积存蜜露）、两种信息素总量、累计统计、平均每步耗时，以及当前最常见的 12 种行为。第一行的每步耗时包含 JIT 预热，偏高属于正常。
 
 模拟随机数默认用当前时间做种子，每次结果不同。设环境变量 `SIM_SEED`（如 `$env:SIM_SEED=7`）后结果可复现，除了耗时以外逐行相同，重构前后可以直接对比输出。
 
-在 PowerShell 里重定向输出会变成 UTF-16 乱码，用 `cmd /c "npx tsx scripts/simtest.ts 6000 > shots\simtest.txt"` 保留 UTF-8。
+在 PowerShell 里重定向输出会变成 UTF-16 乱码，用 `cmd /c "npx tsx scripts/games/ant/simtest.ts 6000 > shots\simtest.txt"` 保留 UTF-8。
 
 ### 截图验证
 1. 启动开发服务器：`npm run dev`
 2. 用无头 Chrome（Agent 环境下用 `rea` 工具的 `capture_browser_scenario`）打开页面，配合 URL 参数定位视角，按键用 `press` 动作，截图选 `at_end: ["screenshot"]`
 3. 每次只截一张图，多张截图会超出工具的返回上限
 4. 无头 Chrome 的默认语言是 en-US，页面会显示英文；要看中文界面加 `?lang=zh`，或在 `environment.locale` 里指定 `zh-CN`
-5. 提取图片：`node scripts/extract-shots.mjs <捕获结果文件> shots/名称`（`shots/` 已加入 .gitignore）
+5. 提取图片：`node scripts/tools/extract-shots.mjs <捕获结果文件> shots/名称`（`shots/` 已加入 .gitignore）
 6. 无头 Chrome 用软件渲染，帧率很低：等 `#loading` 消失后再等 8–10 秒，否则界面面板可能还没刷新。用了 `skip` 时加载本身也要十几秒
 
 常用视角（坐标按默认地图测得；新开局会随机换地图，截图时加 `seed=20261021`）：
@@ -357,11 +376,11 @@ npx tsx -e "import { World } from './src/games/ant/world/world'; const w = new W
 
 ### 触屏与鼠标操作、各种屏幕的截图
 ```
-node scripts/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置、底栏与菜单、转横屏
-node scripts/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置；窗口变窄切到手机布局再切回
-node scripts/pwatest.mjs     # 先 npm run build：清单、图标、安装条件、离线缓存、断网刷新、主屏幕入口、双击打开的单文件
-node scripts/saveui.mjs      # 存档：Ctrl+S 保存、重新打开后恢复种子、蚂蚁数、房间数和时间；中英文页面标题
-node scripts/qualitytest.mjs # 画质：桌面和手机的默认档位、暂停降帧与操作唤醒、省电、人为卡顿后自动降档、选择记住
-node scripts/layoutshots.mjs [phone pad-land ant …] [--en]   # 手机 / 平板 / 桌面、横竖屏 × 几个场景的截图，存到 shots/layout/
+node scripts/ui/touchtest.mjs   # 390×844 手机视口 + 触屏模拟：平移、捏合、旋转、俯仰、点按、双击、工具两步放置、底栏与菜单、转横屏
+node scripts/ui/mousetest.mjs   # 1280×800 桌面：拖拽、滚轮、工具直接放置；窗口变窄切到手机布局再切回
+node scripts/ui/pwatest.mjs     # 先 npm run build：清单、图标、安装条件、离线缓存、断网刷新、主屏幕入口、双击打开的单文件
+node scripts/ui/saveui.mjs      # 存档：Ctrl+S 保存、重新打开后恢复种子、蚂蚁数、房间数和时间；中英文页面标题
+node scripts/ui/qualitytest.mjs # 画质：桌面和手机的默认档位、暂停降帧与操作唤醒、省电、人为卡顿后自动降档、选择记住
+node scripts/ui/layoutshots.mjs [phone pad-land ant …] [--en]   # 手机 / 平板 / 桌面、横竖屏 × 几个场景的截图，存到 shots/layout/
 ```
-需要先 `npm run dev`。脚本直接启动无头 Chrome（共用 `scripts/cdp.mjs`），通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller`、`window.hud`（界面外壳 `Shell`）、`window.quality`、`window.renderer` 判断结果；手机浏览器用 `Emulation.setUserAgentOverride` 伪装。截图脚本还会列出超出屏幕的面板。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。
+需要先 `npm run dev`。脚本直接启动无头 Chrome（共用 `scripts/ui/cdp.mjs`），通过 DevTools 协议派发触摸和鼠标事件（`Input.dispatchTouchEvent` / `dispatchMouseEvent`），再读页面上的 `window.world`、`window.camera`、`window.controller`、`window.hud`（界面外壳 `Shell`）、`window.quality`、`window.renderer` 判断结果；手机浏览器用 `Emulation.setUserAgentOverride` 伪装。截图脚本还会列出超出屏幕的面板。测试会先藏起左右的面板，让手指落在画布上；点按和双击时暂停模拟，免得蚂蚁走开。触屏测试在 `shots/touch-tool.png` 留一张工具面板的截图。

@@ -1,5 +1,5 @@
 // 触屏操作测试：无头 Chrome 开启触屏模拟，用 DevTools 协议派发触摸事件
-// 用法：node scripts/touchtest.mjs [网址，默认 http://localhost:5173/]
+// 用法：node scripts/ui/touchtest.mjs [网址，默认 http://localhost:5173/]
 import { BASE, launch, sleep } from './cdp.mjs';
 
 const W = 390;

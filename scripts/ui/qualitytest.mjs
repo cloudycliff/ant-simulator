@@ -1,5 +1,5 @@
 // 画质与帧率测试：默认档位、暂停后降帧、省电、持续卡顿自动降档、手动选择记住
-// 用法：node scripts/qualitytest.mjs [网址，默认 http://localhost:5173/]
+// 用法：node scripts/ui/qualitytest.mjs [网址，默认 http://localhost:5173/]
 import { BASE, launch, sleep } from './cdp.mjs';
 
 const URL = `${process.argv[2] ?? BASE}?new=1&seed=20261021&hour=12&lang=zh`;
