@@ -195,6 +195,15 @@ export function* guard(a: Ant, w: World, threat = false): Routine {
   yield* goHome(a);
   a.guarding = threat;
   a.activity = L(threat ? 'act.guardThreat' : 'act.goGuard');
+  if (threat) {
+    // 从巢深处走到入口要一阵子，到了入口威胁已经解除就不出去了
+    const ti = w.predators.threatEntrance;
+    if (ti >= 0) yield { k: 'goto', node: w.nest.entrances[ti].node };
+    if (w.predators.threatEntrance < 0) {
+      a.guarding = false;
+      return;
+    }
+  }
   yield { k: 'exit' };
   const ti = w.predators.threatEntrance;
   const ent = threat && ti >= 0 ? w.nest.entrances[ti] : w.nest.nearestEntrance(a.pos.x, a.pos.z);

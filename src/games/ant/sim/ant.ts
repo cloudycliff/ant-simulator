@@ -148,6 +148,9 @@ export class Ant {
   private alarmX = 0;
   private alarmZ = 0;
   private nextAlarmCheck = 0;
+  /** 发觉狼蛛靠近后躲避的剩余秒数，期间暂停原来的任务 */
+  fleeT = 0;
+  private fleeFrom = -1;
   taskActivity: Text = L('act.idle');
   /** 正在撕咬的狼蛛 */
   mobTarget = -1;
@@ -364,6 +367,10 @@ export class Ant {
         this.defend(dt, w);
         return;
       }
+      if (this.fleeT > 0) {
+        this.flee(dt, w);
+        return;
+      }
     }
     this.behavior.run(
       () => w.colony.newRoutine(this),
@@ -374,18 +381,42 @@ export class Ant {
 
   // ---------------- 警报与防御 ----------------
 
-  /** 搬着东西、爬在植物上或陷在坑里的蚂蚁不响应 */
+  /** 搬着东西、爬在植物上或陷在坑里的蚂蚁不响应警报；没闻到警报时看看附近有没有狼蛛 */
   private checkAlarm(w: World): void {
     this.nextAlarmCheck = w.clock.seconds + 0.5;
-    if (this.climbing || this.carrying || this.pitT > 0) return;
+    if (this.climbing || this.pitT > 0) return;
     const D = CONFIG.defense;
-    const src = w.alarm.strongest(this.pos.x, this.pos.z);
-    if (!src || src.level < D.respondLevel) return;
-    this.alarmT = w.rng.range(D.defendSec[0], D.defendSec[1]);
-    this.alarmX = src.x;
-    this.alarmZ = src.z;
+    if (!this.carrying) {
+      const src = w.alarm.strongest(this.pos.x, this.pos.z);
+      if (src && src.level >= D.respondLevel) {
+        this.alarmT = w.rng.range(D.defendSec[0], D.defendSec[1]);
+        this.alarmX = src.x;
+        this.alarmZ = src.z;
+        this.fleeT = 0;
+        this.taskActivity = this.activity;
+        this.note(w, L('note.alarm'));
+        return;
+      }
+    }
+    if (this.fleeT > 0 || this.guarding) return;
+    const s = w.predators.nearestSpider(this.pos.x, this.pos.z, D.fleeRange);
+    if (!s || s.state === 'feed' || !w.rng.chance(s.moving ? D.fleeNoticeMoving : D.fleeNoticeStill)) return;
+    this.fleeT = w.rng.range(D.fleeSec[0], D.fleeSec[1]);
+    this.fleeFrom = s.id;
     this.taskActivity = this.activity;
-    this.note(w, L('note.alarm'));
+    this.note(w, L('note.fledSpider'));
+  }
+
+  /** 朝远离狼蛛的方向跑；它走了或开始离开就回去接着干活 */
+  private flee(dt: number, w: World): void {
+    this.fleeT -= dt;
+    const s = w.predators.spiders.find((p) => p.id === this.fleeFrom);
+    if (!s || s.state === 'leave') this.fleeT = 0;
+    else {
+      this.activity = L('act.fleeSpider');
+      surfaceMove(this, dt, w, Math.atan2(this.pos.z - s.z, this.pos.x - s.x), 8, CONFIG.defense.fleeSpeed);
+    }
+    if (this.fleeT <= 0) this.activity = this.taskActivity;
   }
 
   /** 冲向警报源；附近有狼蛛就贴身撕咬，并不断补充警报招来更多同伴 */

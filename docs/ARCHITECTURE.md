@@ -232,7 +232,7 @@ requestAnimationFrame
 | `climb {x, z, angle, r, top, stay}` | 走到植物茎秆旁，沿茎秆爬到 `top` 高度停留 `stay` 秒，再爬下来 |
 | `wait {time}` | 原地停留 |
 
-和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`，再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`：碰到障碍沿切线走，之后只要朝目标方向 `hugProbe` 以内还挡着，就用 `Skirt.hug` 朝障碍一侧弯着贴边走，而不是转回目标；树枝这类成串的圆，切线撞进下一个圆时沿两圆中点的切线滑过去。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则写在 `antSurface.ts` 的 `surfaceMove` 里。运动层是普通函数，第一个参数是蚂蚁（`stepGoto(a, dt, w, node)`），由 `Ant.step` 按指令分派；它们读写的字段在 `Ant` 里标了属于哪个文件。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
+和物种无关的部分在 `core/move/`：隧道里的位置是 `Ant.walk`（`GraphWalker`，`Ant.edge` 是它的 `edge`），`goto` 每步调用 `walk.advance`（走到半路换了目标、新路线要折回时就地掉头），再用 `tunnelFloor` 按靠右通行的偏移放到隧道底部；地表的转向、贴地和绕障碍用 `turnToward`、`alignToGround`、`Skirt`：碰到障碍沿切线走，之后只要朝目标方向 `hugProbe` 以内还挡着，就用 `Skirt.hug` 朝障碍一侧弯着贴边走，而不是转回目标；树枝这类成串的圆，切线撞进下一个圆时沿两圆中点的切线滑过去。蚁狮陷阱、水洼、信息素、活动范围这些蚂蚁游戏的规则写在 `antSurface.ts` 的 `surfaceMove` 里。运动层是普通函数，第一个参数是蚂蚁（`stepGoto(a, dt, w, node)`），由 `Ant.step` 按指令分派；它们读写的字段在 `Ant` 里标了属于哪个文件。白蚁、蜂巢这类游戏可以直接用这两个模块，只需提供自己的图（`NavGraph`：`nextHop`、`edgeBetween`）。
 
 **行为层**（`routines/`）。每个职别一个入口协程，按优先级（带随机性）选择一项任务：
 
@@ -259,7 +259,7 @@ requestAnimationFrame
 
 天敌（`world/predators.ts`）：`PredatorManager.update` 在蚁群之后运行，先收集地表上没在爬植物的工蚁，再推进狼蛛的状态机（`wander → chase → feed → pause`，到时间或吃够后 `leave`）和蚁狮。捕食调用 `Colony.kill(ant, cause, false)`（不留尸体），进食结束再用 `dropOnSurface` 放下空壳。蚁狮陷阱对蚂蚁的影响写在 `surfaceMove`（`antSurface.ts`）里（`pitAt` 减速、拉向中心、`pitT` 计时后转身外爬）。设计见 DECISIONS T-028。
 
-防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines/` 里觅食蚁出巢前和内务蚁选任务时读取它们；入口刚受威胁时 `callGuards`（`colonySocial.ts`）用 `Behavior.start` 打断几只最近的空手内务蚁，直接换成警戒任务（T-061）。
+防御（DECISIONS T-029）：`Ant.update` 在 `hold` 之后、执行协程之前检查警报（`checkAlarm`），增援期间由 `Ant.defend` 接管运动，协程和当前指令原样保留，结束后接着执行；没闻到警报时同一次检查看附近有没有捕猎中的狼蛛，发觉了就由 `Ant.flee` 接管几秒，同样不动协程（T-062）。撕咬中的工蚁把 `mobTarget` 设为狼蛛编号，`PredatorManager.mobbed` 据此统计围攻数并结算驱赶和反咬。`PredatorManager.threatEntrance` / `guardsOut` 每步更新，`routines/` 里觅食蚁出巢前和内务蚁选任务时读取它们；入口刚受威胁时 `callGuards`（`colonySocial.ts`）用 `Behavior.start` 打断几只最近的空手内务蚁，直接换成警戒任务（T-061）。
 
 天气（DECISIONS T-030）：`WeatherSystem.update` 在每个 tick 最先运行，把云量、湿润度、雨势写进 `Soil`、`PheromoneField.rain`，并更新各房间的 `Chamber.wet`。阶段切换时调用 `Colony.seekShelter` 中断地表工蚁；`Colony.newRoutine` 在 `weather.keepIn` 时给地表工蚁安排躲雨。入口封堵程度是 `Entrance.plug`，由内务蚁的 `plugEntrance` 协程通过 `WeatherSystem.workPlug` 修改，`stepExit`（`antNest.ts`）只走没封死的入口；全部封死时带 `giveUp` 的 `exit` 指令以结果 `'blocked'` 结束，由协程决定怎么处理手里的东西（T-036）。雨后的分批出巢由 `WeatherSystem.damp` 控制。
 

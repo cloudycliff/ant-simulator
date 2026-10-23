@@ -114,6 +114,8 @@ export class GraphWalker<E extends GraphEdge> {
   /** 上一次 advance 有没有在边上走、走过的距离 */
   moved = false;
   walked = 0;
+  /** 上一次 advance 的目标 */
+  private goal = -1;
 
   /** 站到节点上 */
   at(node: number): void {
@@ -137,11 +139,19 @@ export class GraphWalker<E extends GraphEdge> {
     return this.from === this.edge!.a ? 1 : -1;
   }
 
-  /** 沿路走 step 的距离，一次最多换三条边 */
+  /** 沿路走 step 的距离，一次最多换三条边。走到半路换了目标、而新路线要折回出发的那端时，就地掉头 */
   advance(g: NavGraph<E>, step: number, target: number): WalkResult {
     const total = step;
     this.moved = false;
     this.walked = 0;
+    if (this.edge && target !== this.goal) {
+      const to = this.edge.a === this.from ? this.edge.b : this.edge.a;
+      if (to !== target && g.nextHop(to, target) === this.from) {
+        this.from = this.node = to;
+        this.s = this.edge.length - this.s;
+      }
+    }
+    this.goal = target;
     for (let i = 0; i < 3; i++) {
       if (this.edge) {
         this.s += step;

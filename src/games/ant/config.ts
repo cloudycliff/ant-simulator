@@ -211,6 +211,15 @@ export const CONFIG = {
     harassRecover: 1,
     /** 围攻时每只工蚁每秒被狼蛛咬死的概率 */
     mobKillPerSec: 0.025,
+    /**
+     * 没闻到警报的地表工蚁离捕猎中的狼蛛这么近（cm，比狼蛛发现蚂蚁的距离稍远）时，每 0.5 秒有一定概率发觉它：
+     * 狼蛛在走动时容易发觉，静止伏击时难；发觉后朝远离它的方向跑开几秒，速度倍数 fleeSpeed
+     */
+    fleeRange: 10,
+    fleeNoticeMoving: 0.35,
+    fleeNoticeStill: 0.08,
+    fleeSec: [2, 4] as [number, number],
+    fleeSpeed: 1.25,
     /** 狼蛛离入口这么近时，觅食蚁留巢、内务蚁出来警戒 */
     guardRadius: 20,
     holdBackProb: 0.7,
@@ -219,7 +228,7 @@ export const CONFIG = {
     /** 威胁刚出现时，离那个入口最近的这么多只空手内务蚁放下手头的事出来警戒 */
     callGuards: 8,
     /** 警戒时每隔这么多秒看一眼威胁还在不在 */
-    guardCheckSec: 5,
+    guardCheckSec: 2,
     /** 爬出陷阱的蚂蚁记住它，此后绕开（陷阱半径之外再留的距离） */
     pitAvoidPad: 1,
   },
