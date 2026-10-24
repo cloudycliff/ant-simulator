@@ -342,7 +342,7 @@ requestAnimationFrame
 4. 想让扩建也能生成这种房间：在 `NestExpansion.plan` 的类型选择里加入
 5. 运行中新增的房间要调用 `Colony.ensureChamberSlots`（扩建流程已处理）
 
-**新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充；想让玩家能投放，再加进 `PLACEABLE_FOOD`。
+**新增一种食物源**：在 `food.ts` 的 `FoodSourceType`、`SOURCE_INFO`、`buildMesh` 中补充；想让玩家能投放，再加进 `PLACEABLE_FOOD`。要一块块被切走的，在 `buildMesh` 里按切走的先后登记部位和份量（`FoodPart`），`rescale` 会把份量用完的部位藏起来；不登记的整体缩小（果实、糖浆）。切下来的块的颜色在 `itemView.ts` 的 `PIECE_COLORS`。
 
 **新增会变化的模拟状态**：在所属类的 `toSave` / `restore` 里补上；新的子系统在 `World` 构造函数里用 `saves.add(字段名, 保存, 恢复)` 登记，并在 `SaveData` 里写上这个字段的类型。注意登记顺序就是读档顺序。结构不兼容时把 `SAVE_VERSION` 加 1；只是新增一项时登记为可选（`saves.add` 的第四个参数），旧存档缺这一项就沿用新世界的初始状态。新的子系统要每步更新的，用 `addSystem(名字, 更新函数)` 登记，`perftest` 会自动统计它的耗时。用 `npx tsx scripts/games/ant/savetest.ts` 检查读档前后指标一致。
 

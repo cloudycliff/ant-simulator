@@ -3,7 +3,6 @@ import { CONFIG, ROLE_NAMES, type Role } from '../config';
 import { L, t, type Text } from '../../../core/i18n';
 import type { Chamber, ChamberType } from '../nest/nest';
 import type { World } from '../world/world';
-import type { FoodKind } from '../world/food';
 import { Ant, type AntSave, type Routine } from './ant';
 import { updateBrood, updateClimate, updateStores, updateSurfaceItems } from './colonyBrood';
 import { reviewRoles, separate, tryContact } from './colonySocial';
@@ -505,18 +504,18 @@ export class Colony {
   }
 
   /** 从储食室消耗固体食物；吃完的猎物碎块可能留下残渣 */
-  takeFood(amount: number): FoodKind | null {
+  takeFood(amount: number): Pick<Item, 'foodKind' | 'foodSource'> | null {
     const store = this.foodChamber();
     const arr = this.byChamber[store.id];
     let left = amount;
-    let kind: FoodKind | null = null;
+    let from: Pick<Item, 'foodKind' | 'foodSource'> | null = null;
     for (let i = arr.length - 1; i >= 0 && left > 0; i--) {
       const it = arr[i];
       if (it.type !== 'food' || !it.free) continue;
       const k = Math.min(left, it.amount);
       it.amount -= k;
       left -= k;
-      kind = it.foodKind;
+      from = { foodKind: it.foodKind, foodSource: it.foodSource };
       if (it.amount <= 0.001) {
         const spot = it.pos.clone();
         const leftover = this.w.rng.chance(0.3);
@@ -525,7 +524,7 @@ export class Colony {
       }
     }
     this.refreshFoodStock();
-    return left < amount ? kind : null;
+    return left < amount ? from : null;
   }
 
   /** 觅食蚁把携带的固体食物放进储食室 */

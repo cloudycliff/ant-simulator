@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Item, ItemType } from '../sim/items';
+import type { FoodSourceType } from '../world/food';
 import type { World } from '../world/world';
 import { buildAntGeometry } from './antView';
 
@@ -10,6 +11,8 @@ interface Layer {
 }
 
 const FOOD_COLORS = { prey: 0x8c3a26, seed: 0x7a5530, sugar: 0xe0a030 };
+/** 切下来的块和原来的食物同色，和 FoodManager 的材质一致 */
+const PIECE_COLORS: Partial<Record<FoodSourceType, number>> = { caterpillar: 0x7aa33a, beetle: 0x1d2a3a, seeds: 0x6b4a2a };
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -73,7 +76,7 @@ export class ItemView {
     _m.compose(pos, _q, _s);
     L.mesh.setMatrixAt(L.n, _m);
     if (it.type === 'food') {
-      _c.setHex(FOOD_COLORS[it.foodKind]);
+      _c.setHex((it.foodSource && PIECE_COLORS[it.foodSource]) || FOOD_COLORS[it.foodKind]);
       L.mesh.setColorAt(L.n, _c);
     }
     L.n++;

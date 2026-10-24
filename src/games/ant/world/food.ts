@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { L, type Text } from '../../../core/i18n';
+import { clamp } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import type { IdPool } from '../../../core/sim/ids';
 import type { Terrain } from './terrain';
@@ -72,8 +73,28 @@ export class FoodSource {
     return true;
   }
   rescale(): void {
-    this.mesh.scale.setScalar(0.35 + 0.65 * Math.sqrt(this.fraction));
+    const parts = this.mesh.userData.parts as FoodPart[] | undefined;
+    if (!parts) {
+      this.mesh.scale.setScalar(0.35 + 0.65 * Math.sqrt(this.fraction));
+      return;
+    }
+    // 剩下的份量从最后才切的部位往前分，分不到的藏起来，正在切的那块按剩下的比例缩小
+    let left = this.fraction * parts.reduce((s, p) => s + p.w, 0);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const k = clamp(left / parts[i].w, 0, 1);
+      left -= parts[i].w;
+      for (const o of parts[i].objs) {
+        o.visible = k > 0;
+        o.scale.copy(o.userData.base as THREE.Vector3).multiplyScalar(0.4 + 0.6 * k);
+      }
+    }
   }
+}
+
+/** 猎物和种子堆按部位一块块被切走、搬走；w 是这块占的份量，先被切走的排在前面 */
+interface FoodPart {
+  objs: THREE.Object3D[];
+  w: number;
 }
 
 export interface FoodSave {
@@ -138,26 +159,33 @@ export class FoodManager {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
       m.scale.set(sx, sy, sz);
+      m.userData.base = m.scale.clone();
       m.castShadow = true;
       g.add(m);
       return m;
     };
+    const parts: FoodPart[] = [];
     const sphere = new THREE.SphereGeometry(1, 12, 8);
     if (t === 'beetle') {
-      // 仰面朝天的甲虫
-      add(sphere, this.mats.beetle, 0, 0.7, 0, 1.6, 0.75, 1.05);
-      add(sphere, this.mats.beetle, 1.7, 0.55, 0, 0.55, 0.45, 0.6);
+      // 仰面朝天的甲虫：先卸下六条腿，再是头，最后是躯干
+      const body = add(sphere, this.mats.beetle, 0, 0.7, 0, 1.6, 0.75, 1.05);
+      const head = add(sphere, this.mats.beetle, 1.7, 0.55, 0, 0.55, 0.45, 0.6);
       const leg = new THREE.CylinderGeometry(0.07, 0.07, 1.4, 4);
       for (let i = 0; i < 6; i++) {
         const side = i % 2 === 0 ? 1 : -1;
         const m = add(leg, this.mats.beetleLeg, -0.5 + Math.floor(i / 2) * 0.6, 1.4, side * 0.6);
         m.rotation.x = side * 0.7;
+        parts.push({ objs: [m], w: 0.05 });
       }
+      parts.push({ objs: [head], w: 0.15 }, { objs: [body], w: 0.55 });
     } else if (t === 'caterpillar') {
+      const segs: THREE.Object3D[] = [];
       for (let i = 0; i < 9; i++) {
         const s = 0.55 + 0.1 * Math.sin((i / 8) * Math.PI);
-        add(sphere, this.mats.caterpillar, i * 0.8 - 3.2, s * 0.9, Math.sin(i * 0.7) * 0.5, s, s * 0.9, s);
+        segs.push(add(sphere, this.mats.caterpillar, i * 0.8 - 3.2, s * 0.9, Math.sin(i * 0.7) * 0.5, s, s * 0.9, s));
       }
+      // 从两头往中间一节节切
+      for (const i of [0, 8, 1, 7, 2, 6, 3, 5, 4]) parts.push({ objs: [segs[i]], w: 1 });
     } else if (t === 'seeds') {
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * Math.PI * 2 + this.rng.next();
@@ -166,7 +194,7 @@ export class FoodManager {
         const sz = Math.sin(a) * r;
         const m = add(sphere, this.mats.seed, sx, 0.3, sz, 0.5, 0.3, 0.32);
         m.rotation.y = a;
-        add(sphere, this.mats.elaiosome, sx + Math.cos(a) * 0.45, 0.32, sz - Math.sin(a) * 0.45, 0.2, 0.18, 0.2);
+        parts.push({ objs: [m, add(sphere, this.mats.elaiosome, sx + Math.cos(a) * 0.45, 0.32, sz - Math.sin(a) * 0.45, 0.2, 0.18, 0.2)], w: 1 });
       }
     } else if (t === 'fruit') {
       add(sphere, this.mats.fruit, 0, 1.1, 0, 1.5, 1.3, 1.5);
@@ -175,6 +203,7 @@ export class FoodManager {
       add(sphere, this.mats.syrup, 0, 0.05, 0, 1.7, 0.35, 1.5);
       add(sphere, this.mats.syrup, 0.6, 0.05, 0.5, 0.9, 0.25, 0.8);
     }
+    if (parts.length) g.userData.parts = parts;
     return g;
   }
 

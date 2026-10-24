@@ -109,10 +109,11 @@ function* fetchFood(a: Ant, w: World): Generator<Command, 'crop' | 'solid' | nul
   const store = col.foodChamber();
   yield* goHome(a);
   yield { k: 'room', chamber: store.id, time: w.rng.range(0.8, 1.6), point: col.pileSpot(store, 'food') };
-  const kind = col.takeFood(0.45);
-  if (kind) {
+  const from = col.takeFood(0.45);
+  if (from) {
     const piece = w.colony.newItem('food');
-    piece.foodKind = kind;
+    piece.foodKind = from.foodKind;
+    piece.foodSource = from.foodSource;
     col.pickUp(a, piece);
     return 'solid';
   }

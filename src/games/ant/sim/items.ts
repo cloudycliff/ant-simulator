@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { L, type Text } from '../../../core/i18n';
-import type { FoodKind } from '../world/food';
+import type { FoodKind, FoodSourceType } from '../world/food';
 import type { IdPool } from '../../../core/sim/ids';
 
 export type ItemType = 'egg' | 'larva' | 'pupa' | 'food' | 'waste' | 'soil' | 'corpse';
@@ -28,6 +28,8 @@ export interface ItemSave {
   p: number[];
   yaw: number;
   fk: FoodKind;
+  /** 较早的存档没有 */
+  fs?: FoodSourceType;
   am: number;
   sa: number;
   hu: number;
@@ -50,6 +52,8 @@ export class Item {
   yaw = Math.random() * Math.PI * 2;
 
   foodKind: FoodKind = 'prey';
+  /** 食物块是从哪种食物上切下来的，决定颜色；开局储粮没有 */
+  foodSource: FoodSourceType | null = null;
   amount = 1;
 
   stageAge = 0;
@@ -85,6 +89,7 @@ export class Item {
       p: [r3(this.pos.x), r3(this.pos.y), r3(this.pos.z)],
       yaw: r3(this.yaw),
       fk: this.foodKind,
+      ...(this.foodSource ? { fs: this.foodSource } : {}),
       am: r3(this.amount),
       sa: r3(this.stageAge),
       hu: r3(this.hunger),
@@ -106,6 +111,7 @@ export class Item {
     it.pos.set(s.p[0], s.p[1], s.p[2]);
     it.yaw = s.yaw;
     it.foodKind = s.fk;
+    it.foodSource = s.fs ?? null;
     it.amount = s.am;
     it.stageAge = s.sa;
     it.hunger = s.hu;

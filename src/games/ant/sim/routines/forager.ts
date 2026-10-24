@@ -117,6 +117,7 @@ export function* foragerRoutine(a: Ant, w: World): Routine {
   else {
     const piece = w.colony.newItem('food');
     piece.foodKind = found.kind;
+    piece.foodSource = found.type;
     col.pickUp(a, piece);
   }
   a.memory = { x: found.x, z: found.z };
