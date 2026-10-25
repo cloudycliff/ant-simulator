@@ -92,7 +92,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'help.click': 'Left click: select a fish, plant or flake · double-click: fly to it',
   'help.touchTap': 'Tap: select a fish, plant or flake · double-tap: fly to it · while following, drag to orbit',
   'help.follow': '<kbd>F</kbd> follow the selected fish · <kbd>Esc</kbd> deselect · <kbd>Space</kbd> pause/resume',
-  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>G</kbd> glass · <kbd>B</kbd> bubbles · <kbd>C</kbd> hunger colors · <kbd>T</kbd> charts',
+  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>G</kbd> glass · <kbd>B</kbd> bubbles · <kbd>C</kbd> hunger colors · <kbd>T</kbd> charts · <kbd>M</kbd> music',
   'help.tools': '<kbd>6</kbd> feed · <kbd>7</kbd> tap glass (<kbd>Esc</kbd> leaves the tool) · <kbd>Ctrl</kbd>+<kbd>S</kbd> save (also saves automatically)',
 
   'save.what': '{n} fish',

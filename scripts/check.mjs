@@ -84,7 +84,7 @@ const NODE_STEPS = [
 
 const UI_STEPS = [
   { name: '构建', argv: [TSC, '--noEmit'], then: [[VITE, 'build'], [VITE, 'build', '--mode', 'aquarium']] },
-  ...['saveui', 'selecttest', 'touchtest', 'mousetest', 'qualitytest', 'pwatest'].map((n) => ({ name: `浏览器 ${n}`, argv: [`scripts/ui/${n}.mjs`] })),
+  ...['saveui', 'selecttest', 'touchtest', 'mousetest', 'qualitytest', 'pwatest', 'musictest'].map((n) => ({ name: `浏览器 ${n}`, argv: [`scripts/ui/${n}.mjs`] })),
   {
     name: '各屏幕布局',
     argv: ['scripts/ui/layoutshots.mjs'],

@@ -186,7 +186,7 @@
 
 #### `core/config.ts`
 
-- `ENGINE`：框架的配置：`loop`（固定步长 1/30 秒、每帧最多 24 步、每帧模拟最多 10 ms）、`background`（后台运行的节拍和耗时上限）、`render`（画质档位、自动降档、帧率上限）、`save`（自动保存间隔）。游戏一般只读 `ENGINE.loop`
+- `ENGINE`：框架的配置：`loop`（固定步长 1/30 秒、每帧最多 24 步、每帧模拟最多 10 ms）、`background`（后台运行的节拍和耗时上限）、`render`（画质档位、自动降档、帧率上限）、`save`（自动保存间隔）、`music`（背景音乐的音量、速度、调、旋律疏密、混响）。游戏一般只读 `ENGINE.loop`
 
 #### `core/platform/saveSlot.ts`
 
@@ -230,6 +230,15 @@
 #### `core/render/quality.ts`
 
 - `Quality`、`QUALITY_MODES`、`QualityMode`、`QUALITY_LEVELS`：画质档位和帧率上限，由外壳的画质按钮控制
+
+#### `core/audio/composer.ts`
+
+- `Composer`：背景音乐的作曲，给一个 `Rng` 就能确定地往后作。`until(t)` 返回开始时间早于 `t` 秒、还没给过的各小节里的音。`key` 是这次的主音
+- `MusicNote`、`Voice`：一个音（`pad` 和弦铺底、`bell` 旋律、`bass` 低音），时间和时长都是秒
+
+#### `core/audio/music.ts`
+
+- `Music`：用 Web Audio 把作曲变成声音，外壳的音乐按钮和 <kbd>M</kbd> 控制。`enabled` 是开关（记在本地），`playing` 是此刻是否在出声，`toggle()` / `setEnabled()`
 
 #### `core/platform/background.ts`
 

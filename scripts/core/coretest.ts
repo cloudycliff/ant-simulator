@@ -12,6 +12,8 @@ import { Simulation } from '../../src/core/sim/simulation';
 import { GraphWalker, Routes, samplePolyline, type GraphEdge } from '../../src/core/move/graph';
 import { Skirt, turnToward } from '../../src/core/move/surface';
 import { Behavior } from '../../src/core/sim/behavior';
+import { Composer } from '../../src/core/audio/composer';
+import { Rng } from '../../src/core/util/random';
 
 let failed = 0;
 const check = (name: string, ok: boolean, info?: unknown) => {
@@ -272,6 +274,33 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
     threw = true;
   }
   check('和框架重名的键报错', threw);
+}
+
+// ---------------- 背景音乐作曲 ----------------
+{
+  const style = ENGINE.music;
+  const bar = (4 * 60) / style.bpm;
+  const a = new Composer(new Rng(7));
+  const notes = a.until(bar * 400);
+  const again = new Composer(new Rng(7)).until(bar * 400);
+  check('同一个种子作出同一首', JSON.stringify(notes) === JSON.stringify(again));
+  check('音按时间排好、不早于开头', notes.every((n, i) => n.t >= 0 && (i === 0 || n.t >= notes[i - 1].t - 1e-9)));
+  const bells = notes.filter((n) => n.voice === 'bell');
+  const [lo, hi] = style.melodyRange;
+  check(
+    '旋律都在五声音阶和音域里',
+    bells.every((n) => [0, 2, 4, 7, 9].includes((n.midi - a.key) % 12) && n.midi >= a.key + lo && n.midi <= a.key + hi),
+  );
+  const perBar = Array.from({ length: 400 }, (_, i) => bells.filter((n) => n.t >= i * bar - 1e-6 && n.t < (i + 1) * bar - 1e-6).length);
+  const empty = perBar.filter((k) => k === 0).length;
+  const avg = bells.length / 400;
+  check('有只剩和弦的小节，旋律疏密适中', empty > 40 && empty < 300 && avg > 0.8 && avg < 3.5, { empty, avg: avg.toFixed(2) });
+  const pads = notes.filter((n) => n.voice === 'pad');
+  check('每个和弦四个音、两小节一换', pads.length === 200 * 4 && pads.every((n) => Math.round(n.t / bar) % 2 === 0));
+  check('低音在低音区', notes.filter((n) => n.voice === 'bass').every((n) => n.midi >= 28 && n.midi < 50));
+  const step = new Composer(new Rng(7));
+  const parts = [...step.until(bar * 3.5), ...step.until(bar * 400)];
+  check('分几次往前排和一次排完一样', JSON.stringify(parts) === JSON.stringify(notes));
 }
 
 console.log(failed ? `${failed} 项失败` : '全部通过');

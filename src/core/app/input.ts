@@ -85,6 +85,8 @@ export function bindInput<R extends EntityRef>(app: App<R>): void {
         return action('follow');
       case 'KeyH':
         return action('help');
+      case 'KeyM':
+        return action('music');
       case 'KeyR':
         tools?.rotate();
         return;

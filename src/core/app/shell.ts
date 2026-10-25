@@ -1,3 +1,4 @@
+import type { Music } from '../audio/music';
 import { getLang, LANG_NAMES, LANGS, t, tr } from '../i18n';
 import type { SimEvent } from '../sim/events';
 import type { EntityRef } from '../sim/entities';
@@ -29,6 +30,7 @@ export type ShellAction =
   | 'langMenu'
   | 'background'
   | 'quality'
+  | 'music'
   | 'install'
   | 'lang'
   | 'sheet'
@@ -80,6 +82,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   private toolEl = document.getElementById('tool')!;
   private toolKey = '';
   quality: Quality | null = null;
+  music: Music | null = null;
   installer: Installer | null = null;
   private saveEl = document.getElementById('save')!;
   private viewsEl = document.getElementById('views')!;
@@ -260,6 +263,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
                 <div class="perf" id="perf"></div>
                 <div class="label" id="quality-label"></div>
                 <div class="opts" id="quality-opts">${QUALITY_MODES.map((m, i) => `<button data-a="quality" data-v="${i}">${t(`quality.${m}`)}</button>`).join('')}</div>
+                <button data-a="music" id="btn-music" title="${t('ui.musicTitle')}">${t('ui.music')}</button>
                 <button data-a="help">${t('ui.help')}</button>
                 <button data-a="savePanel" id="btn-save">${t('save.title')}</button>
                 <button data-a="install" id="btn-install" class="hidden" title="${t('ui.installTitle')}">${t('ui.install')}</button>
@@ -304,6 +308,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
         <div class="perf" id="perf"></div>
         <div class="meta">
           <button data-a="quality" id="btn-quality" title="${t('ui.qualityTitle')}"></button>
+          <button data-a="music" id="btn-music" title="${t('ui.musicTitle')}">${t('ui.music')} <kbd>M</kbd></button>
           <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
           <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
           <div class="lang" id="lang">
@@ -429,6 +434,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
       b.classList.toggle('on', !c.paused && Number(b.dataset.v) === c.speed);
     });
     document.getElementById('btn-pause')!.classList.toggle('on', c.paused);
+    document.getElementById('btn-music')!.classList.toggle('on', !!this.music?.enabled);
     const sm = document.getElementById('btn-speedmenu');
     if (sm) sm.textContent = `${c.speed}×`;
     document.body.classList.toggle('show-info', !!sel);

@@ -365,7 +365,7 @@ export const zh = {
   'help.click': '左键单击 选择蚂蚁/房间/食物/植物　双击 飞到目标',
   'help.touchTap': '点按 选择蚂蚁/房间/食物/植物　双击 飞到目标　跟随时单指拖动 绕着看',
   'help.follow': '<kbd>F</kbd> 跟随选中的蚂蚁　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续',
-  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线',
+  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>X</kbd> 地下透视　<kbd>P</kbd> 信息素　<kbd>C</kbd> 分工着色　<kbd>G</kbd> 草丛　<kbd>T</kbd> 统计曲线　<kbd>M</kbd> 音乐',
   'help.tools': '<kbd>6</kbd> 投食　<kbd>7</kbd> 障碍　<kbd>8</kbd> 浇水　<kbd>9</kbd> 天敌（重复按切换选项，<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）',
   'legend.trail': '路径信息素：携带食物返巢的工蚁释放，约 1.5 分钟减半',
   'legend.home': '领地足迹：所有工蚁在地表留下的碳氢化合物，挥发很慢',

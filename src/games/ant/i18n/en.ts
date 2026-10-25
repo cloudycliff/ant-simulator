@@ -371,7 +371,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'help.click': 'Click to select an ant, room, food or plant · double-click to fly to it',
   'help.touchTap': 'Tap to select an ant, room, food or plant · double-tap to fly to it · while following an ant, drag to orbit',
   'help.follow': '<kbd>F</kbd> follow the selected ant · <kbd>Esc</kbd> deselect · <kbd>Space</kbd> pause/resume',
-  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>X</kbd> x-ray · <kbd>P</kbd> pheromones · <kbd>C</kbd> role colors · <kbd>G</kbd> grass · <kbd>T</kbd> stats',
+  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>X</kbd> x-ray · <kbd>P</kbd> pheromones · <kbd>C</kbd> role colors · <kbd>G</kbd> grass · <kbd>T</kbd> stats · <kbd>M</kbd> music',
   'help.tools': '<kbd>6</kbd> food · <kbd>7</kbd> obstacle · <kbd>8</kbd> water · <kbd>9</kbd> predator (press again to cycle options, <kbd>Esc</kbd> to put the tool away) · <kbd>Ctrl</kbd>+<kbd>S</kbd> save (it also autosaves)',
   'legend.trail': 'Trail pheromone: laid by workers carrying food home; halves in about 1.5 minutes',
   'legend.home': 'Territory scent: hydrocarbons every worker leaves on the ground; fades very slowly',

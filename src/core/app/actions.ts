@@ -85,6 +85,10 @@ export function runAction<R extends EntityRef>(app: App<R>, a: string, v?: numbe
         app.refresh();
         break;
       }
+      case 'music':
+        shell.toast(t(app.music.toggle() ? 'toast.musicOn' : 'toast.musicOff'));
+        app.refresh();
+        break;
       case 'install':
         if (installer?.kind === 'ios') shell.toast(t('toast.installIos'));
         else void installer?.install().then((ok) => ok && shell.toast(t('toast.installed')));

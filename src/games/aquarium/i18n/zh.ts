@@ -87,7 +87,7 @@ export const zh = {
   'help.click': '左键单击 选择鱼/水草/鱼食　双击 飞过去',
   'help.touchTap': '点按 选择鱼/水草/鱼食　双击 飞过去　跟随时单指拖动 绕着看',
   'help.follow': '<kbd>F</kbd> 跟随选中的鱼　<kbd>Esc</kbd> 取消选择　<kbd>空格</kbd> 暂停/继续',
-  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>G</kbd> 玻璃　<kbd>B</kbd> 气泡　<kbd>C</kbd> 饥饿着色　<kbd>T</kbd> 统计曲线',
+  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> 切换倍速　<kbd>G</kbd> 玻璃　<kbd>B</kbd> 气泡　<kbd>C</kbd> 饥饿着色　<kbd>T</kbd> 统计曲线　<kbd>M</kbd> 音乐',
   'help.tools': '<kbd>6</kbd> 喂食　<kbd>7</kbd> 敲玻璃（<kbd>Esc</kbd> 退出工具）　<kbd>Ctrl</kbd>+<kbd>S</kbd> 保存（也会自动保存）',
 
   'save.what': '{n} 条鱼',

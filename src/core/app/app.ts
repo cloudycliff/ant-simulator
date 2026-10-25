@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Music } from '../audio/music';
 import { t, tr } from '../i18n';
 import type { BackgroundRunner } from '../platform/background';
 import { MOBILE } from '../platform/device';
@@ -47,8 +48,8 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
   setTimeout(() => app.shell.hideHelp(), 25000);
   startLoop(app);
 
-  const { world, camera, controller, shell: hud, quality } = app;
-  Object.assign(window, { world, camera, controller, hud, quality, renderer });
+  const { world, camera, controller, shell: hud, quality, music } = app;
+  Object.assign(window, { world, camera, controller, hud, quality, music, renderer });
 }
 
 /**
@@ -65,6 +66,7 @@ export class App<R extends EntityRef> {
   readonly quality: Quality;
   readonly shell: Shell<R, SaveMeta>;
   readonly installer: Installer | null;
+  readonly music = new Music();
   readonly saving: SaveControl<R>;
   readonly background: BackgroundRunner;
   selection: R | null = null;
@@ -112,6 +114,7 @@ export class App<R extends EntityRef> {
       describeSave: game.save.describe,
     }));
     shell.quality = this.quality;
+    shell.music = this.music;
     this.installer = game.installable ? new Installer() : null;
     if (this.installer) {
       shell.installer = this.installer;
