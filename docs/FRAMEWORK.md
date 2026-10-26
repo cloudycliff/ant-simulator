@@ -11,9 +11,9 @@
 | `core/sim` | `Simulation`：时钟、随机数、编号、按登记顺序推进的子系统、存档登记、实体注册表、最近事件、固定步长和帧预算；`SpatialHash`；`Behavior`（行为协程：生成器 yield 指令，逐帧执行，结果传回） | 继承它，登记子系统、存档部分、实体类型；个体行为复杂时用 `Behavior` |
 | `core/space` | `Space` 接口；`HeightfieldSpace`（地面）、`VolumeSpace`（盒子） | 选一种，传入高度函数和相机范围 |
 | `core/move` | 图上行走（最短路、沿边走）、地表转向、贴地、贴边绕开圆形障碍 | 用得上就用 |
-| `core/render` | 户外的天空、太阳、星空、雾（`Environment`）；雨；画质档位 | 户外游戏用 `Environment`，室内自己放灯 |
+| `core/render` | 户外的天空、太阳、星空、雾（`Environment`）；雨；画质档位；玩家的亮度设置（白天、夜里两档，乘在曝光上） | 户外游戏用 `Environment`，室内自己放灯 |
 | `core/ui` | 相机（自由飞行、跟随、飞过去、触屏手势）、工具（选择、预览圈、触屏两步放置）、折线图、面板 HTML 工具 | 给出工具的定义和执行函数 |
-| `core/app` | `runApp`：渲染器、读档和自动保存、选中和跟随、按键、网址参数、后台运行、主循环；`Shell`：顶栏、手机底栏和抽屉、信息面板、事件列表、帮助、统计、图例、存档面板、语言、画质、音乐 | 写一个 `GameModule` |
+| `core/app` | `runApp`：渲染器、读档和自动保存、选中和跟随、按键、网址参数、后台运行、主循环；`Shell`：顶栏、手机底栏和抽屉、信息面板、事件列表、帮助、统计、图例、存档面板、语言、画质、亮度、音乐 | 写一个 `GameModule` |
 | `core/audio` | 程序生成的背景音乐（`Composer` 作曲、`Music` 发声），外壳自带开关 | 不用管 |
 | `core/platform` | 存档位、语言选择、设备识别、后台运行、添加到主屏幕 | 存档位的名字 |
 | `core/i18n` | `t` / `L` / `tr`、框架自己的文字、`registerDicts` | 游戏的中英文词典 |
@@ -93,7 +93,7 @@ export const hiveSave = {
 
 ### 5. 视图
 
-`view.ts` 建场景对象，每帧 `update` 把模拟状态写进网格。个体多时用 `InstancedMesh`。必须交给外壳一盏投影的方向光（`shadowLight`），画质档位调它的阴影贴图。户外用 `core/render/environment.ts`；室内自己放灯。
+`view.ts` 建场景对象，每帧 `update` 把模拟状态写进网格。个体多时用 `InstancedMesh`。必须交给外壳一盏投影的方向光（`shadowLight`），画质档位调它的阴影贴图。户外用 `core/render/environment.ts`；室内自己放灯。玩家的亮度设置是乘在色调映射曝光上的，普通材质自动跟着变；自己写的 `ShaderMaterial` 不经过色调映射，要亮度一起变就乘上 `renderer.toneMappingExposure / ENGINE.render.exposure`（`Environment` 的天空就是这样做的）。
 
 ### 6. 游戏模块
 

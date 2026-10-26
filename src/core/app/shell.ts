@@ -6,7 +6,9 @@ import type { Simulation } from '../sim/simulation';
 import type { SaveMeta } from '../platform/saveSlot';
 import { BACKGROUND_LIMITED } from '../platform/background';
 import type { Installer } from '../platform/install';
+import { BRIGHTNESS_KEYS, type Brightness, type BrightnessKey } from '../render/brightness';
 import { QUALITY_LEVELS, QUALITY_MODES, type Quality } from '../render/quality';
+import { ENGINE } from '../config';
 import { agoText, cap, esc, isTouch, when } from '../ui/html';
 import type { ToolController } from '../ui/tools';
 import { renderInfo, type GameUi, type ViewToggle } from './game';
@@ -28,6 +30,8 @@ export type ShellAction =
   | 'loadSave'
   | 'newGame'
   | 'langMenu'
+  | 'brightMenu'
+  | 'brightReset'
   | 'background'
   | 'quality'
   | 'music'
@@ -67,7 +71,7 @@ export interface ShellOptions<R extends EntityRef, M extends SaveMeta> {
 }
 
 /**
- * 界面外壳：顶栏（时刻、倍速、视图开关、工具、画质、帮助、存档、语言）、主面板、信息面板、事件列表、帮助、
+ * 界面外壳：顶栏（时刻、倍速、视图开关、工具、画质、亮度、音乐、帮助、存档、语言）、主面板、信息面板、事件列表、帮助、
  * 统计、工具选项、存档面板、提示条；手机布局（一行顶栏 + 底栏 + 抽屉）。面板里的内容由游戏的 GameUi 给出
  */
 export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
@@ -83,6 +87,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   private toolKey = '';
   quality: Quality | null = null;
   music: Music | null = null;
+  brightness: Brightness | null = null;
   installer: Installer | null = null;
   private saveEl = document.getElementById('save')!;
   private viewsEl = document.getElementById('views')!;
@@ -130,16 +135,24 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
       const v = b.dataset.v ? Number(b.dataset.v) : undefined;
       if (a === 'sheet') this.toggleSheet(SHEETS[v ?? 0]);
       if (a === 'menu') this.setMenu(this.menu === v ? null : (v ?? null));
-      else if (b.closest('.pop')) this.setMenu(null);
+      else if (b.closest('.pop') && !b.closest('.bright')) this.setMenu(null);
       this.onAction?.(a, v);
     };
     for (const el of [this.top, this.infoEl, this.helpEl, this.toolEl, this.saveEl, this.viewsEl, this.toolboxEl, this.dockEl]) el.addEventListener('click', handler);
+    this.top.addEventListener('input', (e) => {
+      const el = e.target as HTMLInputElement;
+      const k = el.dataset.bright as BrightnessKey | undefined;
+      if (!k || !this.brightness) return;
+      this.brightness.set(k, Number(el.value));
+      this.syncBrightness();
+    });
     // 捕获阶段：面板会拦下 pointerdown，菜单也要能关掉
     window.addEventListener(
       'pointerdown',
       (e) => {
         const el = e.target as HTMLElement;
         if (!el.closest('#lang')) this.setLangMenu(false);
+        if (!el.closest('#bright')) this.setBrightMenu(false);
         if (!el.closest('.popwrap')) this.setMenu(null);
       },
       true,
@@ -246,6 +259,11 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     const clock = `<div class="clock"><span id="dayicon"></span><span id="clock"></span><span id="temp"></span></div>`;
     const repo = this.opt.repoUrl ? `<a class="repo" href="${this.opt.repoUrl}" target="_blank" rel="noopener" title="${t('ui.repoTitle')}">${GITHUB}<span>GitHub</span></a>` : '';
     const speeds = SPEEDS.map((s) => `<button data-a="speed" data-v="${s}">${s}×</button>`).join('');
+    const B = ENGINE.render.brightness;
+    const bright = `<div class="bright">${BRIGHTNESS_KEYS.map(
+      (k) =>
+        `<label class="slider" id="bright-${k}"><span>${t(`ui.bright.${k}`)}</span><input type="range" min="${B.min}" max="${B.max}" step="${B.step}" value="${this.brightness?.[k] ?? 1}" data-bright="${k}"><output></output></label>`,
+    ).join('')}<button data-a="brightReset">${t('ui.brightReset')}</button></div>`;
     const bgBtn = `<button data-a="background" id="btn-background" class="bg${BACKGROUND_LIMITED ? ' limited' : ''}" title="${t(BACKGROUND_LIMITED ? 'ui.backgroundLimitedTitle' : 'ui.backgroundTitle')}">${t('ui.background')}</button>`;
     if (this.compact) {
       this.top.innerHTML = `
@@ -263,6 +281,8 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
                 <div class="perf" id="perf"></div>
                 <div class="label" id="quality-label"></div>
                 <div class="opts" id="quality-opts">${QUALITY_MODES.map((m, i) => `<button data-a="quality" data-v="${i}">${t(`quality.${m}`)}</button>`).join('')}</div>
+                <div class="label" title="${t('ui.brightTitle')}">${t('ui.brightness')}</div>
+                ${bright}
                 <button data-a="music" id="btn-music" title="${t('ui.musicTitle')}">${t('ui.music')}</button>
                 <button data-a="help">${t('ui.help')}</button>
                 <button data-a="savePanel" id="btn-save">${t('save.title')}</button>
@@ -308,10 +328,14 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
         <div class="perf" id="perf"></div>
         <div class="meta">
           <button data-a="quality" id="btn-quality" title="${t('ui.qualityTitle')}"></button>
+          <div class="drop" id="bright">
+            <button data-a="brightMenu" id="btn-bright" title="${t('ui.brightTitle')}" aria-haspopup="true" aria-expanded="false">${t('ui.brightness')}<i class="caret"></i></button>
+            <div class="menu hidden" id="bright-menu"><div class="hint">${t('ui.brightTitle')}</div>${bright}</div>
+          </div>
           <button data-a="music" id="btn-music" title="${t('ui.musicTitle')}">${t('ui.music')} <kbd>M</kbd></button>
           <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
           <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
-          <div class="lang" id="lang">
+          <div class="drop" id="lang">
             <button data-a="langMenu" id="btn-lang" title="${t('ui.langTitle')}" aria-haspopup="menu" aria-expanded="false">${GLOBE}${LANG_NAMES[cur]}<i class="caret"></i></button>
             <div class="menu hidden" id="lang-menu" role="menu">
               ${LANGS.map((l, i) => `<button data-a="lang" data-v="${i}" role="menuitemradio" aria-checked="${l === cur}" class="${l === cur ? 'on' : ''}">${LANG_NAMES[l]}</button>`).join('')}
@@ -340,15 +364,43 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     this.legendEl.innerHTML = this.ui.legend?.html() ?? '';
   }
 
-  setLangMenu(open: boolean): void {
-    const menu = document.getElementById('lang-menu');
+  /** 桌面顶栏的下拉菜单（语言、亮度） */
+  private setDrop(id: string, open: boolean): void {
+    const menu = document.getElementById(`${id}-menu`);
     if (!menu || menu.classList.contains('hidden') === !open) return;
     menu.classList.toggle('hidden', !open);
-    document.getElementById('btn-lang')!.setAttribute('aria-expanded', String(open));
+    document.getElementById(`btn-${id}`)!.setAttribute('aria-expanded', String(open));
+  }
+
+  setLangMenu(open: boolean): void {
+    this.setDrop('lang', open);
   }
 
   toggleLangMenu(): void {
     this.setLangMenu(!!document.getElementById('lang-menu')?.classList.contains('hidden'));
+  }
+
+  setBrightMenu(open: boolean): void {
+    this.setDrop('bright', open);
+  }
+
+  toggleBrightMenu(): void {
+    this.setBrightMenu(!!document.getElementById('bright-menu')?.classList.contains('hidden'));
+  }
+
+  /** 亮度滑块的数值；圆点标出现在起作用的是哪一档 */
+  syncBrightness(): void {
+    const br = this.brightness;
+    if (!br) return;
+    const now: BrightnessKey = this.world.clock.daylight >= 0.5 ? 'day' : 'night';
+    for (const k of BRIGHTNESS_KEYS) {
+      const row = document.getElementById(`bright-${k}`);
+      if (!row) continue;
+      row.classList.toggle('now', k === now);
+      row.querySelector('output')!.textContent = `${Math.round(br[k] * 100)}%`;
+      const input = row.querySelector('input')!;
+      if (document.activeElement !== input) input.value = String(br[k]);
+    }
   }
 
   /** 切换语言后重写所有界面文字，包括已经产生的事件和日志 */
@@ -435,6 +487,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     });
     document.getElementById('btn-pause')!.classList.toggle('on', c.paused);
     document.getElementById('btn-music')!.classList.toggle('on', !!this.music?.enabled);
+    this.syncBrightness();
     const sm = document.getElementById('btn-speedmenu');
     if (sm) sm.textContent = `${c.speed}×`;
     document.body.classList.toggle('show-info', !!sel);

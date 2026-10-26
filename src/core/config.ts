@@ -36,6 +36,10 @@ export const ENGINE = {
     /** 暂停后这么多秒没有操作，帧率降到 idleFps */
     idleAfterSec: 2,
     idleFps: 15,
+    /** 色调映射的曝光；玩家的亮度设置是乘在它上面的倍数 */
+    exposure: 1.05,
+    /** 亮度滑块的范围和步长（倍数，1 是默认） */
+    brightness: { min: 0.5, max: 2.5, step: 0.05 },
   },
 
   save: {

@@ -153,7 +153,7 @@
 
 #### `core/render/environment.ts`
 
-- `Environment`：户外的天空、太阳、月亮、半球光、星空、雾，以及夜里和透视地下时跟着相机的观察灯。`new Environment(scene, levels)`，每帧 `update(clock, camera, focus, xray, cloud?)`；`sun` 可以直接当 `shadowLight`
+- `Environment`：户外的天空、太阳、月亮、半球光、星空、雾，以及夜里和透视地下时跟着相机的观察灯。`new Environment(scene, levels)`，每帧 `update(clock, camera, focus, xray, cloud?)`；`sun` 可以直接当 `shadowLight`。天空不经过色调映射，自己乘上了玩家的亮度倍数
 - `LightLevels`：各光源的强度（three.js 单位）
 
 #### `core/render/rain.ts`
@@ -186,7 +186,7 @@
 
 #### `core/config.ts`
 
-- `ENGINE`：框架的配置：`loop`（固定步长 1/30 秒、每帧最多 24 步、每帧模拟最多 10 ms）、`background`（后台运行的节拍和耗时上限）、`render`（画质档位、自动降档、帧率上限）、`save`（自动保存间隔）、`music`（背景音乐的音量、速度、调、旋律疏密、混响）。游戏一般只读 `ENGINE.loop`
+- `ENGINE`：框架的配置：`loop`（固定步长 1/30 秒、每帧最多 24 步、每帧模拟最多 10 ms）、`background`（后台运行的节拍和耗时上限）、`render`（画质档位、自动降档、帧率上限、曝光和亮度滑块的范围）、`save`（自动保存间隔）、`music`（背景音乐的音量、速度、调、旋律疏密、混响）。游戏一般只读 `ENGINE.loop`
 
 #### `core/platform/saveSlot.ts`
 
@@ -230,6 +230,11 @@
 #### `core/render/quality.ts`
 
 - `Quality`、`QUALITY_MODES`、`QualityMode`、`QUALITY_LEVELS`：画质档位和帧率上限，由外壳的画质按钮控制
+
+#### `core/render/brightness.ts`
+
+- `Brightness`：玩家的亮度设置，白天和夜里各一个曝光倍数（`day`、`night`，1 是默认），记在本地，由外壳的亮度滑块控制。`factor(daylight)` 按时钟的 `daylight` 在两档之间过渡，主循环每帧乘到 `ENGINE.render.exposure` 上；`set(k, v)`、`reset()`、`isDefault`
+- `BRIGHTNESS_KEYS`、`BrightnessKey`：`'day'`、`'night'`
 
 #### `core/audio/composer.ts`
 

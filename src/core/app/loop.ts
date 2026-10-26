@@ -34,7 +34,7 @@ export function startBackground<R extends EntityRef>(app: App<R>): BackgroundRun
 
 /** 每帧：推进模拟、更新相机、同步视图、刷新面板、自动保存、渲染 */
 export function startLoop<R extends EntityRef>(app: App<R>): void {
-  const { world, renderer, scene, camera, controller, space, shell, tools, session, quality } = app;
+  const { world, renderer, scene, camera, controller, space, shell, tools, session, quality, brightness } = app;
   const focus = new THREE.Vector3();
   const fwd = new THREE.Vector3();
   const hoverPt = new THREE.Vector3();
@@ -83,6 +83,7 @@ export function startLoop<R extends EntityRef>(app: App<R>): void {
     }
 
     const t2 = performance.now();
+    renderer.toneMappingExposure = ENGINE.render.exposure * brightness.factor(world.clock.daylight);
     renderer.render(scene, camera);
     const t3 = performance.now();
     perf.sim += (t1 - t0 - perf.sim) * 0.05;

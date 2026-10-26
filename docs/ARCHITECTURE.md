@@ -13,7 +13,7 @@ src/
   style.css             界面样式
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
   core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/core/layercheck.mjs）——
-    config.ts           ENGINE：主循环步长与帧预算、后台运行、画质档位与帧率、自动保存间隔、背景音乐
+    config.ts           ENGINE：主循环步长与帧预算、后台运行、画质档位与帧率、曝光与亮度范围、自动保存间隔、背景音乐
     util/
       random.ts         Rng（可设种子、可存档的随机数）、Noise2D（梯度噪声、分形噪声）
       math.ts           clamp / lerp / smoothstep / wrapAngle 等
@@ -39,6 +39,7 @@ src/
       environment.ts    天空、日月、半球光、观察灯、雾、星空；阴雨时变灰变暗；光照强度由游戏传入
       rain.ts           雨丝：跟随相机的循环下落线段；注视点周围地面溅起的水圈
       quality.ts        画质档位（像素比、阴影贴图）与帧率上限；“自动”持续卡顿时降档，暂停没操作时降帧
+      brightness.ts     Brightness：玩家的亮度设置，白天、夜里两个曝光倍数，按 daylight 过渡，记在本地
     audio/
       composer.ts       Composer：背景音乐的作曲（和弦进行、五声音阶旋律、低音），给定种子结果确定，不依赖 Web Audio
       music.ts          Music：Web Audio 合成（铃声、和弦铺底、低音、混响），开关记在本地，第一次点击或按键后才出声，页面隐藏时暂停
@@ -56,7 +57,7 @@ src/
       html.ts           面板 HTML 的小工具（进度条、颜色、首字母大写、转义、“多久以前”）
     app/
       game.ts           GameModule（游戏声明：标题、相机、存档、空间、mount）与 GameSession（场景对象、视图开关、工具、点选、每帧更新、面板内容）
-      shell.ts          Shell：界面外壳。顶栏（状态、性能、画质、音乐、帮助、存档、语言、GitHub，速度、后台运行、视图、工具）、主面板、信息面板、事件列表、帮助、统计、图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
+      shell.ts          Shell：界面外壳。顶栏（状态、性能、画质、亮度、音乐、帮助、存档、语言、GitHub，速度、后台运行、视图、工具）、主面板、信息面板、事件列表、帮助、统计、图例、工具面板；手机布局（一行顶栏 + 底栏 + 抽屉）
       app.ts            runApp：按顺序组装下面几份；App：运行中的外壳（场景、相机、session、Shell）和选中、飞过去、跟随、点到表面、使用工具
       boot.ts           渲染器；读档或新开局（?seed=、?new=1、?skip=）
       saving.ts         SaveControl：手动保存，定时、切到后台、关闭页面时自动保存，读档和重新开始时重新载入页面

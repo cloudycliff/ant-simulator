@@ -6,6 +6,7 @@ import { MOBILE } from '../platform/device';
 import { initLang } from '../platform/lang';
 import { Installer, registerServiceWorker } from '../platform/install';
 import type { SaveMeta } from '../platform/saveSlot';
+import { Brightness } from '../render/brightness';
 import { QUALITY_LEVELS, Quality } from '../render/quality';
 import type { EntityRef } from '../sim/entities';
 import type { SimEvent } from '../sim/events';
@@ -48,8 +49,8 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
   setTimeout(() => app.shell.hideHelp(), 25000);
   startLoop(app);
 
-  const { world, camera, controller, shell: hud, quality, music } = app;
-  Object.assign(window, { world, camera, controller, hud, quality, music, renderer });
+  const { world, camera, controller, shell: hud, quality, music, brightness } = app;
+  Object.assign(window, { world, camera, controller, hud, quality, music, brightness, renderer });
 }
 
 /**
@@ -67,6 +68,7 @@ export class App<R extends EntityRef> {
   readonly shell: Shell<R, SaveMeta>;
   readonly installer: Installer | null;
   readonly music = new Music();
+  readonly brightness = new Brightness();
   readonly saving: SaveControl<R>;
   readonly background: BackgroundRunner;
   selection: R | null = null;
@@ -115,6 +117,7 @@ export class App<R extends EntityRef> {
     }));
     shell.quality = this.quality;
     shell.music = this.music;
+    shell.brightness = this.brightness;
     this.installer = game.installable ? new Installer() : null;
     if (this.installer) {
       shell.installer = this.installer;

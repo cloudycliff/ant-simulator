@@ -96,6 +96,13 @@ export function runAction<R extends EntityRef>(app: App<R>, a: string, v?: numbe
       case 'langMenu':
         shell.toggleLangMenu();
         break;
+      case 'brightMenu':
+        shell.toggleBrightMenu();
+        break;
+      case 'brightReset':
+        app.brightness.reset();
+        shell.syncBrightness();
+        break;
       case 'lang':
         shell.setLangMenu(false);
         if (!chooseLang(LANGS[v ?? 0] ?? 'zh')) break;

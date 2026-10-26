@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ENGINE } from '../config';
 import type { SimClock } from '../sim/clock';
 import { TAU, clamp } from '../util/math';
 
@@ -78,9 +79,10 @@ export class Environment {
         sunDir: { value: new THREE.Vector3(0, 1, 0) },
         sunVis: { value: 1 },
         ground: { value: new THREE.Color(0x2a1f16) },
+        gain: { value: 1 },
       },
       vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-      fragmentShader: `uniform vec3 top; uniform vec3 bottom; uniform vec3 sunDir; uniform float sunVis; uniform vec3 ground; varying vec3 vDir;
+      fragmentShader: `uniform vec3 top; uniform vec3 bottom; uniform vec3 sunDir; uniform float sunVis; uniform vec3 ground; uniform float gain; varying vec3 vDir;
         void main(){
           vec3 d = normalize(vDir);
           float h = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);
@@ -89,11 +91,13 @@ export class Environment {
           c += vec3(1.0, 0.85, 0.6) * (pow(s, 600.0) * 3.0 + pow(s, 12.0) * 0.25) * sunVis * step(0.0, d.y);
           // 地平线以下是大地（透视地下时透过地表看到的远景）
           c = mix(c, ground, smoothstep(0.0, -0.08, d.y));
-          gl_FragColor = vec4(c, 1.0);
+          gl_FragColor = vec4(c * gain, 1.0);
         }`,
     });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), this.skyMat);
     this.sky.renderOrder = -1;
+    // 天空不经过色调映射，玩家调的亮度倍数要单独乘上
+    this.sky.onBeforeRender = (r) => (this.skyMat.uniforms.gain.value = r.toneMappingExposure / ENGINE.render.exposure);
     scene.add(this.sky);
 
     const starGeo = new THREE.BufferGeometry();
