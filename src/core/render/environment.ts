@@ -15,6 +15,8 @@ const WHITE = new THREE.Color(0xffffff);
 const MOONLIGHT = new THREE.Color(0xa8bcf0);
 const LAMP_WARM = new THREE.Color(0xffe2b8);
 const LAMP_COOL = new THREE.Color(0xdde6ff);
+const _origin = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 
 /** 光照强度（three.js 单位） */
 export interface LightLevels {
@@ -57,6 +59,11 @@ export class Environment {
   private tmpCloud = new THREE.Color();
   /** 阴影相机现在用的范围，scale.shadow 变了才重算投影 */
   private shadowExtent = 0;
+  private lightBasis = new THREE.Matrix4();
+  private axisX = new THREE.Vector3();
+  private axisY = new THREE.Vector3();
+  private axisZ = new THREE.Vector3();
+  private shadowFocus = new THREE.Vector3();
   /** 游戏可以每帧改 fog 和 shadow（比如镜头从蜂箱飞到花园时放大）；sky 和 sunDistance 只在构造时用 */
   readonly scale: EnvironmentScale;
 
@@ -148,6 +155,22 @@ export class Environment {
     sc.updateProjectionMatrix();
   }
 
+  /**
+   * 阴影相机跟着焦点走时，只按阴影贴图的整像素移动：亚像素的平移会让整张阴影图每帧重新采样，
+   * 细腿、草叶的影子在镜头移动时闪烁。在阴影相机自己的朝向里对齐（和 three.js 的 lookAt 同一套轴）
+   */
+  private snapToShadowTexel(focus: THREE.Vector3, dir: THREE.Vector3): THREE.Vector3 {
+    const texel = (2 * this.shadowExtent) / this.sun.shadow.mapSize.x;
+    this.lightBasis.lookAt(dir, _origin, _up).extractBasis(this.axisX, this.axisY, this.axisZ);
+    const u = Math.round(focus.dot(this.axisX) / texel) * texel;
+    const v = Math.round(focus.dot(this.axisY) / texel) * texel;
+    return this.shadowFocus
+      .copy(this.axisX)
+      .multiplyScalar(u)
+      .addScaledVector(this.axisY, v)
+      .addScaledVector(this.axisZ, focus.dot(this.axisZ));
+  }
+
   /** cloud：阴雨云量 0..1，天空变灰、阳光变弱、雾气拉近 */
   update(clock: SimClock, camera: THREE.Camera, focus: THREE.Vector3, xray: boolean, cloud = 0): void {
     const hour = clock.hour;
@@ -178,8 +201,9 @@ export class Environment {
     this.sun.color.setHSL(0.09, 0.6 * dusk + 0.2, 0.75 + 0.2 * (1 - dusk));
     const S = this.scale;
     this.applyShadowExtent();
-    this.sun.position.copy(focus).addScaledVector(dir, S.sunDistance);
-    this.sun.target.position.copy(focus);
+    const sf = this.snapToShadowTexel(focus, dir);
+    this.sun.position.copy(sf).addScaledVector(dir, S.sunDistance);
+    this.sun.target.position.copy(sf);
     this.sun.castShadow = elev > 0.02 && cloud < 0.8;
 
     const moonDir = dir.clone().negate();
