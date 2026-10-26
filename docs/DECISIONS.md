@@ -656,3 +656,9 @@
   - `CameraController` 加第四个参数 `CameraTuning`（`clearance`、`speed`、`wheel`、`reach`、`follow`、`followStart`、`followRate`），游戏在 `camera.tuning` 里给出。`clearance` 是“离障碍多远”的函数，默认是离地高度；蜜蜂取离地和离观察箱两者的小值，贴近玻璃时变慢
   - 不给时用原来的数值（`DEFAULT_CAMERA_TUNING` 就是蚂蚁的），蚂蚁和鱼缸不用改
 - **结果**：蚂蚁的模拟基线逐行不变，`npm run check` 17 项、`npm run check:ui` 10 项通过；蜜蜂从贴近巢脾到花园上空都能顺手地移动
+
+### T-074 飞过去的方向由实体给出
+- **状态**：已采纳（2026-10-26）
+- **问题**：外壳的“飞过去”沿相机现在的方向走，至少抬高到 0.45 俯看。蚂蚁的东西都在地上，这样正好；蜜蜂的巢脾竖着立，俯看时巢房全是斜的，背面的巢房还要先绕过去
+- **决定**：`EntityKind` 加可选的 `viewDir(ref, from)`，返回从对象指向相机的方向（`from` 是相机现在的位置，方便按相机在哪一边选面）；`CameraController.flyTo(at, dist, viewDir?)` 给了方向就照着走、不抬高。不给或返回 null 时和原来一样
+- **结果**：蚂蚁、鱼缸不用改，蚂蚁的模拟基线逐行不变；蜜蜂选中巢房飞过去时正对着那一面的玻璃

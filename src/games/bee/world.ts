@@ -4,22 +4,49 @@ import { Simulation } from '../../core/sim/simulation';
 import { clamp } from '../../core/util/math';
 import { Noise2D } from '../../core/util/random';
 import { CONFIG } from './config';
+import { CELLS, COMB_H, Comb, cellFace, cellPos, type CombSave } from './sim/comb';
 
-/** 能选中的东西；巢脾、蜂、花丛加进来时在这里扩充 */
-export type BeeRef = { kind: 'hive'; id: number };
-
-/** 巢脾整体的高度：两框加中间的木条 */
-export const COMB_H = CONFIG.hive.frameH * 2 + CONFIG.hive.bar;
+/** 能选中的东西；蜂、花丛加进来时在这里扩充。巢房的 id 就是巢房编号，不随读档变 */
+export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number };
 
 /** 花园和观察箱。地形由编号生成，不进存档 */
 export class BeeWorld extends Simulation<BeeRef> {
+  readonly comb = new Comb();
+  /** 还没有蜂时羽化的只数（蜂加进来后去掉） */
+  emerged = 0;
   private noise: Noise2D;
+  private broodClock = 0;
 
   constructor(readonly seed: number) {
     super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed);
     this.noise = new Noise2D(seed);
     const H = CONFIG.hive;
-    this.entities.define('hive', { pos: () => ({ x: 0, y: H.baseY + COMB_H / 2, z: 0 }), viewDistance: 110 });
+    this.comb.generate(this.rng, seed);
+    this.addSystem('brood', (dt) => {
+      this.broodClock += dt;
+      if (this.broodClock < 1) return;
+      this.emerged += this.comb.develop(this.broodClock);
+      this.broodClock = 0;
+    });
+    this.saves.add(
+      'comb',
+      () => ({ ...this.comb.toSave(), emerged: this.emerged, clock: this.broodClock }),
+      (d: CombSave & { emerged: number; clock: number }) => {
+        this.comb.restore(d);
+        this.emerged = d.emerged;
+        this.broodClock = d.clock;
+      },
+    );
+    this.entities.define('hive', {
+      pos: () => ({ x: 0, y: H.baseY + COMB_H / 2, z: 0 }),
+      viewDistance: 110,
+      viewDir: (_r, from) => ({ x: 0.15, y: 0.1, z: from.z < 0 ? -1 : 1 }),
+    });
+    this.entities.define('cell', {
+      pos: (r) => (r.id >= 0 && r.id < CELLS ? cellPos(r.id) : null),
+      viewDistance: 7,
+      viewDir: (r) => ({ x: 0.2, y: 0.25, z: cellFace(r.id) ? -1 : 1 }),
+    });
   }
 
   /** 地面高度：蜂箱周围是平的，往外慢慢起伏 */
@@ -29,7 +56,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   }
 }
 
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 export interface BeeSaveData {
   version: number;

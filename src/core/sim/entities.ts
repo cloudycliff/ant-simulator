@@ -11,6 +11,11 @@ export interface EntityKind<R> {
   pos?: (ref: R) => Point3 | null;
   /** 相机飞过去时离它多远 */
   viewDistance?: number;
+  /**
+   * 相机飞过去时从哪个方向看：从对象指向相机的方向，不必是单位向量；from 是相机现在的位置。
+   * 不给或返回 null 时沿相机现在的方向，并抬高到俯看
+   */
+  viewDir?: (ref: R, from: Point3) => Point3 | null;
   follow?: boolean;
   /** 读档后编号会重新分配：存档里的事件只留位置，不留对象 */
   unstable?: boolean;
@@ -40,6 +45,10 @@ export class EntityRegistry<R extends EntityRef> {
 
   viewDistance(ref: R): number {
     return this.kinds.get(ref.kind)?.viewDistance ?? this.defaultViewDistance;
+  }
+
+  viewDir(ref: R, from: Point3): Point3 | null {
+    return this.kinds.get(ref.kind)?.viewDir?.(ref, from) ?? null;
   }
 
   canFollow(ref: R): boolean {

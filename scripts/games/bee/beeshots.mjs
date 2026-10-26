@@ -15,6 +15,12 @@ const SCENES = {
   hive: { q: '&hour=11&select=hive:0&fly=1', check: `document.querySelector('#info h2')?.textContent ?? ''` },
   close: { q: '&hour=11&cam=6,100,12,2,98,0' },
   garden: { q: '&hour=12&cam=0,400,900,0,40,-200' },
+  comb: { q: '&hour=11&cam=0,103,58,0,103,0' },
+  back: { q: '&hour=11&cam=0,103,-58,0,103,0' },
+  near: { q: '&hour=11&cam=0,107,9,0,107,0' },
+  side: { q: '&hour=11&cam=-7,106,3.5,5,106,0' },
+  cell: { q: '&hour=11&select=cell:4542&fly=1', check: `document.querySelector('#info')?.innerText.replace(/\\s+/g, ' ') ?? ''` },
+  honey: { q: '&hour=11&cam=-1,119,10,-1,119,0' },
   en: { q: '&hour=11&lang=en' },
 };
 

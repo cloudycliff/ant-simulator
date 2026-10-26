@@ -338,16 +338,18 @@ export class CameraController {
     this.lookAt(this.followPos);
   }
 
-  /** 平滑飞到能看到目标的位置 */
-  flyTo(at: THREE.Vector3Like, dist: number): void {
+  /** 平滑飞到能看到目标的位置；给了 viewDir（从目标指向相机）就从那个方向看，否则从斜上方俯看 */
+  flyTo(at: THREE.Vector3Like, dist: number, viewDir?: THREE.Vector3Like | null): void {
     this.stopFollow();
     const target = new THREE.Vector3().copy(at);
-    const dir = this.camera.position.clone().sub(target);
-    dir.y = Math.max(dir.y, 0.2);
-    dir.normalize();
-    if (dir.y < 0.45) {
-      dir.y = 0.45;
+    const dir = viewDir ? new THREE.Vector3().copy(viewDir).normalize() : this.camera.position.clone().sub(target);
+    if (!viewDir) {
+      dir.y = Math.max(dir.y, 0.2);
       dir.normalize();
+      if (dir.y < 0.45) {
+        dir.y = 0.45;
+        dir.normalize();
+      }
     }
     const to = target.clone().addScaledVector(dir, dist);
     const fromQ = this.camera.quaternion.clone();

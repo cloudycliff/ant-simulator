@@ -5,7 +5,8 @@ import { svgIcon } from '../../core/app/shell';
 import { HeightfieldSpace } from '../../core/space/heightfield';
 import { CONFIG } from './config';
 import { BeeView } from './view';
-import { BeeWorld, COMB_H, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
+import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
+import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
 const H = CONFIG.hive;
 const G = CONFIG.garden;
@@ -60,7 +61,7 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     tools: null,
     pick: (x, y) => pick(view, camera, dom, x, y),
     syncViews: () => view.syncViews(),
-    update: (_dt, f) => view.update(camera, f.focus, f.following, f.selection),
+    update: (_dt, f) => view.update(camera, dom.clientHeight, f.focus, f.following, f.selection),
     ui: beeUi(w),
   };
 }
@@ -71,7 +72,45 @@ function pick(view: BeeView, camera: THREE.Camera, dom: HTMLElement, x: number, 
   const rect = dom.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1), camera);
   const hit = ray.intersectObjects(view.pickables, false)[0];
+  const cell = view.comb.pick(ray.ray);
+  if (cell && (!hit || cell.dist < hit.distance)) return { kind: 'cell', id: cell.cell };
   return (hit?.object.userData.ref as BeeRef | undefined) ?? null;
+}
+
+/** 模拟秒数折成游戏里的时长 */
+function span(seconds: number): string {
+  const h = Math.max(1, Math.round((seconds / CONFIG.clock.dayLength) * 24));
+  return h < 24 ? t('info.hours', { h }) : t('info.days', { d: Math.floor(h / 24), h: h % 24 });
+}
+
+function cellInfo(w: BeeWorld, cell: number): string {
+  const cb = w.comb;
+  const site = cellSite(cell);
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  const local = site % (GRID.rows * GRID.cols);
+  const where = t('info.whereValue', {
+    frame: t(siteFrame(site) ? 'info.upper' : 'info.lower'),
+    face: t(cellFace(cell) ? 'info.back' : 'info.front'),
+    row: GRID.rows - Math.floor(local / GRID.cols),
+    col: (local % GRID.cols) + 1,
+  });
+  const drone = cb.drone[site] === 1;
+  let body = kv(t('info.where'), where) + kv(t('info.caste'), t(drone ? 'info.drone' : 'info.worker'));
+  let key: (typeof CONTENT_KEYS)[number] | 'building';
+  if (cb.build[site] < 1) {
+    key = 'building';
+    body += kv(t('info.built'), t('info.percent', { p: Math.round(cb.build[site] * 100) }));
+  } else {
+    const c = cb.content[cell];
+    key = CONTENT_KEYS[c];
+    const T = drone ? CONFIG.brood.drone : CONFIG.brood.worker;
+    const a = cb.age[cell];
+    if (c === CELL.egg) body += kv(t('info.hatch'), t('info.inTime', { t: span(T.egg - a) }));
+    else if (c === CELL.larva) body += kv(t('info.seal'), t('info.inTime', { t: span(T.egg + T.larva - a) }));
+    else if (c === CELL.capped) body += kv(t('info.emerge'), t('info.inTime', { t: span(T.egg + T.larva + T.capped - a) }));
+    else if (c !== CELL.empty) body += kv(t('info.amount'), t('info.percent', { p: Math.round(cb.amount[cell] * 100) }));
+  }
+  return `<h2>${t('info.cell')} · ${t(`cell.${key}`)}</h2>${body}<p class="desc">${t(`cellDesc.${key}`)}</p>`;
 }
 
 function beeUi(w: BeeWorld): GameUi<BeeRef> {
@@ -82,16 +121,26 @@ function beeUi(w: BeeWorld): GameUi<BeeRef> {
     panel: {
       icon: ICON,
       label: () => t('dock.colony'),
-      html: (folded) => `
+      html: (folded) => {
+        const c = w.comb.census();
+        const n = c.counts;
+        return `
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
       ${row(t('colony.season'), t('colony.summer'))}
-      <p class="desc">${t('colony.todo')}</p>`,
+      ${row(t('colony.cells'), t('colony.cellsValue', { n: c.built * 2, b: c.building * 2 }))}
+      ${row(t('colony.brood'), t('colony.broodValue', { e: n.egg, l: n.larva, c: n.capped }))}
+      ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
+      ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
+      ${row(t('colony.emerged'), String(w.emerged))}
+      <p class="desc">${t('colony.todo')}</p>`;
+      },
     },
     infoHint: () => t('info.hint'),
     info: {
       hive: () => `<h2>${t('info.hive')}</h2>
       <div class="kv"><span>${t('info.size')}</span><b>${t('info.sizeValue', { w: H.combW, h: H.frameH })}</b></div>
       <p class="desc">${t('info.hiveDesc')}</p>`,
+      cell: (r) => cellInfo(w, r.id),
     },
     help: {
       mouse: ['help.move', 'help.mouse', 'help.click', 'help.views'],

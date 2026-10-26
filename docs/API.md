@@ -37,8 +37,8 @@
 #### `core/sim/entities.ts`
 
 - `EntityRef`：指向一个对象，`{ kind }` 加上游戏自己的字段（通常是 `id`）。游戏的引用类型是各类引用的联合
-- `EntityKind`：`define` 的第二个参数。`pos`：现在的位置，不在了返回 null；可跟随的类型要返回对象自己的位置向量，跟随时每帧读一次。`viewDistance`：飞过去时离多远。`follow`：能否跟随。`unstable`：读档后编号会重新分配，事件存档时只留位置
-- `EntityRegistry`：`define(kind, spec)`（重复登记报错）、`has`、`pos`、`viewDistance`、`canFollow`、`stable`、`defaultViewDistance`。选中、飞过去、跟随、事件定位都查它
+- `EntityKind`：`define` 的第二个参数。`pos`：现在的位置，不在了返回 null；可跟随的类型要返回对象自己的位置向量，跟随时每帧读一次。`viewDistance`：飞过去时离多远。`viewDir(ref, from)`：飞过去时从哪个方向看（从对象指向相机，`from` 是相机现在的位置），不给或返回 null 时沿现在的方向抬高到俯看。`follow`：能否跟随。`unstable`：读档后编号会重新分配，事件存档时只留位置
+- `EntityRegistry`：`define(kind, spec)`（重复登记报错）、`has`、`pos`、`viewDistance`、`viewDir`、`canFollow`、`stable`、`defaultViewDistance`。选中、飞过去、跟随、事件定位都查它
 
 #### `core/sim/events.ts`
 
@@ -138,7 +138,7 @@
 
 #### `core/ui/camera.ts`
 
-- `CameraController`：外壳创建，`new CameraController(camera, dom, space, tuning?)`。`mode`（`free` / `follow`）、`setPose`、`follow`、`stopFollow`、`flyTo(at, dist)`、`update`。`onClick`、`onDoubleClick`、`onUserMove`、`onTouchDragStart`、`onTouchDrag` 由外壳占用，游戏不要改
+- `CameraController`：外壳创建，`new CameraController(camera, dom, space, tuning?)`。`mode`（`free` / `follow`）、`setPose`、`follow`、`stopFollow`、`flyTo(at, dist, viewDir?)`、`update`。`onClick`、`onDoubleClick`、`onUserMove`、`onTouchDragStart`、`onTouchDrag` 由外壳占用，游戏不要改
 - `CameraTuning`：相机的快慢和远近，游戏写在 `GameModule.camera.tuning` 里。`clearance(p)`：相机离最近的景物多远，移动、平移、滚轮的快慢都按它算，默认是离参考面的高度（蜂箱架在离地 80 cm 处时，贴着巢脾要按离巢脾的距离算）；`speed`、`wheel`、`reach`：WASD、滚轮、触屏的限幅；`follow`、`followStart`：跟随距离的范围和开始跟随时的范围；`followRate`：跟随时镜头追目标的速率，目标速度除以它约等于镜头落后的距离（飞行的蜂要调大）
 - `DEFAULT_CAMERA_TUNING`：默认值，即蚂蚁游戏的尺度
 

@@ -161,7 +161,7 @@ export class App<R extends EntityRef> {
   flyToSelection(): void {
     if (!this.selection) return;
     const p = this.world.entities.pos(this.selection);
-    if (p) this.controller.flyTo(p, this.world.entities.viewDistance(this.selection));
+    if (p) this.controller.flyTo(p, this.world.entities.viewDistance(this.selection), this.world.entities.viewDir(this.selection, this.camera.position));
   }
 
   toggleFollow(): void {

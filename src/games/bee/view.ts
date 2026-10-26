@@ -3,8 +3,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Environment } from '../../core/render/environment';
 import { clamp } from '../../core/util/math';
 import { Rng } from '../../core/util/random';
+import { CombView } from './combView';
 import { CONFIG } from './config';
-import { COMB_H, type BeeRef, type BeeWorld } from './world';
+import { COMB_H } from './sim/comb';
+import type { BeeRef, BeeWorld } from './world';
 
 const H = CONFIG.hive;
 const R = CONFIG.render;
@@ -19,6 +21,7 @@ const _focus = new THREE.Vector3();
 export class BeeView {
   readonly group = new THREE.Group();
   readonly env: Environment;
+  readonly comb: CombView;
   /** 点选用：观察箱的各个部件，userData.ref 指向观察箱 */
   readonly pickables: THREE.Object3D[] = [];
   glass = true;
@@ -40,6 +43,8 @@ export class BeeView {
     }
     this.buildGarden();
     this.buildHive();
+    this.comb = new CombView(w.comb);
+    this.group.add(this.comb.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.8, depthTest: false }));
     this.outline.position.set(0, H.baseY + COMB_H / 2 + 6, 0);
@@ -189,11 +194,12 @@ export class BeeView {
     return _focus;
   }
 
-  update(camera: THREE.PerspectiveCamera, focus: THREE.Vector3, following: boolean, sel: BeeRef | null): void {
+  update(camera: THREE.PerspectiveCamera, viewportH: number, focus: THREE.Vector3, following: boolean, sel: BeeRef | null): void {
     if (following) this.env.scale.shadow = R.shadowNear;
     this.env.update(this.w.clock, camera, following ? focus : this.focusFor(camera), false);
     const k = clamp(this.env.hemi.intensity / R.light.hemiDay, 0, 1);
     for (const f of this.fills) f.intensity = R.fill * k;
     this.outline.visible = sel?.kind === 'hive';
+    this.comb.update(camera, viewportH, sel?.kind === 'cell' ? sel.id : null);
   }
 }
