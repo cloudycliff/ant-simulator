@@ -5,17 +5,17 @@ import { clamp } from '../../core/util/math';
 import { Noise2D } from '../../core/util/random';
 import { CONFIG } from './config';
 import { CELLS, COMB_H, Comb, cellFace, cellPos, type CombSave } from './sim/comb';
+import { Bees, type BeesSave } from './sim/bees';
 import { Flowers, type FlowerSave } from './sim/flowers';
 
-/** 能选中的东西；蜂加进来时在这里扩充。巢房的 id 就是巢房编号，花丛的 id 是 ids.next('flower') 发的号，都不随读档变 */
-export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number };
+/** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
+export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number };
 
 /** 花园和观察箱。地形由编号生成，不进存档 */
 export class BeeWorld extends Simulation<BeeRef> {
   readonly comb = new Comb();
   readonly flowers = new Flowers();
-  /** 还没有蜂时羽化的只数（蜂加进来后去掉） */
-  emerged = 0;
+  readonly bees: Bees;
   private noise: Noise2D;
   private broodClock = 0;
 
@@ -25,21 +25,32 @@ export class BeeWorld extends Simulation<BeeRef> {
     const H = CONFIG.hive;
     this.comb.generate(this.rng, seed);
     this.flowers.generate(this.rng, () => this.ids.next('flower'));
+    this.bees = new Bees(this.comb, this.rng, this.ids, () => this.clock.seconds);
+    this.bees.generate();
     this.addSystem('brood', (dt) => {
       this.broodClock += dt;
       if (this.broodClock < 1) return;
-      this.emerged += this.comb.develop(this.broodClock);
+      this.comb.develop(
+        this.broodClock,
+        (cell) => this.bees.emerge(cell),
+        () => this.bees.starved++,
+      );
       this.broodClock = 0;
     });
+    this.addSystem('bees', (dt) => this.bees.update(dt));
     this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour));
     this.saves.add(
       'comb',
-      () => ({ ...this.comb.toSave(), emerged: this.emerged, clock: this.broodClock }),
-      (d: CombSave & { emerged: number; clock: number }) => {
+      () => ({ ...this.comb.toSave(), clock: this.broodClock }),
+      (d: CombSave & { clock: number }) => {
         this.comb.restore(d);
-        this.emerged = d.emerged;
         this.broodClock = d.clock;
       },
+    );
+    this.saves.add(
+      'bees',
+      () => this.bees.toSave(),
+      (d: BeesSave) => this.bees.restore(d),
     );
     this.saves.add(
       'flowers',
@@ -63,6 +74,15 @@ export class BeeWorld extends Simulation<BeeRef> {
       },
       viewDistance: 450,
     });
+    this.entities.define('bee', {
+      pos: (r) => this.bees.get(r.id)?.pos ?? null,
+      viewDistance: 5,
+      follow: true,
+      viewDir: (r) => {
+        const b = this.bees.get(r.id);
+        return b ? { x: 0.25, y: 0.4, z: b.face ? -1 : 1 } : null;
+      },
+    });
   }
 
   /** 地面高度：蜂箱周围是平的，往外慢慢起伏 */
@@ -72,7 +92,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   }
 }
 
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 export interface BeeSaveData {
   version: number;
@@ -80,9 +100,10 @@ export interface BeeSaveData {
   savedAt: number;
   clock: { seconds: number; speed: number };
   camera?: number[];
+  bees?: BeesSave;
 }
 
-export type BeeSaveMeta = SaveMeta;
+export type BeeSaveMeta = SaveMeta & { bees?: number };
 
 export const beeSave = {
   slot: new SaveSlot<BeeSaveData, BeeSaveMeta>('cyber-bee-save'),
@@ -93,5 +114,5 @@ export const beeSave = {
     w.saves.restore(d as unknown as Record<string, unknown>);
   },
   problem: (d: BeeSaveData) => (d.version !== SAVE_VERSION ? L('save.incompatible') : null),
-  meta: (d: BeeSaveData): BeeSaveMeta => ({ savedAt: d.savedAt, seconds: Math.round(d.clock.seconds) }),
+  meta: (d: BeeSaveData): BeeSaveMeta => ({ savedAt: d.savedAt, seconds: Math.round(d.clock.seconds), bees: d.bees?.bees.length }),
 };

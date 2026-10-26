@@ -5,6 +5,7 @@ import { svgIcon } from '../../core/app/shell';
 import { HeightfieldSpace } from '../../core/space/heightfield';
 import { CONFIG } from './config';
 import { BeeView } from './view';
+import { CASTE, CASTE_KEYS, ROLE_KEYS, roleOf } from './sim/bees';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
 import { nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
@@ -45,7 +46,7 @@ export const beeGame: GameModule<BeeWorld, BeeRef, BeeSaveData, BeeSaveMeta> = {
     },
   },
   create: (seed) => new BeeWorld(seed),
-  save: { ...beeSave, describe: () => t('save.what') },
+  save: { ...beeSave, describe: (m) => t('save.what', { n: m.bees ?? 0 }) },
   space: (w) => new HeightfieldSpace((x, z) => w.groundAt(x, z), G.size, new THREE.Box3(new THREE.Vector3(-G.size / 2 + 200, 1, -G.size / 2 + 200), new THREE.Vector3(G.size / 2 - 200, 1500, G.size / 2 - 200))),
   mount,
 };
@@ -55,25 +56,32 @@ const ICON = svgIcon('<path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5z"/><p
 function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
   const { world: w, scene, camera, dom } = ctx;
   const view = new BeeView(w, scene);
-  const views: ViewToggle[] = [{ id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) }];
+  const views: ViewToggle[] = [
+    { id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) },
+    { id: 'fade', label: () => t('ui.fade'), key: 'B', on: () => view.bees.fade, toggle: () => (view.bees.fade = !view.bees.fade) },
+  ];
   return {
     shadowLight: view.env.sun,
     views,
     tools: null,
-    pick: (x, y) => pick(view, camera, dom, x, y),
+    pick: (x, y, tol) => pick(view, camera, dom, x, y, tol),
     syncViews: () => view.syncViews(),
     update: (_dt, f) => view.update(camera, dom.clientHeight, f.focus, f.following, f.selection),
-    ui: beeUi(w),
+    ui: beeUi(w, ctx.following),
   };
 }
 
 const ray = new THREE.Raycaster();
 
-function pick(view: BeeView, camera: THREE.Camera, dom: HTMLElement, x: number, y: number): BeeRef | null {
+/** 蜂按屏幕距离优先；淡化蜂时巢房优先，点不到巢房才选蜂（P-009） */
+function pick(view: BeeView, camera: THREE.PerspectiveCamera, dom: HTMLElement, x: number, y: number, tol = 16): BeeRef | null {
   const rect = dom.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1), camera);
   const hit = ray.intersectObjects(view.pickables, false)[0];
   const cell = view.comb.pick(ray.ray);
+  const bee = view.bees.pick(camera, rect.width, rect.height, x - rect.left, y - rect.top, tol);
+  const front = cell && (!hit || cell.dist < hit.distance) ? cell.dist : (hit?.distance ?? Infinity);
+  if (bee && !(view.bees.fade && cell) && bee.dist < front + 2) return { kind: 'bee', id: bee.id };
   if (cell && (!hit || cell.dist < hit.distance)) return { kind: 'cell', id: cell.cell };
   return (hit?.object.userData.ref as BeeRef | undefined) ?? null;
 }
@@ -135,7 +143,25 @@ function flowerInfo(w: BeeWorld, id: number): string {
     <p class="desc">${t(`flowerDesc.${sp.key}`)}</p>`;
 }
 
-function beeUi(w: BeeWorld): GameUi<BeeRef> {
+function beeInfo(w: BeeWorld, id: number, following: boolean): string {
+  const b = w.bees.get(id);
+  if (!b) return `<h2>${t('info.gone')}</h2>`;
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  const role = roleOf(b);
+  const title = t(`caste.${CASTE_KEYS[b.caste]}`) + (role ? ` · ${t(`role.${role}`)}` : '');
+  let body = kv(t('info.beeAge'), span(b.age));
+  if (b.caste !== CASTE.queen) body += kv(t('info.lifeLeft'), span(b.life - b.age));
+  body += kv(t('info.doing'), t(`act.${b.act}`));
+  if (b.caste !== CASTE.queen) body += kv(t('info.crop'), t('info.percent', { p: Math.round(b.crop * 100) }));
+  if (role === 'nurse') body += kv(t('info.jelly'), t('info.jellyValue', { n: Math.max(0, Math.floor(b.jelly)) }));
+  return `<h2>${title}</h2>${body}<p class="desc">${t(`beeDesc.${role ?? (b.caste === CASTE.drone ? 'drone' : 'queen')}`)}</p>
+    <div class="actions">
+      <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
+      <button data-a="flyto">${t('info.flyNear')}</button>
+    </div>`;
+}
+
+function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
   const row = (label: string, value: string) => `<div class="row">${label}<b>${value}</b></div>`;
   return {
     status: () => ({ icon: w.clock.isNight ? '🌙' : '☀️', text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status') }),
@@ -146,14 +172,25 @@ function beeUi(w: BeeWorld): GameUi<BeeRef> {
       html: (folded) => {
         const c = w.comb.census();
         const n = c.counts;
+        const B = w.bees;
+        const roles = Object.fromEntries(ROLE_KEYS.map((k) => [k, 0])) as Record<(typeof ROLE_KEYS)[number], number>;
+        let drones = 0;
+        for (const b of B.list) {
+          const r = roleOf(b);
+          if (r) roles[r]++;
+          else if (b.caste === CASTE.drone) drones++;
+        }
         return `
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
       ${row(t('colony.season'), t('colony.summer'))}
+      ${row(t('colony.bees'), t('colony.beesValue', { n: B.list.length, d: drones }))}
+      ${ROLE_KEYS.map((k) => `<div class="row sub">${t(`role.${k}`)}<b>${roles[k]}</b></div>`).join('')}
       ${row(t('colony.cells'), t('colony.cellsValue', { n: c.built * 2, b: c.building * 2 }))}
       ${row(t('colony.brood'), t('colony.broodValue', { e: n.egg, l: n.larva, c: n.capped }))}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
-      ${row(t('colony.emerged'), String(w.emerged))}
+      ${row(t('colony.since'), t('colony.sinceValue', { b: B.births, d: B.deaths, l: B.laid }))}
+      ${B.starved ? row(t('colony.starved'), String(B.starved)) : ''}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: w.flowers.patches.length, o: w.flowers.patches.filter((p) => openness(CONFIG.flowers.species[p.species], w.clock.hour) > 0).length }))}
       <p class="desc">${t('colony.todo')}</p>`;
       },
@@ -165,9 +202,10 @@ function beeUi(w: BeeWorld): GameUi<BeeRef> {
       <p class="desc">${t('info.hiveDesc')}</p>`,
       cell: (r) => cellInfo(w, r.id),
       flower: (r) => flowerInfo(w, r.id),
+      bee: (r) => beeInfo(w, r.id, following()),
     },
     help: {
-      mouse: ['help.move', 'help.mouse', 'help.click', 'help.views'],
+      mouse: ['help.move', 'help.mouse', 'help.click', 'help.follow', 'help.views'],
       touch: ['help.touchMove', 'help.touchTap'],
     },
   };

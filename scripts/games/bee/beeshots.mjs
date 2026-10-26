@@ -29,6 +29,12 @@ const SCENES = {
   lavender: { q: '&hour=11&select=flower:4&fly=1' },
   corn: { q: '&hour=9&select=flower:5&fly=1' },
   clover: { q: '&hour=11&cam=845,60,1700,845,0,1941' },
+  bees: { q: '&hour=11&cam=0,103,40,0,100,0' },
+  beesnear: { q: '&hour=11&cam=-2,96,6,-2,95,0' },
+  fade: { q: '&hour=11&cam=0,103,40,0,100,0&view=fade' },
+  queen: { q: '&hour=11&select=bee:1&fly=1', check: INFO },
+  follow: { q: '&hour=11&select=bee:200&follow=1', check: INFO },
+  edge: { q: '&hour=11&cam=-35,100,8,-15,96,0' },
   en: { q: '&hour=11&lang=en' },
 };
 

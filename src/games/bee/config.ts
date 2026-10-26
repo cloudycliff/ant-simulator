@@ -37,6 +37,64 @@ export const CONFIG = {
     drone: { egg: 600, larva: 1380, capped: 2580 },
   },
   /**
+   * 蜂（BALANCE“游戏里的取值”）。开局 workers 只工蜂、drones 只雄蜂和一只蜂王，日龄在寿命里均匀分布。
+   * life、droneLife 是寿命（秒）的范围；roles 是日龄（秒）到了换下一种工作：清理 → 哺育 → 内勤（筑巢、酿蜜）→ 守卫 → 采集
+   */
+  bees: {
+    workers: 2400,
+    drones: 60,
+    life: [6000, 8400] as [number, number],
+    droneLife: [4800, 7200] as [number, number],
+    roles: { nurse: 600, house: 2400, guard: 3600, forager: 4200 },
+    /** 工蜂身长（cm）；身体中心离巢面多高（腿撑着） */
+    length: 1.1,
+    lift: 0.2,
+    /** 爬行速度（cm/s）、转向（rad/s）；绕过巢脾边到另一面用的秒数；闲逛走到巢脾边时绕过去的机会 */
+    walk: 1.5,
+    droneWalk: 1,
+    queenWalk: 0.8,
+    turn: 5,
+    wrapTime: 0.8,
+    wrapChance: 0.3,
+    /** 蜜囊吃满能撑 burn 秒（雄蜂 droneBurn），低于 hungry 去吃；吃满一次用掉 meal 房蜜；饿空 starve 秒饿死 */
+    burn: 200,
+    droneBurn: 120,
+    hungry: 0.3,
+    meal: 0.006,
+    starve: 300,
+    /** 做完一件事后歇一会的机会和秒数 */
+    rest: 0.3,
+    restTime: [3, 8] as [number, number],
+  },
+  /**
+   * 巢里的活（秒）。幼虫喂饱后 feedEvery 秒饿空，再过 starve 秒饿死；饿到 hungry 以下哺育蜂来喂。
+   * 哺育蜂吃一次花粉（pollenMeal 房）能喂 feeds 次。筑巢一次加高 build（造好是 1），新开始的位置从 start 起；
+   * 酿蜜一次 ripen 成；蜂蜜装到 capAt 就封盖。蜂王看一眼 inspect、产一粒 lay，产完歇一会的机会 queenRest；
+   * 雄蜂子超过 droneBrood 个时不在雄蜂房产卵
+   */
+  care: {
+    feedEvery: 120,
+    starve: 240,
+    hungry: 0.5,
+    pollenMeal: 0.05,
+    feeds: 6,
+    build: 0.01,
+    start: 0.05,
+    buildCost: 0.15,
+    ripen: 0.05,
+    capAt: 0.9,
+    work: { feed: 2.5, pollen: 2, eat: 2, clean: 3, build: 4, ripen: 3, cap: 3 },
+    inspect: 0.6,
+    lay: 0.6,
+    queenRest: 0.1,
+    droneBrood: 80,
+    /** 内勤蜂去筑巢的机会（不然去酿蜜、封盖）；守卫日龄的蜂去巢门站岗的机会 */
+    builders: 0.35,
+    guards: 0.35,
+    /** 路程场多久重算一次（秒）：要喂的幼虫、要清理的、能产卵的、食物、花粉、要酿的蜜、在造的巢房 */
+    refresh: { larvae: 2, dirty: 5, layable: 3, food: 5, pollen: 5, ripen: 5, frontier: 10 },
+  },
+  /**
    * 花丛（BALANCE“花”一节）。开局 patches 片，离蜂箱 near～far cm，彼此至少隔 gap。
    * 每种花：hours 是开放（流蜜、散粉）的时刻，前后各用 ramp 小时慢慢开合；nectar、pollen 是每株满的时候
    * 有几份（一份 = 一只采集蜂一趟带回的量），采空后开着的时候 refill 秒长满；pollenKind 是花粉团的颜色
@@ -75,5 +133,7 @@ export const CONFIG = {
      * 重新挑一次这些巢房
      */
     comb: { nearPx: 10, rebuild: 0.5 },
+    /** 蜂身（T-006）：屏幕上长过 nearPx 像素画完整的模型，短于 farPx 画八面体，中间画三个球；淡化时的不透明度（P-009） */
+    bees: { nearPx: 30, farPx: 8, fade: 0.18 },
   },
 };

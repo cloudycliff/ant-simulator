@@ -1,6 +1,6 @@
 /**
- * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
- * 蜂加进来以后在这里补上它们的检查。
+ * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
+ * 存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -8,7 +8,9 @@ import { setLang, t, tr } from '../../../src/core/i18n';
 import { CombView } from '../../../src/games/bee/combView';
 import { CONFIG } from '../../../src/games/bee/config';
 import { CELL, CELLS, CONTENT_KEYS, SITES, cellPos, siteAt, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
+import { ACTS, CASTE, type Act } from '../../../src/games/bee/sim/bees';
 import { nectarCap, openness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
+import { nodeAt } from '../../../src/games/bee/sim/walk';
 import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
 import { en } from '../../../src/games/bee/i18n/en';
 
@@ -22,7 +24,8 @@ const check = (name: string, ok: boolean, detail = '') => {
 const run = (w: BeeWorld, secs: number) => {
   for (let s = 0; s < secs; s += STEP) w.advance(STEP);
 };
-const fingerprint = (w: BeeWorld) => `${w.clock.seconds.toFixed(3)}|${w.rng.state}|${w.emerged}|${w.comb.version}`;
+const fingerprint = (w: BeeWorld) =>
+  `${w.clock.seconds.toFixed(3)}|${w.rng.state}|${w.bees.births}|${w.bees.list.length}|${w.comb.version}|${w.bees.list.reduce((s, b) => s + b.u + b.v * 3 + b.face, 0).toFixed(6)}`;
 
 const t0 = performance.now();
 const w = new BeeWorld(7);
@@ -110,13 +113,38 @@ const emptied = patches.find((q) => nectarCap(q) > 0)!;
 }
 const corn = patches.find((q) => SPECIES_KEYS[q.species] === 'corn')!;
 check('玉米没有花蜜', nectarCap(corn) === 0 && w.flowers.take(corn, 'nectar', 1, 9) === 0);
-run(w, CONFIG.clock.dayLength);
+const B = CONFIG.bees;
+const bees = w.bees;
+check('开局的蜂：工蜂、雄蜂和一只蜂王', bees.list.length === B.workers + B.drones + 1 && bees.list.filter((b) => b.caste === CASTE.queen).length === 1, `${bees.list.length} 只`);
+const offComb = () => bees.list.filter((b) => b.wrap === 0 && bees.map.walk[nodeAt(b.u, b.v)] === 0 && nodeAt(b.u, b.v) >= 0).length + bees.list.filter((b) => nodeAt(b.u, b.v) < 0).length;
+check('开局的蜂都站在巢脾或框条上', offComb() === 0);
+const built0 = census0.built;
+const honey0 = census0.honeyCells;
+const seen = new Set<Act>();
+const stepT0 = performance.now();
+for (let s = 0; s < CONFIG.clock.dayLength; s += 10) {
+  run(w, 10);
+  for (const b of bees.list) seen.add(b.act);
+}
+const stepMs = (performance.now() - stepT0) / (CONFIG.clock.dayLength * 30);
 check('一天过去了', w.clock.day === 2, tr(w.clock.stamp()));
 check('采空的花丛一天里长回来、不超过满', patches.every((p) => p.nectar <= nectarCap(p) + 1e-9 && p.pollen <= pollenCap(p) + 1e-9) && emptied.nectar > nectarCap(emptied) * 0.99, `${((emptied.nectar / nectarCap(emptied)) * 100).toFixed(0)}%`);
 check('蜂箱周围的地面是平的', w.groundAt(0, 0) === 0 && w.groundAt(40, -30) === 0);
 const ms = performance.now() - t0;
 const c1 = comb.census().counts;
-check('一天里有子羽化', w.emerged > 0, `${w.emerged} 只`);
+check('一天里有子羽化成蜂', bees.births > 0 && bees.list.filter((b) => b.age < CONFIG.clock.dayLength).length > 0, `${bees.births} 只`);
+check('一天后蜂都还站在巢脾或框条上', offComb() === 0);
+const face1 = bees.list.filter((b) => b.face === 1).length;
+check('两面都有蜂（绕过巢脾边换面）', face1 > bees.list.length * 0.3 && face1 < bees.list.length * 0.7, `背面 ${face1} / ${bees.list.length}`);
+check('只数没有崩', bees.list.length > (B.workers + B.drones) * 0.9, `${bees.list.length} 只，羽化 ${bees.births}、死 ${bees.deaths}`);
+check('蜂王一天产了一两百粒以上的卵', bees.laid > 180, `${bees.laid} 粒`);
+check('幼虫没有饿死', bees.starved === 0, `${bees.starved} 只`);
+check('成蜂没有饿死', bees.hungry === 0, `${bees.hungry} 只`);
+const census1 = comb.census();
+check('巢脾在长', census1.built > built0 + 50, `${built0} → ${census1.built}`);
+check('储蜜在吃，但没吃光', census1.honeyCells < honey0 && census1.honeyCells > honey0 * 0.9, `${honey0.toFixed(0)} → ${census1.honeyCells.toFixed(0)} 满房`);
+const missing = ACTS.filter((a) => !seen.has(a));
+check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
 
 const json = JSON.stringify(beeSave.write(w, 1));
@@ -128,7 +156,8 @@ const load = () => {
 };
 const a = load();
 check('存档往返内容一致', JSON.stringify(beeSave.write(a, 1)) === json, `${(json.length / 1024).toFixed(1)} KB`);
-check('读档后巢脾一样', a.comb.content.every((c, i) => c === comb.content[i]) && a.comb.age.every((x, i) => x === comb.age[i]) && a.emerged === w.emerged);
+check('读档后巢脾一样', a.comb.content.every((c, i) => c === comb.content[i]) && a.comb.age.every((x, i) => x === comb.age[i]));
+check('读档后蜂一样', a.bees.list.length === bees.list.length && a.bees.list.every((x, i) => x.id === bees.list[i].id && x.face === bees.list[i].face && Math.abs(x.u - bees.list[i].u) < 1e-3));
 check('读档后花丛一样', JSON.stringify(a.flowers.patches) === JSON.stringify(w.flowers.patches));
 const b = load();
 run(a, 60);
@@ -149,7 +178,7 @@ for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, 
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 
-console.log(`模拟 ${CONFIG.clock.dayLength} 秒用了 ${ms.toFixed(0)} ms`);
+console.log(`模拟 ${CONFIG.clock.dayLength} 秒用了 ${ms.toFixed(0)} ms，每步 ${stepMs.toFixed(2)} ms（${bees.list.length} 只蜂）`);
 if (failed) {
   console.log(`${failed} 项失败`);
   process.exitCode = 1;

@@ -78,6 +78,27 @@ export function siteAt(u: number, v: number): number {
   return best;
 }
 
+/** 同一框里相邻的位置（尖角朝上、奇数行右移半格），最多 6 个 */
+export function siteNeighbors(site: number, out: number[] = []): number[] {
+  out.length = 0;
+  const per = GRID.rows * GRID.cols;
+  const base = site - (site % per);
+  const local = site % per;
+  const row = Math.floor(local / GRID.cols);
+  const col = local % GRID.cols;
+  const add = (r: number, c: number) => {
+    if (r >= 0 && r < GRID.rows && c >= 0 && c < GRID.cols) out.push(base + r * GRID.cols + c);
+  };
+  add(row, col - 1);
+  add(row, col + 1);
+  const c0 = row & 1 ? col : col - 1;
+  for (const r of [row - 1, row + 1]) {
+    add(r, c0);
+    add(r, c0 + 1);
+  }
+  return out;
+}
+
 export const cellFace = (cell: number) => (cell >= SITES ? 1 : 0);
 export const cellSite = (cell: number) => cell % SITES;
 export const siteFrame = (site: number) => (site >= GRID.rows * GRID.cols ? 1 : 0);
@@ -117,6 +138,8 @@ export interface CombSave {
 export interface CombCensus {
   built: number;
   building: number;
+  /** 空房里还没清理的 */
+  dirty: number;
   counts: Record<(typeof CONTENT_KEYS)[number], number>;
   /** 储蜜：花蜜、蜂蜜、封盖蜜按装满的程度折成满房数 */
   honeyCells: number;
@@ -130,12 +153,19 @@ export class Comb {
   /** 雄蜂房（真的比工蜂房大，这里网格一样大，只是封盖凸起） */
   readonly drone = new Uint8Array(SITES);
   readonly content = new Uint8Array(CELLS);
-  /** 花蜜、蜂蜜、花粉装了多满（0..1） */
+  /**
+   * 花蜜、蜂蜜、花粉装了多满（0..1）。幼虫是还饱着多少：刚喂过是 1，降到 0 开始挨饿，负数是饿了多久（按 feedEvery 折算）。
+   * 空房大于 0 是还没清理（羽化或幼虫死后留下的茧衣和残渣），蜂王不在里面产卵
+   */
   readonly amount = new Float32Array(CELLS);
-  /** 卵、幼虫、封盖子从产卵起过了多少秒 */
+  /** 卵、幼虫、封盖子从产卵起过了多少秒；花蜜是酿到了几成（0..1） */
   readonly age = new Float32Array(CELLS);
   readonly pollen = new Uint8Array(CELLS);
+  /** 内容变了加一 */
   version = 0;
+  /** 有没有巢房变了（新开始造一个位置）加一，走路的方格按它重建 */
+  shape = 0;
+  private nb: number[] = [];
 
   built(cell: number): boolean {
     return this.build[cellSite(cell)] > 0;
@@ -190,6 +220,89 @@ export class Comb {
   private lay(cell: number, c: CellContent, age: number): void {
     this.content[cell] = c;
     this.age[cell] = age;
+    if (c === CELL.larva) this.amount[cell] = 1;
+  }
+
+  /** 能产卵：造好了、空着、清理过 */
+  layable(cell: number): boolean {
+    return this.build[cellSite(cell)] >= 1 && this.content[cell] === CELL.empty && this.amount[cell] <= 0;
+  }
+
+  layEgg(cell: number): void {
+    this.lay(cell, CELL.egg, 0);
+    this.amount[cell] = 0;
+    this.version++;
+  }
+
+  feed(cell: number): void {
+    this.amount[cell] = 1;
+  }
+
+  clean(cell: number): void {
+    this.amount[cell] = 0;
+    this.version++;
+  }
+
+  /** 从蜜房里取走最多 want（房），返回取到的；封盖蜜先咬开 */
+  takeHoney(cell: number, want: number): number {
+    const c = this.content[cell];
+    if (c !== CELL.nectar && c !== CELL.honey && c !== CELL.cappedHoney) return 0;
+    if (c === CELL.cappedHoney) this.content[cell] = CELL.honey;
+    const got = Math.min(want, this.amount[cell]);
+    this.amount[cell] -= got;
+    if (this.amount[cell] <= 1e-4) this.empty(cell);
+    this.version++;
+    return got;
+  }
+
+  takePollen(cell: number, want: number): number {
+    if (this.content[cell] !== CELL.pollen) return 0;
+    const got = Math.min(want, this.amount[cell]);
+    this.amount[cell] -= got;
+    if (this.amount[cell] <= 1e-4) this.empty(cell);
+    this.version++;
+    return got;
+  }
+
+  /** 酿 d 成，酿够了花蜜就成了蜂蜜 */
+  ripen(cell: number, d: number): void {
+    if (this.content[cell] !== CELL.nectar) return;
+    this.age[cell] += d;
+    if (this.age[cell] >= 1) {
+      this.content[cell] = CELL.honey;
+      this.age[cell] = 0;
+    }
+    this.version++;
+  }
+
+  cap(cell: number): void {
+    if (this.content[cell] !== CELL.honey) return;
+    this.content[cell] = CELL.cappedHoney;
+    this.version++;
+  }
+
+  /** 位置加高 d，造好时旁边还没有的位置开始造 */
+  buildUp(site: number, d: number, start: number): void {
+    const b = this.build[site];
+    if (b <= 0 || b >= 1) return;
+    this.build[site] = Math.min(1, b + d);
+    if (this.build[site] >= 1) {
+      let grew = false;
+      for (const n of siteNeighbors(site, this.nb))
+        if (this.build[n] <= 0) {
+          this.build[n] = start;
+          grew = true;
+        }
+      if (grew) this.shape++;
+    }
+    this.version++;
+  }
+
+  private empty(cell: number): void {
+    this.content[cell] = CELL.empty;
+    this.amount[cell] = 0;
+    this.age[cell] = 0;
+    this.pollen[cell] = 0;
   }
 
   private store(cell: number, c: CellContent, amount: number, pollen = 0): void {
@@ -199,36 +312,48 @@ export class Comb {
   }
 
   /**
-   * 卵、幼虫、封盖子长大 dt 秒，到了时间换下一阶段；羽化后巢房空出来，返回羽化了几只。
-   * 还没有蜂：幼虫不用喂、羽化的蜂不出现，蜂加进来后由它们接手
+   * 卵、幼虫、封盖子长大 dt 秒，到了时间换下一阶段。幼虫越来越饿，饿过 starve 秒就死了；
+   * 羽化和饿死的巢房空出来、要清理，各自回调一次
    */
-  develop(dt: number): number {
-    let emerged = 0;
+  develop(dt: number, onEmerge: (cell: number) => void, onStarve: (cell: number) => void): void {
     let changed = false;
     const W = CONFIG.brood.worker;
     const D = CONFIG.brood.drone;
+    const C = CONFIG.care;
+    const hunger = dt / C.feedEvery;
+    const dead = -C.starve / C.feedEvery;
     for (let cell = 0; cell < CELLS; cell++) {
       const c = this.content[cell];
       if (c < CELL.egg || c > CELL.capped) continue;
+      if (c === CELL.larva && (this.amount[cell] -= hunger) < dead) {
+        this.empty(cell);
+        this.amount[cell] = 1;
+        changed = true;
+        onStarve(cell);
+        continue;
+      }
       const a = (this.age[cell] += dt);
       const T = this.drone[cellSite(cell)] ? D : W;
       const next = a < T.egg ? CELL.egg : a < T.egg + T.larva ? CELL.larva : a < T.egg + T.larva + T.capped ? CELL.capped : CELL.empty;
       if (next === c) continue;
       this.content[cell] = next;
       changed = true;
-      if (next === CELL.empty) {
+      if (next === CELL.larva) this.amount[cell] = 1;
+      else if (next === CELL.capped) this.amount[cell] = 0;
+      else if (next === CELL.empty) {
         this.age[cell] = 0;
-        emerged++;
+        this.amount[cell] = 1;
+        onEmerge(cell);
       }
     }
     if (changed) this.version++;
-    return emerged;
   }
 
   census(): CombCensus {
     const counts = Object.fromEntries(CONTENT_KEYS.map((k) => [k, 0])) as CombCensus['counts'];
     let built = 0;
     let building = 0;
+    let dirty = 0;
     let honeyCells = 0;
     let pollenCells = 0;
     for (let s = 0; s < SITES; s++) {
@@ -241,11 +366,12 @@ export class Comb {
       for (const cell of [s, s + SITES]) {
         const c = this.content[cell];
         counts[CONTENT_KEYS[c]]++;
+        if (c === CELL.empty && this.amount[cell] > 0) dirty++;
         if (c === CELL.nectar || c === CELL.honey || c === CELL.cappedHoney) honeyCells += this.amount[cell];
         else if (c === CELL.pollen) pollenCells += this.amount[cell];
       }
     }
-    return { built, building, counts, honeyCells, pollenCells };
+    return { built, building, dirty, counts, honeyCells, pollenCells };
   }
 
   toSave(): CombSave {
@@ -267,5 +393,6 @@ export class Comb {
     decode(d.age, this.age);
     decode(d.pollen, this.pollen);
     this.version++;
+    this.shape++;
   }
 }

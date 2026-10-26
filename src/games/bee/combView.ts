@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clamp } from '../../core/util/math';
 import { CONFIG } from './config';
 import { LARVA_GAP, PALETTE, glossy, larvaTurn } from './palette';
 import { CELL, COMB_H, GRID, SITES, cellPos, siteAt, type Comb } from './sim/comb';
@@ -13,6 +14,10 @@ const MIDRIB = H.combHalf - C.depth;
 const INNER_R = (P / 2 - C.wall / 2) / Math.cos(Math.PI / 6);
 
 const col = (c: number) => new THREE.Color(c);
+/** 没清理的空房房底暗多少 */
+const DIRTY = 0.62;
+/** 巢房内容变得很勤（每步都有蜂在改），状态纹理和近处的实例最多隔这么久（ms）才重做一次 */
+const SYNC_MS = 250;
 const f = (x: number) => x.toFixed(6);
 
 /** 着色器平板：按巢面坐标找所在的巢房，从状态纹理取内容（换算和 sim/comb.ts 的 siteAt 一样） */
@@ -99,6 +104,9 @@ float combRough = 0.85;
   if (build < 1.0) {
     inner = uNewWax * mix(0.8, 0.95, t);
     tilt = vec2(0.0);
+  } else if (content == ${CELL.empty}.0 && amount > 0.0) {
+    // 还没清理：房底留着茧衣和残渣，发暗
+    inner *= ${DIRTY.toFixed(2)};
   } else if (content == ${CELL.egg}.0) {
     vec2 e = best / vec2(0.028, 0.06);
     if (dot(e, e) < 1.0) { inner = uEgg; tilt = e * 0.3; }
@@ -224,6 +232,8 @@ export class CombView {
   private tex = new THREE.DataTexture(this.data, GRID.cols, GRID.rows * 4, THREE.RGBAFormat);
   private uniforms: Record<string, THREE.IUniform>;
   private version = -1;
+  private syncedAt = -Infinity;
+  private nearAt = -Infinity;
   private walls: THREE.InstancedMesh;
   private layer: THREE.InstancedMesh;
   private liquid: THREE.InstancedMesh;
@@ -325,7 +335,11 @@ export class CombView {
   }
 
   update(camera: THREE.PerspectiveCamera, viewportH: number, selected: number | null): void {
-    if (this.version !== this.comb.version) this.syncState();
+    const now = performance.now();
+    if (this.version !== this.comb.version && now - this.syncedAt >= SYNC_MS) {
+      this.syncedAt = now;
+      this.syncState();
+    }
     this.updateNear(camera, viewportH);
     this.mark.visible = selected !== null;
     if (selected !== null) {
@@ -348,7 +362,7 @@ export class CombView {
       const prog = c === CELL.egg ? a / T.egg : c === CELL.larva ? (a - T.egg) / T.larva : 0;
       const o = cell * 4;
       this.data[o] = c;
-      this.data[o + 1] = Math.round(cb.amount[cell] * 255);
+      this.data[o + 1] = Math.round(clamp(cb.amount[cell], 0, 1) * 255);
       this.data[o + 2] = Math.round(cb.build[site] * 255);
       this.data[o + 3] = (cb.drone[site] << 7) | (cb.pollen[cell] << 4) | Math.round(Math.min(1, Math.max(0, prog)) * 15);
     }
@@ -373,7 +387,9 @@ export class CombView {
       }
       return;
     }
-    if (face === this.nearFace && this.nearVersion === this.comb.version && cp.distanceTo(this.nearCam) < RC.rebuild && Math.abs(near - this.nearDist) < 1) return;
+    const fresh = this.nearVersion === this.comb.version || performance.now() - this.nearAt < SYNC_MS;
+    if (face === this.nearFace && fresh && cp.distanceTo(this.nearCam) < RC.rebuild && Math.abs(near - this.nearDist) < 1) return;
+    this.nearAt = performance.now();
     this.nearFace = face;
     this.nearVersion = this.comb.version;
     this.nearCam.copy(cp);
@@ -422,7 +438,7 @@ export class CombView {
         if (drone) put(this.blobs, nb++, H.combHalf + 0.1, 0.02, 0.01, PALETTE.bottom, 0.4);
       } else if (c === CELL.cappedHoney) put(this.layer, nl++, H.combHalf - 0.02, 1, 0.01, PALETTE.cappedHoney);
       else if (c === CELL.pollen) put(this.layer, nl++, MIDRIB + amount * C.depth * 0.75, 1, 0.06, PALETTE.pollen[cb.pollen[cell]]);
-      else put(this.layer, nl++, MIDRIB, 1, 0.02, PALETTE.bottom);
+      else put(this.layer, nl++, MIDRIB, 1, 0.02, PALETTE.bottom, c === CELL.empty && amount > 0 ? DIRTY : 1);
       if (c === CELL.egg) put(this.blobs, nb++, MIDRIB + 0.06, 0.028, 0.06, PALETTE.egg);
       else if (c === CELL.larva) {
         const T = drone ? D : W;
