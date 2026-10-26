@@ -36,6 +36,26 @@ export const CONFIG = {
     worker: { egg: 600, larva: 1200, capped: 2220 },
     drone: { egg: 600, larva: 1380, capped: 2580 },
   },
+  /**
+   * 花丛（BALANCE“花”一节）。开局 patches 片，离蜂箱 near～far cm，彼此至少隔 gap。
+   * 每种花：hours 是开放（流蜜、散粉）的时刻，前后各用 ramp 小时慢慢开合；nectar、pollen 是每株满的时候
+   * 有几份（一份 = 一只采集蜂一趟带回的量），采空后开着的时候 refill 秒长满；pollenKind 是花粉团的颜色
+   * （PALETTE.pollen 的编号）。r 是花丛的半径，spacing 是株距；closes 的花合上时画面上也合起来
+   */
+  flowers: {
+    patches: 9,
+    near: 500,
+    far: 2200,
+    gap: 150,
+    margin: 300,
+    species: [
+      { key: 'clover', hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false },
+      { key: 'sunflower', hours: [7, 18.5], ramp: 1, nectar: 0.8, pollen: 1.5, refill: 200, pollenKind: 0, r: [90, 140], spacing: 42, closes: false },
+      { key: 'pumpkin', hours: [5, 10.5], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true },
+      { key: 'lavender', hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false },
+      { key: 'corn', hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false },
+    ] as const,
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

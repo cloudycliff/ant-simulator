@@ -5,6 +5,7 @@ import { clamp } from '../../core/util/math';
 import { Rng } from '../../core/util/random';
 import { CombView } from './combView';
 import { CONFIG } from './config';
+import { FlowerView } from './flowerView';
 import { COMB_H } from './sim/comb';
 import type { BeeRef, BeeWorld } from './world';
 
@@ -22,7 +23,8 @@ export class BeeView {
   readonly group = new THREE.Group();
   readonly env: Environment;
   readonly comb: CombView;
-  /** 点选用：观察箱的各个部件，userData.ref 指向观察箱 */
+  readonly flowers: FlowerView;
+  /** 点选用：观察箱的各个部件、花丛的圆柱，userData.ref 指向它们 */
   readonly pickables: THREE.Object3D[] = [];
   glass = true;
   private glassMeshes: THREE.Mesh[] = [];
@@ -44,7 +46,9 @@ export class BeeView {
     this.buildGarden();
     this.buildHive();
     this.comb = new CombView(w.comb);
-    this.group.add(this.comb.group);
+    this.flowers = new FlowerView(w);
+    this.pickables.push(...this.flowers.pickables);
+    this.group.add(this.comb.group, this.flowers.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.8, depthTest: false }));
     this.outline.position.set(0, H.baseY + COMB_H / 2 + 6, 0);
@@ -102,6 +106,11 @@ export class BeeView {
       const d = CONFIG.garden.flatR + Math.pow(r.next(), 0.8) * (size / 2 - 200);
       const x = Math.cos(a) * d;
       const z = Math.sin(a) * d;
+      // 花丛里不长草，不然盖住贴地的三叶草
+      if (w.flowers.patches.some((p) => Math.hypot(p.x - x, p.z - z) < p.r)) {
+        i--;
+        continue;
+      }
       m.compose(new THREE.Vector3(x, w.groundAt(x, z), z), q.setFromAxisAngle(up, r.range(0, 3)), new THREE.Vector3(1, r.range(5, 16), 1));
       grass.setMatrixAt(i, m);
       grass.setColorAt(i, c.setHSL(0.24 + r.range(-0.04, 0.03), 0.5, r.range(0.28, 0.42)));
@@ -201,5 +210,6 @@ export class BeeView {
     for (const f of this.fills) f.intensity = R.fill * k;
     this.outline.visible = sel?.kind === 'hive';
     this.comb.update(camera, viewportH, sel?.kind === 'cell' ? sel.id : null);
+    this.flowers.update(this.w.clock.hour, sel?.kind === 'flower' ? sel.id : null);
   }
 }

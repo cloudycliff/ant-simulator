@@ -8,6 +8,7 @@ const VIEWPORTS = [
 ];
 const Q = 'bee.html?new=1&seed=7';
 const PERF = `document.getElementById('perf')?.textContent ?? ''`;
+const INFO = `document.querySelector('#info')?.innerText.replace(/\\s+/g, ' ') ?? ''`;
 const SCENES = {
   home: { q: '&hour=11' },
   night: { q: '&hour=22.5' },
@@ -21,6 +22,13 @@ const SCENES = {
   side: { q: '&hour=11&cam=-7,106,3.5,5,106,0' },
   cell: { q: '&hour=11&select=cell:4542&fly=1', check: `document.querySelector('#info')?.innerText.replace(/\\s+/g, ' ') ?? ''` },
   honey: { q: '&hour=11&cam=-1,119,10,-1,119,0' },
+  flowers: { q: '&hour=8&cam=-300,250,-300,400,20,350' },
+  sunflower: { q: '&hour=11&select=flower:2&fly=1', check: INFO },
+  pumpkin: { q: '&hour=8&select=flower:7&fly=1', check: INFO },
+  pumpkinpm: { q: '&hour=14&select=flower:7&fly=1' },
+  lavender: { q: '&hour=11&select=flower:4&fly=1' },
+  corn: { q: '&hour=9&select=flower:5&fly=1' },
+  clover: { q: '&hour=11&cam=845,60,1700,845,0,1941' },
   en: { q: '&hour=11&lang=en' },
 };
 

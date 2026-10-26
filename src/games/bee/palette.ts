@@ -24,3 +24,12 @@ export const LARVA_GAP = 0.6;
 
 /** 有光泽的内容（花蜜、蜂蜜） */
 export const glossy = (c: number) => c === CELL.nectar || c === CELL.honey;
+
+/** 花丛：叶、花、远看时花丛底下那一片地的颜色，按花的 key */
+export const FLOWER_COLORS: Record<string, { leaf: number; bloom: number; tint: number }> = {
+  clover: { leaf: 0x4f8a34, bloom: 0xf4f0e2, tint: 0xd6dcc0 },
+  sunflower: { leaf: 0x4d7c2a, bloom: 0xf5c21a, tint: 0xd8b830 },
+  pumpkin: { leaf: 0x3d6e26, bloom: 0xf6a01e, tint: 0x6f9a34 },
+  lavender: { leaf: 0x7f9c7a, bloom: 0x8b6cd0, tint: 0x9a86c8 },
+  corn: { leaf: 0x5f9032, bloom: 0xd8c47c, tint: 0x86a848 },
+};

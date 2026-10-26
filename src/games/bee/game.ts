@@ -6,6 +6,7 @@ import { HeightfieldSpace } from '../../core/space/heightfield';
 import { CONFIG } from './config';
 import { BeeView } from './view';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
+import { nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
 const H = CONFIG.hive;
@@ -113,6 +114,27 @@ function cellInfo(w: BeeWorld, cell: number): string {
   return `<h2>${t('info.cell')} · ${t(`cell.${key}`)}</h2>${body}<p class="desc">${t(`cellDesc.${key}`)}</p>`;
 }
 
+/** 7.5 → 7:30 */
+const clockTime = (h: number) => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+
+function flowerInfo(w: BeeWorld, id: number): string {
+  const p = w.flowers.get(id);
+  if (!p) return '';
+  const sp = CONFIG.flowers.species[p.species];
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  const k = openness(sp, w.clock.hour);
+  const rising = openness(sp, w.clock.hour + 0.1) > k;
+  const now = k >= 1 ? 'info.open' : k <= 0 ? 'info.closed' : rising ? 'info.opening' : 'info.closing';
+  const pct = (v: number, cap: number) => (cap > 0 ? t('info.percent', { p: Math.round((v / cap) * 100) }) : t('info.none'));
+  return `<h2>${t('info.flower')} · ${t(`flower.${sp.key}`)}</h2>
+    ${kv(t('info.plants'), t('info.plantsValue', { n: plantCount(p) }))}
+    ${kv(t('info.openHours'), t('info.hoursValue', { a: clockTime(sp.hours[0]), b: clockTime(sp.hours[1]) }))}
+    ${kv(t('info.now'), t(now))}
+    ${kv(t('info.nectar'), pct(p.nectar, nectarCap(p)))}
+    ${kv(t('info.pollen'), pct(p.pollen, pollenCap(p)))}
+    <p class="desc">${t(`flowerDesc.${sp.key}`)}</p>`;
+}
+
 function beeUi(w: BeeWorld): GameUi<BeeRef> {
   const row = (label: string, value: string) => `<div class="row">${label}<b>${value}</b></div>`;
   return {
@@ -132,6 +154,7 @@ function beeUi(w: BeeWorld): GameUi<BeeRef> {
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
       ${row(t('colony.emerged'), String(w.emerged))}
+      ${row(t('colony.flowers'), t('colony.flowersValue', { n: w.flowers.patches.length, o: w.flowers.patches.filter((p) => openness(CONFIG.flowers.species[p.species], w.clock.hour) > 0).length }))}
       <p class="desc">${t('colony.todo')}</p>`;
       },
     },
@@ -141,6 +164,7 @@ function beeUi(w: BeeWorld): GameUi<BeeRef> {
       <div class="kv"><span>${t('info.size')}</span><b>${t('info.sizeValue', { w: H.combW, h: H.frameH })}</b></div>
       <p class="desc">${t('info.hiveDesc')}</p>`,
       cell: (r) => cellInfo(w, r.id),
+      flower: (r) => flowerInfo(w, r.id),
     },
     help: {
       mouse: ['help.move', 'help.mouse', 'help.click', 'help.views'],
