@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Rng } from '../../core/util/random';
 import { CONFIG } from './config';
 import { FLOWER_COLORS } from './palette';
-import { openness, plantsOf, type FlowerPatch } from './sim/flowers';
+import { bloomYaw, openness, plantScale, plantsOf, plantYaw, type FlowerPatch } from './sim/flowers';
 import type { BeeRef, BeeWorld } from './world';
 
 const F = CONFIG.flowers;
@@ -32,6 +32,7 @@ function paint(g: THREE.BufferGeometry, color: number): THREE.BufferGeometry {
 }
 
 const merge = (parts: THREE.BufferGeometry[]) => mergeGeometries(parts)!;
+const landOf = (key: string) => F.species.find((s) => s.key === key)!.land;
 const Y = new THREE.Vector3(0, 1, 0);
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -112,11 +113,9 @@ function buildModel(key: string): PlantModel {
     }
     const cup = new THREE.CylinderGeometry(6, 1, 9, 5, 1, true).translate(0, 4.5, 0);
     bloom.push(merge([paint(cup, C.bloom), paint(new THREE.ConeGeometry(1.4, 2.5, 5).rotateX(Math.PI).translate(0, 0.5, 0), 0x6e8a2c)]));
+    // 花的位置按落脚点摆（蜂落在喇叭里，比花底高 5 cm）
     blooms.length = 0;
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * Math.PI * 2 + 0.5;
-      blooms.push(v3(Math.cos(a) * 20, r.range(18, 26), Math.sin(a) * 20));
-    }
+    for (const [x, y, z] of landOf(key)) blooms.push(v3(x, y - 5, z));
   } else if (key === 'lavender') {
     // 薰衣草：灰绿的一丛，十几根细梗顶着紫色的穗
     height = 60;
@@ -126,10 +125,17 @@ function buildModel(key: string): PlantModel {
       body.push(paint(leaf(r.range(12, 20), 3).rotateX(-r.range(0.3, 1.1)).rotateY(a).translate(Math.cos(a) * d, 0, Math.sin(a) * d), C.leaf));
     }
     const spikes: THREE.BufferGeometry[] = [];
+    // 前几根穗按落脚点摆：蜂落在穗的侧面，穗中心比梢高 3 cm、在蜂里侧 1.4 cm
+    const land = landOf(key);
     for (let k = 0; k < 16; k++) {
       const a = r.range(0, Math.PI * 2);
       const d = r.range(6, 22);
-      const tip = v3(Math.cos(a) * d, r.range(40, 55), Math.sin(a) * d);
+      let tip = v3(Math.cos(a) * d, r.range(40, 55), Math.sin(a) * d);
+      if (k < land.length) {
+        const [x, y, z] = land[k];
+        const h = Math.hypot(x, z);
+        tip = v3(x - (x / h) * 1.4, y - 3, z - (z / h) * 1.4);
+      }
       body.push(paint(stem(v3(Math.cos(a) * d * 0.3, 10, Math.sin(a) * d * 0.3), tip, 0.3), 0x8aa070));
       const dir = tip.clone().sub(v3(0, 10, 0)).normalize();
       const spike = new THREE.OctahedronGeometry(1, 0).scale(1.1, 4.5, 1.1).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, dir));
@@ -156,6 +162,7 @@ interface Placed {
   x: number;
   y: number;
   z: number;
+  k: number;
   yaw: number;
   s: number;
 }
@@ -190,7 +197,7 @@ export class FlowerView {
           const x = pl[i];
           const z = pl[i + 1];
           const k = pl[i + 2];
-          place.push({ x, y: w.groundAt(x, z), z, yaw: k * Math.PI * 2, s: 0.8 + 0.4 * ((k * 7.31) % 1) });
+          place.push({ x, y: w.groundAt(x, z), z, k, yaw: plantYaw(k), s: plantScale(k) });
         }
         this.addPatch(p, model.height, proxyMat);
       }
@@ -260,7 +267,7 @@ export class FlowerView {
       const sx = 0.25 + 0.75 * open;
       let i = 0;
       for (const pl of K.place) {
-        _q.setFromAxisAngle(Y, sp.key === 'sunflower' ? (pl.yaw - Math.PI) * 0.12 : pl.yaw);
+        _q.setFromAxisAngle(Y, bloomYaw(sp, pl.k));
         _o.set(pl.x, pl.y, pl.z);
         for (const b of K.model.blooms) {
           _p.copy(b).multiplyScalar(pl.s).applyQuaternion(_q).add(_o);

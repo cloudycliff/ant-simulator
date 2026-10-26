@@ -1,3 +1,4 @@
+import type { Point3 } from '../../../core/sim/events';
 import { smoothstep } from '../../../core/util/math';
 import { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
@@ -60,6 +61,30 @@ export function plantsOf(p: FlowerPatch): Float32Array {
 }
 
 export const plantCount = (p: FlowerPatch) => plantsOf(p).length / 3;
+
+/** 株的个头和转角，k 是 plantsOf 给的随机数；画面照这个摆 */
+export const plantScale = (k: number) => 0.8 + 0.4 * ((k * 7.31) % 1);
+export const plantYaw = (k: number) => k * Math.PI * 2;
+/** 花朵的转角：向日葵的花盘都朝东（+x），只差一点 */
+export const bloomYaw = (sp: FlowerSpecies, k: number) => (sp.key === 'sunflower' ? (plantYaw(k) - Math.PI) * 0.12 : plantYaw(k));
+
+/** 第 i 株的第 j 个落脚点（见 CONFIG.flowers 的 land）在世界里的位置；ground 是地面高度 */
+export function landingPoint(p: FlowerPatch, i: number, j: number, ground: (x: number, z: number) => number, out: Point3): Point3 {
+  const pl = plantsOf(p);
+  const x = pl[i * 3];
+  const z = pl[i * 3 + 1];
+  const k = pl[i * 3 + 2];
+  const sp = F.species[p.species];
+  const L = sp.land[j % sp.land.length];
+  const s = plantScale(k);
+  const a = bloomYaw(sp, k);
+  const c = Math.cos(a);
+  const sn = Math.sin(a);
+  out.x = x + (L[0] * c + L[2] * sn) * s;
+  out.y = ground(x, z) + L[1] * s;
+  out.z = z + (-L[0] * sn + L[2] * c) * s;
+  return out;
+}
 export const nectarCap = (p: FlowerPatch) => plantCount(p) * F.species[p.species].nectar;
 export const pollenCap = (p: FlowerPatch) => plantCount(p) * F.species[p.species].pollen;
 

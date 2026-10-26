@@ -49,7 +49,7 @@ export class BeeView {
     this.buildHive();
     this.comb = new CombView(w.comb);
     this.flowers = new FlowerView(w);
-    this.bees = new BeesView(w.bees);
+    this.bees = new BeesView(w);
     this.pickables.push(...this.flowers.pickables);
     this.group.add(this.comb.group, this.flowers.group, this.bees.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);

@@ -35,6 +35,11 @@ const SCENES = {
   queen: { q: '&hour=11&select=bee:1&fly=1', check: INFO },
   follow: { q: '&hour=11&select=bee:200&follow=1', check: INFO },
   edge: { q: '&hour=11&cam=-35,100,8,-15,96,0' },
+  entrance: { q: '&hour=11&run=30&cam=-48,92,22,-28,84,0' },
+  flying: { q: '&hour=11&run=30&select=bee:164&follow=1', check: INFO },
+  onflower: { q: '&hour=11&run=30&select=bee:924&follow=1', check: INFO },
+  outside: { q: '&hour=11&run=30&cam=-150,160,120,-30,100,0' },
+  farbees: { q: '&hour=11&run=30&cam=0,400,900,0,40,-200' },
   en: { q: '&hour=11&lang=en' },
 };
 

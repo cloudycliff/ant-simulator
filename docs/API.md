@@ -16,6 +16,7 @@
   - `clock`、`rng`、`ids`、`saves`、`entities`、`events`，各自见下面的文件
   - `addSystem(name, update)`：登记每个模拟步调用一次的子系统，按登记顺序调用
   - `advance(realDt, budgetMs?, maxSteps?)`：推进现实时间 `realDt` 秒（乘以倍速），每步 `ENGINE.loop.fixedStep` 秒。一帧耗时超过 `budgetMs` 就丢掉没算完的时间，这时 `effectiveSpeed`（实际倍速）低于设定倍速；`lastSteps` 是这一帧走了几步。暂停时什么都不做
+  - `alpha`：上一步之后攒下、还不够一步的时间占一步的几成（0..1），画面拿它在上一步和这一步的位置之间插值
   - 内核自己登记了三个存档部分：`clock` 最先恢复，`rng` 和 `ids` 在其他部分之后恢复
 - `SimSystem`：`systems` 里的一项 `{ name, update }`。`update` 可以被替换，`perftest` 用它统计各子系统的耗时
 

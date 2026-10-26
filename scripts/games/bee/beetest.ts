@@ -9,7 +9,7 @@ import { CombView } from '../../../src/games/bee/combView';
 import { CONFIG } from '../../../src/games/bee/config';
 import { CELL, CELLS, CONTENT_KEYS, SITES, cellPos, siteAt, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
 import { ACTS, CASTE, type Act } from '../../../src/games/bee/sim/bees';
-import { nectarCap, openness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
+import { Flowers, nectarCap, openness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
 import { nodeAt } from '../../../src/games/bee/sim/walk';
 import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
 import { en } from '../../../src/games/bee/i18n/en';
@@ -25,7 +25,7 @@ const run = (w: BeeWorld, secs: number) => {
   for (let s = 0; s < secs; s += STEP) w.advance(STEP);
 };
 const fingerprint = (w: BeeWorld) =>
-  `${w.clock.seconds.toFixed(3)}|${w.rng.state}|${w.bees.births}|${w.bees.list.length}|${w.comb.version}|${w.bees.list.reduce((s, b) => s + b.u + b.v * 3 + b.face, 0).toFixed(6)}`;
+  `${w.clock.seconds.toFixed(3)}|${w.rng.state}|${w.bees.births}|${w.bees.list.length}|${w.comb.version}|${w.bees.trips}|${w.bees.list.reduce((s, b) => s + b.u + b.v * 3 + b.face + b.pos.x + b.pos.y * 3 + b.pos.z * 7, 0).toFixed(4)}`;
 
 const t0 = performance.now();
 const w = new BeeWorld(7);
@@ -109,26 +109,45 @@ const emptied = patches.find((q) => nectarCap(q) > 0)!;
   const got = w.flowers.take(p, 'nectar', 1, 12);
   check('采蜜：采到多少花丛少多少', got > 0 && Math.abs(p.nectar - (before - got)) < 1e-9, `${got.toFixed(2)} 份`);
   check('花没开时采不到', w.flowers.take(p, 'nectar', 1, 23) === 0 && w.flowers.take(p, 'pollen', 1, 23) === 0);
-  p.nectar = 0;
 }
+// 长回来单独用一份花丛算，世界里的花丛白天有蜂在采
+const regrow = new Flowers();
+regrow.patches.push({ ...emptied, nectar: 0 });
+for (let s = 0; s < CONFIG.clock.dayLength; s++) regrow.update(1, (9 + (s / CONFIG.clock.dayLength) * 24) % 24);
+const regrown = regrow.patches[0];
 const corn = patches.find((q) => SPECIES_KEYS[q.species] === 'corn')!;
 check('玉米没有花蜜', nectarCap(corn) === 0 && w.flowers.take(corn, 'nectar', 1, 9) === 0);
 const B = CONFIG.bees;
 const bees = w.bees;
 check('开局的蜂：工蜂、雄蜂和一只蜂王', bees.list.length === B.workers + B.drones + 1 && bees.list.filter((b) => b.caste === CASTE.queen).length === 1, `${bees.list.length} 只`);
-const offComb = () => bees.list.filter((b) => b.wrap === 0 && bees.map.walk[nodeAt(b.u, b.v)] === 0 && nodeAt(b.u, b.v) >= 0).length + bees.list.filter((b) => nodeAt(b.u, b.v) < 0).length;
+const inHive = () => bees.list.filter((b) => !b.out);
+const offComb = () => inHive().filter((b) => b.wrap === 0 && bees.map.walk[nodeAt(b.u, b.v)] === 0 && nodeAt(b.u, b.v) >= 0).length + inHive().filter((b) => nodeAt(b.u, b.v) < 0).length;
 check('开局的蜂都站在巢脾或框条上', offComb() === 0);
 const built0 = census0.built;
 const honey0 = census0.honeyCells;
+const pollen0 = census0.pollenCells;
 const seen = new Set<Act>();
+let maxOut = 0;
+let outAtNight = 0;
+let badFlight = 0;
+const garden = CONFIG.garden.size / 2;
 const stepT0 = performance.now();
 for (let s = 0; s < CONFIG.clock.dayLength; s += 10) {
   run(w, 10);
-  for (const b of bees.list) seen.add(b.act);
+  let out = 0;
+  for (const b of bees.list) {
+    seen.add(b.act);
+    if (!b.out) continue;
+    out++;
+    const p = b.pos;
+    if (Math.abs(p.x) > garden || Math.abs(p.z) > garden || p.y < w.groundAt(p.x, p.z) || p.y > 1000 || !Number.isFinite(p.x + p.y + p.z)) badFlight++;
+  }
+  maxOut = Math.max(maxOut, out);
+  if (w.clock.hour > 23 || w.clock.hour < 3) outAtNight = Math.max(outAtNight, out);
 }
 const stepMs = (performance.now() - stepT0) / (CONFIG.clock.dayLength * 30);
 check('一天过去了', w.clock.day === 2, tr(w.clock.stamp()));
-check('采空的花丛一天里长回来、不超过满', patches.every((p) => p.nectar <= nectarCap(p) + 1e-9 && p.pollen <= pollenCap(p) + 1e-9) && emptied.nectar > nectarCap(emptied) * 0.99, `${((emptied.nectar / nectarCap(emptied)) * 100).toFixed(0)}%`);
+check('采空的花丛一天里长回来、不超过满', patches.every((p) => p.nectar <= nectarCap(p) + 1e-9 && p.pollen <= pollenCap(p) + 1e-9) && regrown.nectar > nectarCap(regrown) * 0.99, `${((regrown.nectar / nectarCap(regrown)) * 100).toFixed(0)}%`);
 check('蜂箱周围的地面是平的', w.groundAt(0, 0) === 0 && w.groundAt(40, -30) === 0);
 const ms = performance.now() - t0;
 const c1 = comb.census().counts;
@@ -142,7 +161,10 @@ check('幼虫没有饿死', bees.starved === 0, `${bees.starved} 只`);
 check('成蜂没有饿死', bees.hungry === 0, `${bees.hungry} 只`);
 const census1 = comb.census();
 check('巢脾在长', census1.built > built0 + 50, `${built0} → ${census1.built}`);
-check('储蜜在吃，但没吃光', census1.honeyCells < honey0 && census1.honeyCells > honey0 * 0.9, `${honey0.toFixed(0)} → ${census1.honeyCells.toFixed(0)} 满房`);
+check('采集蜂出巢、带回花蜜和花粉', bees.trips > 500 && bees.nectarIn > 20 && bees.pollenIn > 20, `最多 ${maxOut} 只在外面，${bees.trips} 趟，花蜜 ${bees.nectarIn.toFixed(0)} 房、花粉 ${bees.pollenIn.toFixed(0)} 房`);
+check('飞着的蜂都在花园里、地面以上', badFlight === 0, `${badFlight} 次`);
+check('半夜蜂都在巢里', outAtNight === 0, `${outAtNight} 只在外面`);
+check('储蜜、储粉一天后没有单向漂移', Math.abs(census1.honeyCells / honey0 - 1) < 0.05 && Math.abs(census1.pollenCells / pollen0 - 1) < 0.15, `蜜 ${honey0.toFixed(0)} → ${census1.honeyCells.toFixed(0)}、粉 ${pollen0.toFixed(0)} → ${census1.pollenCells.toFixed(0)} 满房`);
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -157,7 +179,15 @@ const load = () => {
 const a = load();
 check('存档往返内容一致', JSON.stringify(beeSave.write(a, 1)) === json, `${(json.length / 1024).toFixed(1)} KB`);
 check('读档后巢脾一样', a.comb.content.every((c, i) => c === comb.content[i]) && a.comb.age.every((x, i) => x === comb.age[i]));
-check('读档后蜂一样', a.bees.list.length === bees.list.length && a.bees.list.every((x, i) => x.id === bees.list[i].id && x.face === bees.list[i].face && Math.abs(x.u - bees.list[i].u) < 1e-3));
+check(
+  '读档后蜂一样（巢里的和在外面的）',
+  a.bees.list.length === bees.list.length &&
+    a.bees.list.every((x, i) => {
+      const y = bees.list[i];
+      return x.id === y.id && x.face === y.face && x.out === y.out && Math.abs(x.u - y.u) < 1e-3 && Math.abs(x.pos.x - y.pos.x) < 1e-3 && Math.abs(x.pos.y - y.pos.y) < 1e-3 && Math.abs(x.load - y.load) < 1e-3;
+    }),
+  `${bees.list.filter((x) => x.out).length} 只在外面`,
+);
 check('读档后花丛一样', JSON.stringify(a.flowers.patches) === JSON.stringify(w.flowers.patches));
 const b = load();
 run(a, 60);
@@ -174,7 +204,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x' }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y' }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

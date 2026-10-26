@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CONFIG } from './config';
-import { CASTE, type Bee, type Bees } from './sim/bees';
+import { CASTE, type Bee } from './sim/bees';
+import type { BeeWorld } from './world';
 
 const B = CONFIG.bees;
 const H = CONFIG.hive;
 const RB = CONFIG.render.bees;
+const MIN_PX = CONFIG.render.minPx;
 
 /** 转成不带索引、没有 uv、带顶点颜色的几何体；color 可以按顶点位置给 */
 function paint(g: THREE.BufferGeometry, color: number | ((x: number) => number)): THREE.BufferGeometry {
@@ -81,9 +83,24 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Sphere(new THREE.Vector3(), 1);
 const _fr = new THREE.Frustum();
 const _pv = new THREE.Matrix4();
+const _k = new THREE.Vector3();
+/** 飞着的蜂翅膀扇成一片虚影，画宽一点 */
+const FLAP = new THREE.Matrix4().makeScale(1.05, 1, 1.6);
 
-/** 蜂身的朝向：巢面上背朝外；绕边时背从这一面的法线转到边的外侧再转到另一面 */
+/**
+ * 蜂身的朝向：巢面上背朝外；绕边时背从这一面的法线转到边的外侧再转到另一面。
+ * 不在巢脾上时背朝上，飞着的按速度抬头低头
+ */
 function orient(b: Bee, fwd: THREE.Vector3, up: THREE.Vector3): void {
+  if (b.out) {
+    const v = b.vel;
+    const pitch = b.out === 2 ? Math.max(-0.6, Math.min(0.6, Math.atan2(v.y, Math.hypot(v.x, v.z)))) : 0;
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    fwd.set(Math.cos(b.h) * cp, sp, Math.sin(b.h) * cp);
+    up.set(-Math.cos(b.h) * sp, cp, -Math.sin(b.h) * sp);
+    return;
+  }
   const zf = b.face ? -1 : 1;
   if (b.wrap > 0) {
     const th = Math.PI * b.wrap;
@@ -110,7 +127,7 @@ export class BeesView {
   private faded = false;
   private mark: THREE.LineLoop;
 
-  constructor(private readonly bees: Bees) {
+  constructor(private readonly w: BeeWorld) {
     this.alloc(4000);
     const ring: number[] = [];
     for (let k = 0; k < 24; k++) ring.push(Math.cos((k / 24) * Math.PI * 2) * 0.9, Math.sin((k / 24) * Math.PI * 2) * 0.9, 0);
@@ -139,15 +156,15 @@ export class BeesView {
     this.wings.renderOrder = 6;
   }
 
-  /** 这只蜂现在看不看得见：在画面里，没被巢脾挡住 */
-  private visible(b: Bee, cam: THREE.Vector3): boolean {
-    if (b.wrap === 0 && cam.z * (b.face ? -1 : 1) < -H.combHalf - 1) return false;
-    _s.center.set(b.pos.x, b.pos.y, b.pos.z);
+  /** 这只蜂现在看不看得见：在画面里，没被巢脾挡住；p 是它画面上的位置 */
+  private visible(b: Bee, p: THREE.Vector3, cam: THREE.Vector3): boolean {
+    if (!b.out && b.wrap === 0 && cam.z * (b.face ? -1 : 1) < -H.combHalf - 1) return false;
+    _s.center.copy(p);
     return _fr.intersectsSphere(_s);
   }
 
   update(camera: THREE.PerspectiveCamera, viewportH: number, selected: number | null): void {
-    const list = this.bees.list;
+    const list = this.w.bees.list;
     if (list.length > this.cap) this.alloc(Math.ceil(list.length * 1.5));
     if (this.fade !== this.faded) {
       this.faded = this.fade;
@@ -159,17 +176,19 @@ export class BeesView {
     const n = [0, 0, 0];
     let nw = 0;
     for (const b of list) {
-      if (!this.visible(b, cam)) continue;
-      _p.set(b.pos.x, b.pos.y, b.pos.z);
+      this.w.beePos(b, _p);
+      if (!this.visible(b, _p, cam)) continue;
       const px = (B.length * pxPerCm) / Math.max(0.01, cam.distanceTo(_p));
       const lod = px >= RB.nearPx ? 0 : px >= RB.farPx ? 1 : 2;
       orient(b, _f, _u);
       _z.crossVectors(_f, _u);
-      _m.makeBasis(_f, _u, _z).scale(CASTE_SCALE[b.caste]).setPosition(_p);
+      _m.makeBasis(_f, _u, _z).scale(CASTE_SCALE[b.caste]);
+      if (b.out === 2 && px < MIN_PX) _m.scale(_k.setScalar(MIN_PX / px));
+      _m.setPosition(_p);
       const mesh = this.meshes[lod];
       mesh.setMatrixAt(n[lod], _m);
       mesh.setColorAt(n[lod]++, CASTE_TINT[b.caste]);
-      if (lod < 2 && !this.fade) this.wings.setMatrixAt(nw++, _m);
+      if (lod < 2 && !this.fade) this.wings.setMatrixAt(nw++, b.out === 2 ? _m.multiply(FLAP) : _m);
     }
     this.meshes.forEach((m, i) => {
       m.count = n[i];
@@ -179,11 +198,12 @@ export class BeesView {
     this.wings.count = nw;
     this.wings.instanceMatrix.needsUpdate = true;
 
-    const sel = selected === null ? undefined : this.bees.get(selected);
+    const sel = selected === null ? undefined : this.w.bees.get(selected);
     this.mark.visible = !!sel;
     if (sel) {
-      this.mark.position.set(sel.pos.x, sel.pos.y, sel.pos.z);
-      this.mark.rotation.set(0, sel.face ? Math.PI : 0, 0);
+      this.w.beePos(sel, this.mark.position);
+      if (sel.out) this.mark.rotation.set(-Math.PI / 2, 0, 0);
+      else this.mark.rotation.set(0, sel.face ? Math.PI : 0, 0);
       this.mark.scale.setScalar(sel.caste === CASTE.worker ? 1 : 1.3);
     }
   }
@@ -193,9 +213,9 @@ export class BeesView {
     _fr.setFromProjectionMatrix(_pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     let best: { id: number; dist: number } | null = null;
     let bestScore = Infinity;
-    for (const b of this.bees.list) {
-      if (!this.visible(b, camera.position)) continue;
-      _p.set(b.pos.x, b.pos.y, b.pos.z);
+    for (const b of this.w.bees.list) {
+      this.w.beePos(b, _p);
+      if (!this.visible(b, _p, camera.position)) continue;
       const dist = _p.distanceTo(camera.position);
       _p.project(camera);
       const d = Math.hypot((_p.x * 0.5 + 0.5) * w - sx, (-_p.y * 0.5 + 0.5) * h - sy);

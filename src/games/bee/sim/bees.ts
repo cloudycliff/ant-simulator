@@ -1,27 +1,74 @@
 import { Behavior, type Routine as CoreRoutine } from '../../../core/sim/behavior';
 import type { IdPool } from '../../../core/sim/ids';
 import { turnToward } from '../../../core/move/surface';
+import type { Point3 } from '../../../core/sim/events';
 import { wrapAngle } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteU, siteV, type Comb } from './comb';
+import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './flight';
+import { landingPoint, openness, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
 
 const B = CONFIG.bees;
 const C = CONFIG.care;
 const H = CONFIG.hive;
 const P = CONFIG.cell.pitch;
+const F = CONFIG.forage;
+const SPECIES = CONFIG.flowers.species;
+
+/** 每个位置在育儿区（0）、外面放花粉的一圈（1）还是再往外放花蜜（2）；按开局育儿区的椭圆，不随蜂群变 */
+const ZONE = (() => {
+  const O = CONFIG.opening.brood;
+  const z = new Uint8Array(SITES);
+  for (let s = 0; s < SITES; s++) {
+    const d = Math.hypot((siteU(s) - O.u) / O.ru, (siteV(s) - O.v) / O.rv);
+    z[s] = d < 1 ? 0 : d < C.ring ? 1 : 2;
+  }
+  return z;
+})();
 
 export const CASTE = { worker: 0, drone: 1, queen: 2 } as const;
 export const CASTE_KEYS = ['worker', 'drone', 'queen'] as const;
 export const ROLE_KEYS = ['cleaner', 'nurse', 'house', 'guard', 'forager'] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 /** 正在做什么（信息面板的 act.* 文字） */
-export const ACTS = ['rest', 'wander', 'goEat', 'eat', 'goPollen', 'pollen', 'goFeed', 'feed', 'goClean', 'clean', 'goBuild', 'build', 'goRipen', 'ripen', 'cap', 'guard', 'wait', 'seek', 'inspect', 'lay'] as const;
+export const ACTS = [
+  'rest',
+  'wander',
+  'goEat',
+  'eat',
+  'goPollen',
+  'pollen',
+  'goFeed',
+  'feed',
+  'goClean',
+  'clean',
+  'goBuild',
+  'build',
+  'goRipen',
+  'ripen',
+  'cap',
+  'guard',
+  'wait',
+  'seek',
+  'inspect',
+  'lay',
+  'leave',
+  'flyOut',
+  'sipNectar',
+  'gatherPollen',
+  'flyHome',
+  'enter',
+  'goStore',
+  'storeNectar',
+  'goPack',
+  'packPollen',
+] as const;
 export type Act = (typeof ACTS)[number];
 
 /** 要去的地方各有一张路程场 */
-const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'food', 'pollen', 'ripen', 'frontier', 'entrance'] as const;
+const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance'] as const;
 type FieldKey = (typeof FIELD_KEYS)[number];
 
 /** 行为协程交给运动层的指令；t 是剩下的秒数，执行时就地减，存档时连进度一起存 */
@@ -33,7 +80,13 @@ export type Cmd =
   /** 走到同一面的巢房口 */
   | { k: 'to'; cell: number; t: number }
   /** 停在巢房上、头朝着它 */
-  | { k: 'work'; cell: number; t: number };
+  | { k: 'work'; cell: number; t: number }
+  /** 走巢门的路：dir 1 从巢门格走到管口飞起来，-1 从管口走进来落到 face 那面的巢门格；s 是离巢门格多远 */
+  | { k: 'tube'; dir: 1 | -1; s: number; face: number; t: number }
+  /** 飞到 (x, y, z) 离 r 以内；stop 为假时是路过、不减速 */
+  | { k: 'fly'; x: number; y: number; z: number; r: number; v: number; stop: boolean; t: number }
+  /** 停在花上 */
+  | { k: 'sip'; t: number };
 type Routine = CoreRoutine<Cmd>;
 
 /** 绕过巢脾边时离边多远（cm） */
@@ -59,6 +112,15 @@ export class Bee {
   wn = 0;
   /** 停下来歇着、干活时占着的格（带面），别的蜂绕开它、不在它上面停；走着的蜂不占格 */
   parked = -1;
+  /** 0 在巢脾上；1 在巢门管里走；2 在飞；3 停在花上。不在巢脾上时 pos 就是位置，h 是世界里的水平朝向 */
+  out = 0;
+  readonly vel = { x: 0, y: 0, z: 0 };
+  /** 上一步的位置，画面按 world.alpha 在它和 pos 之间插值 */
+  readonly prev = { x: 0, y: 0, z: 0 };
+  /** 采集蜂认得的花丛（-1 不认得）、采什么（0 花蜜，1 花粉）、带着多少（份） */
+  patch = -1;
+  goods = 0;
+  load = 0;
   act: Act = 'rest';
   readonly brain = new Behavior<Cmd>();
   next!: () => Routine;
@@ -68,7 +130,7 @@ export class Bee {
     readonly id: number,
     readonly caste: number,
     public age: number,
-    readonly life: number,
+    public life: number,
   ) {}
 }
 
@@ -81,9 +143,17 @@ export function roleOf(b: Bee): RoleKey | null {
 
 const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
 
-type BeeSave = [number, number, number, number, number, number, number, number, number, number, number, number, number, Act, Cmd | null, number];
+type BeeSave = [
+  ...[id: number, caste: number, age: number, life: number, face: number, u: number, v: number, h: number, crop: number, jelly: number, wrap: number, wn: number, fast: number],
+  ...[act: Act, cmd: Cmd | null, started: number],
+  ...[out: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, patch: number, goods: number, load: number],
+];
 export interface BeesSave {
   bees: BeeSave[];
+  trips: number;
+  lost: number;
+  nectarIn: number;
+  pollenIn: number;
   births: number;
   deaths: number;
   laid: number;
@@ -91,7 +161,17 @@ export interface BeesSave {
   hungry: number;
 }
 
-/** 巢里的蜂：在巢脾两面爬（T-008），按日龄干活，饿了吃蜜；蜂王产卵，子羽化出新的蜂 */
+/** 蜂在巢外要知道的：花丛、此刻几点、地面多高 */
+export interface BeeEnv {
+  flowers: Flowers;
+  hour: () => number;
+  ground: (x: number, z: number) => number;
+}
+
+/**
+ * 蜂：巢里在巢脾两面爬（T-008），按日龄干活，饿了吃蜜；蜂王产卵，子羽化出新的蜂；
+ * 采集蜂出巢飞到花丛，采满了飞回来把花蜜、花粉放进巢房（T-013）
+ */
 export class Bees {
   readonly list: Bee[] = [];
   readonly map = new WalkMap();
@@ -101,22 +181,29 @@ export class Bees {
   /** 饿死的幼虫、成蜂 */
   starved = 0;
   hungry = 0;
+  /** 带着东西回巢的趟数；放进巢房的花蜜、花粉（房） */
+  trips = 0;
+  /** 死在外面的采集蜂 */
+  lost = 0;
+  nectarIn = 0;
+  pollenIn = 0;
   private byId = new Map<number, Bee>();
   private fields = Object.fromEntries(FIELD_KEYS.map((k) => [k, new Field()])) as Record<FieldKey, Field>;
   private dt = 0;
-  /** 正要走进的巢房那一格，停着蜂也能进 */
   /** 快到地方的蜂不再绕开停着的蜂，直接从它们身上爬过去（目标周围总挤着蜂，绕来绕去走不到） */
   private pushing = false;
   /** 每格停着几只蜂 */
   private occ = new Uint8Array(2 * NODES);
-  /** 雄蜂子还不多、可以在雄蜂房产卵；蜜房里没开封的蜜不多了、要咬开封盖蜜（重算路程场时定） */
+  /** 雄蜂子还不多、可以在雄蜂房产卵（重算路程场时定） */
   private droneOk = true;
+  private target: Point3 = { x: 0, y: 0, z: 0 };
 
   constructor(
     private readonly comb: Comb,
     private readonly rng: Rng,
     private readonly ids: IdPool,
     private readonly now: () => number,
+    private readonly env: BeeEnv,
   ) {}
 
   get(id: number): Bee | undefined {
@@ -181,6 +268,7 @@ export class Bees {
       b.v = nodeV(n) + rng.range(-0.2, 0.2);
       b.h = rng.range(-Math.PI, Math.PI);
       this.place(b);
+      Object.assign(b.prev, b.pos);
       return;
     }
   }
@@ -196,6 +284,7 @@ export class Bees {
     b.h = this.rng.range(-Math.PI, Math.PI);
     b.crop = 0.5;
     this.place(b);
+    Object.assign(b.prev, b.pos);
     this.births++;
   }
 
@@ -204,9 +293,12 @@ export class Bees {
     this.dt = dt;
     let dead = 0;
     for (const b of this.list) {
+      b.prev.x = b.pos.x;
+      b.prev.y = b.pos.y;
+      b.prev.z = b.pos.z;
       b.age += dt;
       if (b.caste !== CASTE.queen) {
-        b.crop = Math.max(0, b.crop - dt / (b.caste === CASTE.drone ? B.droneBurn : B.burn));
+        b.crop = Math.max(0, b.crop - dt / (b.out === 2 ? F.flyBurn : b.caste === CASTE.drone ? B.droneBurn : B.burn));
         b.fast = b.crop > 0 ? 0 : b.fast + dt;
       }
       if (b.age >= b.life || b.fast > B.starve) {
@@ -230,8 +322,9 @@ export class Bees {
     }
   }
 
-  /** 世界坐标：巢面上方 lift；绕边时沿半个椭圆从这一面转到另一面 */
+  /** 世界坐标：巢面上方 lift；绕边时沿半个椭圆从这一面转到另一面。不在巢脾上的蜂 pos 自己管 */
   private place(b: Bee): void {
+    if (b.out) return;
     const zf = b.face ? -1 : 1;
     const r = H.combHalf + B.lift;
     b.pos.x = b.u - H.combW / 2;
@@ -397,7 +490,69 @@ export class Bees {
         this.unpark(b);
         return true;
       }
+      case 'tube':
+        return this.stepTube(b, c);
+      case 'fly': {
+        b.out = 2;
+        const T = this.target;
+        T.x = c.x;
+        T.y = c.y;
+        T.z = c.z;
+        if (steer(b, T, c.v, c.stop, dt, this.env.ground(b.pos.x, b.pos.z), this.now()) < c.r) {
+          b.brain.result = true;
+          return true;
+        }
+        if ((c.t -= dt) > 0) return false;
+        b.brain.result = false;
+        return true;
+      }
+      case 'sip':
+        b.out = 3;
+        b.vel.x = b.vel.y = b.vel.z = 0;
+        return (c.t -= dt) <= 0;
     }
+  }
+
+  /** 巢门的路：先在巢脾上走到巢门格，再沿管子走；走出管口就飞起来，走进来就落到巢脾上 */
+  private stepTube(b: Bee, c: Extract<Cmd, { k: 'tube' }>): boolean {
+    if (b.out === 0) {
+      const du = DOOR.u - b.u;
+      const dv = DOOR.v - b.v;
+      if (du * du + dv * dv > 0.0625) {
+        if ((c.t -= this.dt) <= 0) {
+          b.brain.result = false;
+          return true;
+        }
+        this.walkTo(b, DOOR.u, DOOR.v, true);
+        return false;
+      }
+      this.unpark(b);
+      c.face = b.face;
+      c.s = 0;
+    }
+    b.out = 1;
+    c.s += c.dir * F.tubeWalk * this.dt;
+    if (c.dir > 0 && c.s >= TUBE_LEN) {
+      b.out = 2;
+      Object.assign(b.pos, MOUTH);
+      Object.assign(b.vel, { x: -30, y: 15, z: 0 });
+      b.h = Math.PI;
+      b.brain.result = true;
+      return true;
+    }
+    if (c.dir < 0 && c.s <= 0) {
+      b.out = 0;
+      b.face = c.face;
+      b.u = DOOR.u;
+      b.v = DOOR.v;
+      b.h = 0;
+      b.vel.x = b.vel.y = b.vel.z = 0;
+      this.place(b);
+      b.brain.result = true;
+      return true;
+    }
+    b.h = tubeAt(c.s, c.face, ((b.id * 0.381966) % 1) * 2 - 1, b.pos) + (c.dir < 0 ? Math.PI : 0);
+    return false;
   }
 
   private nodeOf(b: Bee): number {
@@ -418,6 +573,18 @@ export class Bees {
   private isFood = (c: number) => this.isOpenFood(c) || this.comb.content[c] === CELL.cappedHoney;
   private isPollen = (c: number) => this.comb.content[c] === CELL.pollen && this.comb.amount[c] > 0.01;
   private isRipe = (c: number) => this.comb.content[c] === CELL.nectar || (this.comb.content[c] === CELL.honey && this.comb.amount[c] >= C.capAt);
+  /** 放花蜜：育儿区上面没装满的蜜房，或者清理过的空房 */
+  private isStore = (c: number) => {
+    const s = cellSite(c);
+    const k = this.comb.content[c];
+    return this.comb.build[s] >= 1 && (((k === CELL.nectar || k === CELL.honey) && this.comb.amount[c] < C.capAt) || (k === CELL.empty && this.comb.amount[c] <= 0 && ZONE[s] === 2));
+  };
+  /** 放花粉：育儿区外面一圈没装满的粉房或空房 */
+  private isPollenStore = (c: number) => {
+    const s = cellSite(c);
+    const k = this.comb.content[c];
+    return this.comb.build[s] >= 1 && ((k === CELL.pollen && this.comb.amount[c] < C.capAt) || (k === CELL.empty && this.comb.amount[c] <= 0 && ZONE[s] === 1));
+  };
   private isFrontier = (c: number) => {
     const b = this.comb.build[cellSite(c)];
     return b > 0 && b < 1;
@@ -453,14 +620,24 @@ export class Bees {
       let found = 0;
       for (let c = 0; c < CELLS; c++) {
         const s = cellSite(c);
-        if (this.isLayable(c) && Math.hypot((siteU(s) - O.u) / (O.ru * 1.4), (siteV(s) - O.v) / (O.rv * 1.4)) < 1) {
+        if (this.isLayable(c) && Math.hypot((siteU(s) - O.u) / (O.ru * C.queen), (siteV(s) - O.v) / (O.rv * C.queen)) < 1) {
           found++;
           yield cellNode(c);
         }
       }
       if (found) return;
     }
-    const want = { larvae: this.isHungryLarva, dirty: this.isDirty, layable: this.isLayable, food: this.isFood, pollen: this.isPollen, ripen: this.isRipe, frontier: this.isFrontier }[key];
+    const want = {
+      larvae: this.isHungryLarva,
+      dirty: this.isDirty,
+      layable: this.isLayable,
+      food: this.isFood,
+      pollen: this.isPollen,
+      ripen: this.isRipe,
+      frontier: this.isFrontier,
+      store: this.isStore,
+      pollenStore: this.isPollenStore,
+    }[key];
     for (let c = 0; c < CELLS; c++) if (want(c)) yield cellNode(c);
   }
 
@@ -503,6 +680,7 @@ export class Bees {
   // ---- 任务 ----
 
   private *task(b: Bee): Routine {
+    if (b.out) return yield* this.comeHome(b);
     if (b.caste === CASTE.queen) return yield* this.queenTask(b);
     if (b.crop < B.hungry) return yield* this.eat(b);
     if (b.caste === CASTE.drone) return yield* this.idle(b, 0.6);
@@ -522,11 +700,120 @@ export class Bees {
         }
         return yield* this.wait(b);
       default:
-        return yield* this.wait(b);
+        return yield* this.forage(b);
     }
   }
 
-  /** 采集蜂（和不站岗的守卫蜂）：飞行还没做，先在巢里歇着 */
+  /** 采集蜂：带着东西先放下；认得开着的花丛就出巢去采，不认得的有时去侦察，其余在巢里等 */
+  private *forage(b: Bee): Routine {
+    if (b.load > 0) return yield* this.unload(b);
+    const p = this.pickPatch(b);
+    if (!p) return yield* this.wait(b);
+    if (b.crop < F.depart) return yield* this.eat(b);
+    b.act = 'leave';
+    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean)) return yield* this.idle(b);
+    if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 10 }) as boolean)) return yield* this.idle(b);
+    b.act = 'flyOut';
+    yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };
+    yield* this.gather(b, p);
+    // 回巢由 task 开头的 comeHome 接着做（读档后也一样）
+  }
+
+  /** 认得的花丛开着就去；不认得（或认得的合上了，有时）就挑一片开着的去侦察；goods 0 是花蜜，1 起是花粉（颜色 + 1） */
+  private pickPatch(b: Bee): FlowerPatch | null {
+    const hour = this.env.hour();
+    const open = (p: FlowerPatch) => openness(SPECIES[p.species], hour) >= F.minOpen;
+    if (b.patch >= 0) {
+      const p = this.env.flowers.get(b.patch);
+      if (p && open(p)) return p;
+      if (p && !this.rng.chance(F.scout / 2)) return null;
+      b.patch = -1;
+    }
+    if (!this.rng.chance(F.scout)) return null;
+    const list = this.env.flowers.patches.filter(open);
+    if (!list.length) return null;
+    const p = list[this.rng.int(0, list.length - 1)];
+    const sp = SPECIES[p.species];
+    const pollen = sp.nectar <= 0 || (sp.pollen > 0 && this.rng.chance(F.pollenShare));
+    b.patch = p.id;
+    b.goods = pollen ? sp.pollenKind + 1 : 0;
+    return p;
+  }
+
+  /** 在花丛里一朵朵地采，带满一份或接连采不到就停；带得太少就不再来这片 */
+  private *gather(b: Bee, p: FlowerPatch): Routine {
+    const sp = SPECIES[p.species];
+    const what = b.goods ? 'pollen' : 'nectar';
+    const per = b.goods ? sp.pollen : sp.nectar;
+    let i = this.rng.int(0, plantCount(p) - 1);
+    let misses = 0;
+    for (let k = 0; k < F.visits && b.load < 0.999; k++) {
+      const L = landingPoint(p, i, this.rng.int(0, sp.land.length - 1), this.env.ground, { x: 0, y: 0, z: 0 });
+      b.act = k === 0 ? 'flyOut' : b.goods ? 'gatherPollen' : 'sipNectar';
+      if (!((yield { k: 'fly', ...L, r: 0.5, v: k === 0 ? F.speed : F.hop, stop: true, t: k === 0 ? 120 : 20 }) as boolean)) break;
+      Object.assign(b.pos, L);
+      b.act = b.goods ? 'gatherPollen' : 'sipNectar';
+      yield { k: 'sip', t: this.rng.range(F.visit[0], F.visit[1]) };
+      const want = Math.min(1 - b.load, per);
+      const got = this.env.flowers.take(p, what, want, this.env.hour());
+      b.load += got;
+      misses = got < want * 0.2 ? misses + 1 : 0;
+      if (misses >= 3) break;
+      i = this.nextPlant(p, i);
+    }
+    if (b.load < F.keep) b.patch = -1;
+    // 有的采集蜂回不来了（鸟、蜘蛛、迷路）：下一步按老死处理
+    if (this.rng.chance(F.risk)) {
+      b.life = b.age;
+      this.lost++;
+    }
+  }
+
+  /** 下一株：随便看几株，挑最近的 */
+  private nextPlant(p: FlowerPatch, i: number): number {
+    const pl = plantsOf(p);
+    const n = pl.length / 3;
+    let best = i;
+    let bestD = Infinity;
+    for (let k = 0; k < 4; k++) {
+      const j = this.rng.int(0, n - 1);
+      const d = Math.hypot(pl[j * 3] - pl[i * 3], pl[j * 3 + 1] - pl[i * 3 + 1]);
+      if (j !== i && d < bestD) {
+        bestD = d;
+        best = j;
+      }
+    }
+    return best;
+  }
+
+  /** 飞回巢门、走进巢里。从远处来的先绕到蜂箱巢门那一侧，不穿过箱子；实在飞不到管口就直接落在那儿 */
+  private *comeHome(b: Bee): Routine {
+    if (b.out >= 2) {
+      b.act = 'flyHome';
+      if (Math.hypot(b.pos.x - DOCK.x, b.pos.z - DOCK.z) > 60) yield { k: 'fly', ...APPROACH, r: 15, v: F.speed, stop: false, t: 120 };
+      yield { k: 'fly', ...DOCK, r: 2, v: F.hop, stop: true, t: 30 };
+      if (!((yield { k: 'fly', ...MOUTH, r: 0.8, v: F.hop, stop: true, t: 20 }) as boolean)) Object.assign(b.pos, MOUTH);
+    }
+    b.act = 'enter';
+    yield { k: 'tube', dir: -1, s: TUBE_LEN, face: this.rng.int(0, 1), t: 60 };
+    if (b.load > 0) this.trips++;
+  }
+
+  /** 把带回来的花蜜、花粉放进巢房；放不下就带着，过一会再找 */
+  private *unload(b: Bee): Routine {
+    const pollen = b.goods > 0;
+    const cell = yield* this.seek(b, pollen ? 'pollenStore' : 'store', pollen ? this.isPollenStore : this.isStore, pollen ? 'goPack' : 'goStore');
+    if (cell < 0) return yield* this.idle(b);
+    yield* this.work(b, cell, pollen ? 'packPollen' : 'storeNectar', F.unload);
+    const unit = pollen ? F.pollenLoad : F.nectarLoad;
+    const put = pollen ? this.comb.addPollen(cell, b.load * unit, b.goods - 1) : this.comb.addNectar(cell, b.load * unit);
+    if (pollen) this.pollenIn += put;
+    else this.nectarIn += put;
+    b.load -= put / unit;
+    if (b.load < 0.05) b.load = 0;
+  }
+
+  /** 守卫日龄还没站岗的蜂、等出巢的采集蜂：在巢里歇着、转转 */
   private *wait(b: Bee): Routine {
     if (this.rng.chance(0.2)) {
       b.act = 'wander';
@@ -645,8 +932,19 @@ export class Bees {
     return {
       bees: this.list.map((b) => {
         const c = b.brain.cmd;
-        return [b.id, b.caste, r4(b.age), r4(b.life), b.face, r4(b.u), r4(b.v), r4(b.h), r4(b.crop), r4(b.jelly), r4(b.wrap), r4(b.wn), r4(b.fast), b.act, c ? { ...c, t: r4(c.t) } : null, b.brain.started ? 1 : 0];
+        const p = b.pos;
+        const v = b.vel;
+        return [
+          ...[b.id, b.caste, r4(b.age), r4(b.life), b.face, r4(b.u), r4(b.v), r4(b.h), r4(b.crop), r4(b.jelly), r4(b.wrap), r4(b.wn), r4(b.fast)],
+          ...[b.act, c ? { ...c, t: r4(c.t) } : null, b.brain.started ? 1 : 0],
+          // 巢脾上的蜂位置由 u、v 算出来，不存
+          ...[b.out, ...(b.out ? [r4(p.x), r4(p.y), r4(p.z), r4(v.x), r4(v.y), r4(v.z)] : [0, 0, 0, 0, 0, 0]), b.patch, b.goods, r4(b.load)],
+        ] as BeeSave;
       }),
+      trips: this.trips,
+      lost: this.lost,
+      nectarIn: r4(this.nectarIn),
+      pollenIn: r4(this.pollenIn),
       births: this.births,
       deaths: this.deaths,
       laid: this.laid,
@@ -659,12 +957,19 @@ export class Bees {
     this.list.length = 0;
     this.byId.clear();
     this.occ.fill(0);
-    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started] of d.bees) {
+    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load] of d.bees) {
       const b = this.add(caste, age, life, id);
-      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act });
+      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load });
+      Object.assign(b.pos, { x, y, z });
+      Object.assign(b.vel, { x: vx, y: vy, z: vz });
       if (cmd) b.brain.resume({ ...cmd }, started === 1);
       this.place(b);
+      Object.assign(b.prev, b.pos);
     }
+    this.trips = d.trips;
+    this.lost = d.lost;
+    this.nectarIn = d.nectarIn;
+    this.pollenIn = d.pollenIn;
     this.births = d.births;
     this.deaths = d.deaths;
     this.laid = d.laid;

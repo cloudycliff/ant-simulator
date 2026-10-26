@@ -264,6 +264,42 @@ export class Comb {
     return got;
   }
 
+  /**
+   * 往空房、花蜜房或没封盖的蜜房里放 x 房花蜜，返回放进去多少。新的花蜜冲淡了原来的：
+   * 酿的进度按量摊开，原来的蜂蜜算酿好的
+   */
+  addNectar(cell: number, x: number): number {
+    const c = this.content[cell];
+    if (c === CELL.empty) {
+      if (this.amount[cell] > 0) return 0;
+      this.store(cell, CELL.nectar, 0);
+      this.age[cell] = 0;
+    } else if (c !== CELL.nectar && c !== CELL.honey) return 0;
+    const a = this.amount[cell];
+    const got = Math.min(x, 1 - a);
+    if (got <= 0) return 0;
+    const ripe = c === CELL.honey ? 1 : this.age[cell];
+    this.content[cell] = CELL.nectar;
+    this.age[cell] = (ripe * a) / (a + got);
+    this.amount[cell] = a + got;
+    this.version++;
+    return got;
+  }
+
+  /** 往空房或花粉房里放 x 房花粉（kind 是颜色，空房才用得上），返回放进去多少 */
+  addPollen(cell: number, x: number, kind: number): number {
+    const c = this.content[cell];
+    if (c === CELL.empty) {
+      if (this.amount[cell] > 0) return 0;
+      this.store(cell, CELL.pollen, 0, kind);
+    } else if (c !== CELL.pollen) return 0;
+    const got = Math.min(x, 1 - this.amount[cell]);
+    if (got <= 0) return 0;
+    this.amount[cell] += got;
+    this.version++;
+    return got;
+  }
+
   /** 酿 d 成，酿够了花蜜就成了蜂蜜 */
   ripen(cell: number, d: number): void {
     if (this.content[cell] !== CELL.nectar) return;

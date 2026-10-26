@@ -6,9 +6,10 @@ export const CONFIG = {
   clock: { dayLength: 600, startHour: 9 },
   /**
    * 观察箱：两框巢脾竖着摞，中间隔一根木条。巢脾坐标 u 横向 0..combW、v 竖向 0..2·frameH+bar，
-   * 巢脾中心面在 z = 0，两面各在 ±combHalf；baseY 是下框底边离地的高度
+   * 巢脾中心面在 z = 0，两面各在 ±combHalf；baseY 是下框底边离地的高度。
+   * 巢门管从巢脾左边往外 from～to cm，中心在 v 的高度、半径 r
    */
-  hive: { combW: 40, frameH: 22, bar: 1.5, combHalf: 1.1, baseY: 80 },
+  hive: { combW: 40, frameH: 22, bar: 1.5, combHalf: 1.1, baseY: 80, tube: { v: 3, r: 1.1, from: 2.5, to: 10 } },
   /**
    * 巢房：尖角朝上的六边形，中心距 pitch，房壁厚 wall，房深 depth（房底到房口；中肋在两面房底之间）。
    * 中蜂工蜂房内径约 0.48 cm（BALANCE）；房壁比真的厚，远处才看得见
@@ -91,14 +92,52 @@ export const CONFIG = {
     /** 内勤蜂去筑巢的机会（不然去酿蜜、封盖）；守卫日龄的蜂去巢门站岗的机会 */
     builders: 0.35,
     guards: 0.35,
-    /** 路程场多久重算一次（秒）：要喂的幼虫、要清理的、能产卵的、食物、花粉、要酿的蜜、在造的巢房 */
-    refresh: { larvae: 2, dirty: 5, layable: 3, food: 5, pollen: 5, ripen: 5, frontier: 10 },
+    /** 路程场多久重算一次（秒）：要喂的幼虫、要清理的、能产卵的、食物、花粉、要酿的蜜、在造的巢房、放花蜜和花粉的房 */
+    refresh: { larvae: 2, dirty: 5, layable: 3, food: 5, pollen: 5, ripen: 5, frontier: 10, store: 5, pollenStore: 5 },
+    /** 育儿区（开局育儿区的椭圆）往外到 ring 倍是放花粉的一圈，再往外放花蜜；蜂王在 queen 倍以内产卵 */
+    ring: 1.5,
+    queen: 1.4,
+  },
+  /**
+   * 出巢采集（T-013）。飞行用转向：最快 speed、在花间 hop（cm/s），加速度不过 accel，离目标 d 时想要的速度是
+   * d × brake（不低于 slow）；离目标水平 descend 以外按 cruise 的高度（离地）飞，左右摆 wobble 成、wobbleHz 次每秒。
+   * 飞着的蜂蜜囊 flyBurn 秒用空；出巢前蜜囊低于 depart 先去吃。
+   * 不认得花丛的采集蜂每回想出巢时 scout 的机会去侦察；花开到 minOpen 才去；pollenShare 的蜂采花粉。
+   * 一趟最多落 visits 朵花，每朵停 visit 秒，带满 1 份回巢；不到 keep 份就不再去这片花丛。
+   * 一份花蜜放进巢房是 nectarLoad 房、花粉 pollenLoad 房；放的时候停 unload 秒。巢门管里跑得快，tubeWalk cm/s。
+   * 每趟有 risk 的机会死在外面
+   */
+  forage: {
+    speed: 300,
+    hop: 60,
+    slow: 15,
+    accel: 900,
+    brake: 2,
+    descend: 250,
+    cruise: [180, 260] as [number, number],
+    wobble: 0.15,
+    wobbleHz: 0.7,
+    flyBurn: 100,
+    depart: 0.5,
+    scout: 0.2,
+    minOpen: 0.3,
+    pollenShare: 0.3,
+    visits: 16,
+    visit: [2, 4] as [number, number],
+    keep: 0.3,
+    nectarLoad: 0.1,
+    pollenLoad: 0.12,
+    unload: 3,
+    tubeWalk: 4,
+    risk: 0.01,
   },
   /**
    * 花丛（BALANCE“花”一节）。开局 patches 片，离蜂箱 near～far cm，彼此至少隔 gap。
    * 每种花：hours 是开放（流蜜、散粉）的时刻，前后各用 ramp 小时慢慢开合；nectar、pollen 是每株满的时候
    * 有几份（一份 = 一只采集蜂一趟带回的量），采空后开着的时候 refill 秒长满；pollenKind 是花粉团的颜色
-   * （PALETTE.pollen 的编号）。r 是花丛的半径，spacing 是株距；closes 的花合上时画面上也合起来
+   * （PALETTE.pollen 的编号）。r 是花丛的半径，spacing 是株距；closes 的花合上时画面上也合起来。
+   * land 是蜂落在一株上的几个落脚点（株的坐标，cm，没乘个头）：花序顶上、花盘面上、南瓜花的喇叭里、
+   * 薰衣草穗的侧面、玉米雄穗的枝上；画面的南瓜花和前几根薰衣草穗按它摆
    */
   flowers: {
     patches: 9,
@@ -107,11 +146,23 @@ export const CONFIG = {
     gap: 150,
     margin: 300,
     species: [
-      { key: 'clover', hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false },
-      { key: 'sunflower', hours: [7, 18.5], ramp: 1, nectar: 0.8, pollen: 1.5, refill: 200, pollenKind: 0, r: [90, 140], spacing: 42, closes: false },
-      { key: 'pumpkin', hours: [5, 10.5], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true },
-      { key: 'lavender', hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false },
-      { key: 'corn', hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false },
+      { key: 'clover', hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false, land: [[0.5, 13.7, 0]] },
+      {
+        key: 'sunflower',
+        hours: [7, 18.5],
+        ramp: 1,
+        nectar: 0.8,
+        pollen: 1.5,
+        refill: 200,
+        pollenKind: 0,
+        r: [90, 140],
+        spacing: 42,
+        closes: false,
+        land: [[4.3, 171.4, 0], [5.5, 174.1, 0], [4.3, 171.4, 3], [3, 168.7, 0], [4.3, 171.4, -3]],
+      },
+      { key: 'pumpkin', hours: [5, 10.5], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
+      { key: 'lavender', hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false, land: [[15.4, 51, 0], [0, 48, 13.4], [-13.3, 55, -5.5], [6.5, 45, -16.3]] },
+      { key: 'corn', hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false, land: [[7, 221.6, 0], [0, 221.6, 7], [-7, 221.6, 0], [0, 221.6, -7]] },
     ] as const,
   },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
@@ -135,5 +186,7 @@ export const CONFIG = {
     comb: { nearPx: 10, rebuild: 0.5 },
     /** 蜂身（T-006）：屏幕上长过 nearPx 像素画完整的模型，短于 farPx 画八面体，中间画三个球；淡化时的不透明度（P-009） */
     bees: { nearPx: 30, farPx: 8, fade: 0.18 },
+    /** 飞着的蜂短于 minPx 像素时放大到 minPx（T-007）；巢里的蜂不放大，不然远看整箱是一团 */
+    minPx: 5,
   },
 };

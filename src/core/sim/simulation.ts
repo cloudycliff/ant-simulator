@@ -60,6 +60,14 @@ export class Simulation<R extends EntityRef = EntityRef> {
     );
   }
 
+  /**
+   * 上一步之后又攒了多少不够一步的时间，0..1（按步长算）。画面在上一步和这一步的位置之间按它插值，
+   * 跑得快的东西（每步走几厘米）在 60 帧的屏幕上才不会一顿一顿
+   */
+  get alpha(): number {
+    return Math.min(1, this.acc / ENGINE.loop.fixedStep);
+  }
+
   /** 每步按登记的顺序调用 */
   addSystem(name: string, update: (dt: number) => void): void {
     this.systems.push({ name, update });

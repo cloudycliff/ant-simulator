@@ -42,7 +42,7 @@ export const beeGame: GameModule<BeeWorld, BeeRef, BeeSaveData, BeeSaveMeta> = {
       reach: [3, 3000],
       follow: [2, 400],
       followStart: [4, 30],
-      followRate: 30,
+      followRate: 60,
     },
   },
   create: (seed) => new BeeWorld(seed),
@@ -65,6 +65,11 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     views,
     tools: null,
     pick: (x, y, tol) => pick(view, camera, dom, x, y, tol),
+    // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）
+    applyParams: (params) => {
+      const secs = Math.min(600, Number(params.get('run')) || 0);
+      for (let s = 0; s < secs; s += 1) w.advance(1, Infinity, Infinity);
+    },
     syncViews: () => view.syncViews(),
     update: (_dt, f) => view.update(camera, dom.clientHeight, f.focus, f.following, f.selection),
     ui: beeUi(w, ctx.following),
@@ -154,6 +159,12 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
   body += kv(t('info.doing'), t(`act.${b.act}`));
   if (b.caste !== CASTE.queen) body += kv(t('info.crop'), t('info.percent', { p: Math.round(b.crop * 100) }));
   if (role === 'nurse') body += kv(t('info.jelly'), t('info.jellyValue', { n: Math.max(0, Math.floor(b.jelly)) }));
+  if (role === 'forager') {
+    const p = b.patch >= 0 ? w.flowers.get(b.patch) : undefined;
+    const goods = t(b.goods ? 'info.goodsPollen' : 'info.goodsNectar');
+    body += kv(t('info.patch'), p ? t('info.patchValue', { flower: t(`flower.${CONFIG.flowers.species[p.species].key}`), goods }) : t('info.noPatch'));
+    if (b.load > 0) body += kv(t('info.load'), `${goods} ${t('info.percent', { p: Math.round(b.load * 100) })}`);
+  }
   return `<h2>${title}</h2>${body}<p class="desc">${t(`beeDesc.${role ?? (b.caste === CASTE.drone ? 'drone' : 'queen')}`)}</p>
     <div class="actions">
       <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
@@ -175,7 +186,9 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
         const B = w.bees;
         const roles = Object.fromEntries(ROLE_KEYS.map((k) => [k, 0])) as Record<(typeof ROLE_KEYS)[number], number>;
         let drones = 0;
+        let out = 0;
         for (const b of B.list) {
+          if (b.out) out++;
           const r = roleOf(b);
           if (r) roles[r]++;
           else if (b.caste === CASTE.drone) drones++;
@@ -189,7 +202,9 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
       ${row(t('colony.brood'), t('colony.broodValue', { e: n.egg, l: n.larva, c: n.capped }))}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
-      ${row(t('colony.since'), t('colony.sinceValue', { b: B.births, d: B.deaths, l: B.laid }))}
+      ${row(t('colony.since'), t('colony.sinceValue', { b: B.births, d: B.deaths, x: B.lost, l: B.laid }))}
+      ${row(t('colony.out'), t('colony.outValue', { n: out }))}
+      ${row(t('colony.brought'), t('colony.broughtValue', { t: B.trips, n: Math.round(B.nectarIn), p: Math.round(B.pollenIn) }))}
       ${B.starved ? row(t('colony.starved'), String(B.starved)) : ''}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: w.flowers.patches.length, o: w.flowers.patches.filter((p) => openness(CONFIG.flowers.species[p.species], w.clock.hour) > 0).length }))}
       <p class="desc">${t('colony.todo')}</p>`;
