@@ -1,6 +1,6 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -12,6 +12,7 @@ import { ACTS, CASTE, type Act } from '../../../src/games/bee/sim/bees';
 import { Flowers, nectarCap, openness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
 import { nodeAt } from '../../../src/games/bee/sim/walk';
 import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
+import { MOUTH } from '../../../src/games/bee/sim/flight';
 import { en } from '../../../src/games/bee/i18n/en';
 
 setLang('en');
@@ -165,6 +166,27 @@ check('采集蜂出巢、带回花蜜和花粉', bees.trips > 500 && bees.nectar
 check('飞着的蜂都在花园里、地面以上', badFlight === 0, `${badFlight} 次`);
 check('半夜蜂都在巢里', outAtNight === 0, `${outAtNight} 只在外面`);
 check('储蜜、储粉一天后没有单向漂移', Math.abs(census1.honeyCells / honey0 - 1) < 0.05 && Math.abs(census1.pollenCells / pollen0 - 1) < 0.15, `蜜 ${honey0.toFixed(0)} → ${census1.honeyCells.toFixed(0)}、粉 ${pollen0.toFixed(0)} → ${census1.pollenCells.toFixed(0)} 满房`);
+check('采集蜂跳舞，招募的蜂大多飞到舞里那片花', bees.dances > 100 && bees.arrived >= 20 && bees.hits / bees.arrived >= 0.5, `${bees.dances} 支舞，招募 ${bees.recruits}，飞到 ${bees.arrived}，找到那片 ${((bees.hits / Math.max(1, bees.arrived)) * 100).toFixed(0)}%`);
+check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 ${bees.handoffs}、自己放 ${bees.selfStored}、颤抖舞 ${bees.trembles}`);
+{
+  // 没有误差时，舞读出来的地方就是那片花：两面、各个方向、跳舞和读舞之间太阳动了也一样
+  const x = new BeeWorld(9) as unknown as { bees: Record<string, (...a: unknown[]) => unknown>; flowers: BeeWorld['flowers']; advance: BeeWorld['advance'] };
+  const DC = CONFIG.dance as { angleNoise: number; distNoise: number };
+  const noise = [DC.angleNoise, DC.distNoise];
+  DC.angleNoise = DC.distNoise = 0;
+  let worst = 0;
+  for (const p of x.flowers.patches)
+    for (const face of [0, 1]) {
+      const d = { face, patch: p.id, goods: 0 };
+      const dist = Math.hypot(p.x - MOUTH.x, p.z - MOUTH.z);
+      if (dist < CONFIG.dance.round) continue;
+      const wv = CONFIG.dance.w0 + (dist / 100) * CONFIG.dance.perM;
+      const aim = x.bees.decode.call(x.bees, d, { k: 'dance', cu: 0, cv: 0, a: x.bees.danceAngle.call(x.bees, d, p), w: wv, len: wv, n: 1, ph: 0 }) as { x: number; z: number };
+      worst = Math.max(worst, Math.hypot(aim.x - p.x, aim.z - p.z));
+    }
+  [DC.angleNoise, DC.distNoise] = noise;
+  check('没有误差时舞里说的就是那片花（两面）', worst < 1, `差 ${worst.toFixed(3)} cm`);
+}
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -184,7 +206,7 @@ check(
   a.bees.list.length === bees.list.length &&
     a.bees.list.every((x, i) => {
       const y = bees.list[i];
-      return x.id === y.id && x.face === y.face && x.out === y.out && Math.abs(x.u - y.u) < 1e-3 && Math.abs(x.pos.x - y.pos.x) < 1e-3 && Math.abs(x.pos.y - y.pos.y) < 1e-3 && Math.abs(x.load - y.load) < 1e-3;
+      return x.id === y.id && x.face === y.face && x.out === y.out && Math.abs(x.u - y.u) < 1e-3 && Math.abs(x.pos.x - y.pos.x) < 1e-3 && Math.abs(x.pos.y - y.pos.y) < 1e-3 && Math.abs(x.load - y.load) < 1e-3 && x.partner === y.partner && !x.aim === !y.aim && (!x.aim || Math.abs(x.aim.x - y.aim!.x) < 1e-3);
     }),
   `${bees.list.filter((x) => x.out).length} 只在外面`,
 );
@@ -204,7 +226,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y' }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6 }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

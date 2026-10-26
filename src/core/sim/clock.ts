@@ -1,5 +1,18 @@
 import { L, type Text } from '../i18n';
 import { TAU } from '../util/math';
+import type { Point3 } from './events';
+
+/** 某时刻太阳的方向（单位向量，朝着太阳）：6 点从 +x 升起，正午偏 +z，18 点落在 -x。画面的太阳和模拟用的是同一个 */
+export function sunDirection(hour: number, out: Point3 = { x: 0, y: 0, z: 0 }): Point3 {
+  const ang = ((hour - 6) / 24) * TAU;
+  const x = Math.cos(ang) * 0.85;
+  const y = Math.sin(ang);
+  const len = Math.hypot(x, y, 0.35);
+  out.x = x / len;
+  out.y = y / len;
+  out.z = 0.35 / len;
+  return out;
+}
 
 /** 模拟时钟：游戏日、时刻、昼夜。 */
 export class SimClock {
@@ -37,6 +50,12 @@ export class SimClock {
   /** 太阳高度系数 -1..1，正午为 1 */
   get sunElevation(): number {
     return Math.sin(((this.hour - 6) / 24) * TAU);
+  }
+
+  /** 太阳的水平方位：atan2(z, x)，从上往下看顺时针增大 */
+  get sunAzimuth(): number {
+    const d = sunDirection(this.hour);
+    return Math.atan2(d.z, d.x);
   }
 
   /** 0 = 深夜，1 = 白天 */

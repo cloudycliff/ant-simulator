@@ -22,7 +22,8 @@
 
 #### `core/sim/clock.ts`
 
-- `SimClock`：`seconds`（开局以来的模拟秒数）、`speed`、`paused`、`dayLength`；`day`（从 1 起）、`hour`（0–24）、`totalDays`、`sunElevation`（-1..1，正午为 1）、`daylight`（0 深夜到 1 白天）、`isNight`；`stamp()` / `stampAt(秒数)` 返回“第 3 天 14:20”这样的 `Text`
+- `SimClock`：`seconds`（开局以来的模拟秒数）、`speed`、`paused`、`dayLength`；`day`（从 1 起）、`hour`（0–24）、`totalDays`、`sunElevation`（-1..1，正午为 1）、`sunAzimuth`（太阳的水平方位 atan2(z, x)）、`daylight`（0 深夜到 1 白天）、`isNight`；`stamp()` / `stampAt(秒数)` 返回“第 3 天 14:20”这样的 `Text`
+- `sunDirection(hour, out?)`：那个时刻朝着太阳的单位向量（6 点从 +x 升起，正午偏 +z）。`Environment` 画的太阳也用它，模拟里要按太阳定方向时用同一个
 
 #### `core/sim/saves.ts`
 

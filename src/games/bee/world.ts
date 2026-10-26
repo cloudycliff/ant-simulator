@@ -30,6 +30,7 @@ export class BeeWorld extends Simulation<BeeRef> {
     this.bees = new Bees(this.comb, this.rng, this.ids, () => this.clock.seconds, {
       flowers: this.flowers,
       hour: () => this.clock.hour,
+      sun: () => this.clock.sunAzimuth,
       ground: (x, z) => this.groundAt(x, z),
     });
     this.bees.generate();
@@ -112,7 +113,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   }
 }
 
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
 export interface BeeSaveData {
   version: number;

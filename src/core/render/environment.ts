@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ENGINE } from '../config';
-import type { SimClock } from '../sim/clock';
-import { TAU, clamp } from '../util/math';
+import { sunDirection, type SimClock } from '../sim/clock';
+import { clamp } from '../util/math';
 
 const DAY_TOP = new THREE.Color(0x5d9be0);
 const DAY_BOTTOM = new THREE.Color(0xc9dff0);
@@ -174,8 +174,8 @@ export class Environment {
   /** cloud：阴雨云量 0..1，天空变灰、阳光变弱、雾气拉近 */
   update(clock: SimClock, camera: THREE.Camera, focus: THREE.Vector3, xray: boolean, cloud = 0): void {
     const hour = clock.hour;
-    const ang = ((hour - 6) / 24) * TAU;
-    const dir = new THREE.Vector3(Math.cos(ang) * 0.85, Math.sin(ang), 0.35).normalize();
+    const s = sunDirection(hour);
+    const dir = new THREE.Vector3(s.x, s.y, s.z);
     const elev = dir.y;
     const day = clamp((elev + 0.08) / 0.35, 0, 1);
     const dusk = clamp(1 - Math.abs(elev) / 0.3, 0, 1);

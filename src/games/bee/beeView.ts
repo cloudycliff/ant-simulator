@@ -86,6 +86,9 @@ const _pv = new THREE.Matrix4();
 const _k = new THREE.Vector3();
 /** 飞着的蜂翅膀扇成一片虚影，画宽一点 */
 const FLAP = new THREE.Matrix4().makeScale(1.05, 1, 1.6);
+/** 摇摆舞的摆动段身子左右摆（每秒 13 次），颤抖舞抖得小些（cm） */
+const SHAKE_HZ = 13;
+const SHAKE = [0, 0.12, 0.05];
 
 /**
  * 蜂身的朝向：巢面上背朝外；绕边时背从这一面的法线转到边的外侧再转到另一面。
@@ -175,6 +178,7 @@ export class BeesView {
     const pxPerCm = viewportH / (2 * Math.tan((camera.fov * Math.PI) / 360));
     const n = [0, 0, 0];
     let nw = 0;
+    const shake = Math.sin((performance.now() / 1000) * SHAKE_HZ * Math.PI * 2);
     for (const b of list) {
       this.w.beePos(b, _p);
       if (!this.visible(b, _p, cam)) continue;
@@ -183,6 +187,7 @@ export class BeesView {
       orient(b, _f, _u);
       _z.crossVectors(_f, _u);
       _m.makeBasis(_f, _u, _z).scale(CASTE_SCALE[b.caste]);
+      if (b.waggle) _p.addScaledVector(_z, shake * SHAKE[b.waggle]);
       if (b.out === 2 && px < MIN_PX) _m.scale(_k.setScalar(MIN_PX / px));
       _m.setPosition(_p);
       const mesh = this.meshes[lod];

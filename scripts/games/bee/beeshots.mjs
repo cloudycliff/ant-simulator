@@ -40,7 +40,12 @@ const SCENES = {
   onflower: { q: '&hour=11&run=30&select=bee:924&follow=1', check: INFO },
   outside: { q: '&hour=11&run=30&cam=-150,160,120,-30,100,0' },
   farbees: { q: '&hour=11&run=30&cam=0,400,900,0,40,-200' },
+  dance: { q: '&hour=11&run=120&cam=-15,101,9,-15,101,0&view=dance' },
+  danceback: { q: '&hour=11&run=120&cam=-15,101,-9,-15,101,0&view=dance' },
+  dancer: { q: '&hour=11&run=120&select=bee:262&fly=1&view=dance', check: INFO },
+  dancegarden: { q: '&hour=11&run=120&cam=0,2800,400,0,0,0&view=dance' },
   en: { q: '&hour=11&lang=en' },
+  endancer: { q: '&hour=11&run=120&select=bee:262&fly=1&lang=en', check: INFO },
 };
 
 const filters = process.argv.slice(2);

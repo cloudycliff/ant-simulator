@@ -99,10 +99,58 @@ export const CONFIG = {
     queen: 1.4,
   },
   /**
+   * 摇摆舞和交接（T-014）。
+   * 舞：花丛离蜂箱不到 round cm 跳圆舞（不指方向），远了跳摇摆舞：摆动段 w0 + 距离（m）× perM 秒，摆动时走 waggle cm/s，
+   * 回转半圈走 turn cm/s。带回 1 份、马上交出去的一趟跳 circuits 圈，带得少、等得久、不缺粉（采粉的）就少跳，不到 1 圈不跳。
+   * 舞场是每一面离巢门最近的那片造好的巢脾、往里 floor 步（0.5 cm 一步）。没活的采集蜂每回有 floorVisit 的机会去舞场
+   * 等 watch 秒（不然歇着），看得见 see cm 内的舞，跟上 follow 圈就飞出去。
+   * 读舞有误差：方向差 angleNoise（rad，标准差）、距离差 distNoise 成；飞到地方在 search cm 内找花丛，同种的花（认得气味）
+   * 当作近 scent cm。读出来 aimLife 秒还没飞出去就忘了。
+   * 交接：回巢的采集蜂在离巢门 give 步内找接蜜的内勤蜂，碰上了交 handoff 秒；等过 giveUp 秒自己放。
+   * 等不到 quick 秒照常跳，过了 slow 秒不跳摇摆舞，改跳颤抖舞 tremble 秒，每支让内勤蜂去接蜜的机会多 trembleGain，
+   * 按 trembleDecay 秒衰减；等过 slow 的蜂有 quit 的机会不再去那片花。
+   * 内勤蜂白天有 receive 的机会去巢门附近（离巢门 receiveAt 步）等着接蜜，一次等 receiveWait 秒。
+   * 储粉到 pollenTarget 满房就不缺粉，一半以下最缺；缺粉程度低于 sated 时采粉的蜂回来有 switch 的机会改采蜜
+   */
+  dance: {
+    round: 600,
+    w0: 0.3,
+    perM: 0.09,
+    waggle: 0.8,
+    turn: 1.6,
+    circuits: 10,
+    floor: 8,
+    floorVisit: 0.5,
+    watch: [15, 30] as [number, number],
+    see: 3,
+    follow: 3,
+    angleNoise: 0.15,
+    distNoise: 0.1,
+    search: 300,
+    aimLife: 60,
+    scent: 200,
+    give: [2, 8] as [number, number],
+    handoff: 4,
+    giveUp: 60,
+    quick: 15,
+    slow: 40,
+    tremble: [10, 20] as [number, number],
+    trembleGain: 0.05,
+    trembleDecay: 120,
+    quit: 0.3,
+    receive: 0.3,
+    receiveAt: [4, 16] as [number, number],
+    receiveWait: [15, 30] as [number, number],
+    pollenTarget: 800,
+    sated: 0.2,
+    switch: 0.5,
+  },
+  /**
    * 出巢采集（T-013）。飞行用转向：最快 speed、在花间 hop（cm/s），加速度不过 accel，离目标 d 时想要的速度是
    * d × brake（不低于 slow）；离目标水平 descend 以外按 cruise 的高度（离地）飞，左右摆 wobble 成、wobbleHz 次每秒。
    * 飞着的蜂蜜囊 flyBurn 秒用空；出巢前蜜囊低于 depart 先去吃。
-   * 不认得花丛的采集蜂每回想出巢时 scout 的机会去侦察；花开到 minOpen 才去；pollenShare 的蜂采花粉。
+   * 不认得花丛的采集蜂每回想出巢时 scout 的机会去侦察（不然去舞场看舞，T-014）；花开到 minOpen 才去；
+   * 侦察蜂采花粉的机会是缺粉程度 × pollenShare。开局 known 的采集蜂已经认得一片花丛。
    * 一趟最多落 visits 朵花，每朵停 visit 秒，带满 1 份回巢；不到 keep 份就不再去这片花丛。
    * 一份花蜜放进巢房是 nectarLoad 房、花粉 pollenLoad 房；放的时候停 unload 秒。巢门管里跑得快，tubeWalk cm/s。
    * 每趟有 risk 的机会死在外面
@@ -119,9 +167,10 @@ export const CONFIG = {
     wobbleHz: 0.7,
     flyBurn: 100,
     depart: 0.5,
-    scout: 0.2,
+    scout: 0.05,
     minOpen: 0.3,
-    pollenShare: 0.3,
+    pollenShare: 0.6,
+    known: 0.5,
     visits: 16,
     visit: [2, 4] as [number, number],
     keep: 0.3,

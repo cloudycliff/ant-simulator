@@ -3,9 +3,11 @@ import { t } from '../../core/i18n';
 import type { CameraPose, GameContext, GameModule, GameSession, GameUi, ViewToggle } from '../../core/app/game';
 import { svgIcon } from '../../core/app/shell';
 import { HeightfieldSpace } from '../../core/space/heightfield';
+import { wrapAngle } from '../../core/util/math';
 import { CONFIG } from './config';
 import { BeeView } from './view';
-import { CASTE, CASTE_KEYS, ROLE_KEYS, roleOf } from './sim/bees';
+import { CASTE, CASTE_KEYS, ROLE_KEYS, roleOf, type Bee } from './sim/bees';
+import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
 import { nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
@@ -59,6 +61,7 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
   const views: ViewToggle[] = [
     { id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) },
     { id: 'fade', label: () => t('ui.fade'), key: 'B', on: () => view.bees.fade, toggle: () => (view.bees.fade = !view.bees.fade) },
+    { id: 'dance', label: () => t('ui.dance'), key: 'V', on: () => view.dance.on, toggle: () => (view.dance.on = !view.dance.on) },
   ];
   return {
     shadowLight: view.env.sun,
@@ -165,11 +168,39 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
     body += kv(t('info.patch'), p ? t('info.patchValue', { flower: t(`flower.${CONFIG.flowers.species[p.species].key}`), goods }) : t('info.noPatch'));
     if (b.load > 0) body += kv(t('info.load'), `${goods} ${t('info.percent', { p: Math.round(b.load * 100) })}`);
   }
+  if (role === 'house' && b.load > 0) body += kv(t('info.load'), `${t('info.goodsNectar')} ${t('info.percent', { p: Math.round(b.load * 100) })}`);
+  body += danceRows(w, b);
   return `<h2>${title}</h2>${body}<p class="desc">${t(`beeDesc.${role ?? (b.caste === CASTE.drone ? 'drone' : 'queen')}`)}</p>
     <div class="actions">
       <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
       <button data-a="flyto">${t('info.flyNear')}</button>
     </div>`;
+}
+
+/** 和太阳方向差 th（从上往下看顺时针为正，也就是面朝太阳时的右边）写成文字 */
+function sunSide(th: number): string {
+  const d = Math.round((wrapAngle(th) * 180) / Math.PI);
+  return Math.abs(d) < 3 ? t('info.sunAt') : t(d > 0 ? 'info.sunRight' : 'info.sunLeft', { d: Math.abs(d) });
+}
+
+/** 跳舞的蜂：舞里说的方向和距离、还剩几圈；跟舞读出地方的蜂：读出来的 */
+function danceRows(w: BeeWorld, b: Bee): string {
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  const c = b.brain.cmd;
+  if (c?.k === 'dance') {
+    if (c.w <= 0) return kv(t('info.danceSays'), t('info.danceNear')) + kv(t('info.circuits'), String(c.n));
+    // 摆动方向和竖直向上的夹角就是花丛和太阳的方位差；背面看过去左右反过来
+    const th = Math.atan2(b.face ? -Math.cos(c.a) : Math.cos(c.a), Math.sin(c.a));
+    const m = Math.round((c.w - CONFIG.dance.w0) / CONFIG.dance.perM);
+    return kv(t('info.danceSays'), t('info.danceValue', { dir: sunSide(th), m, s: c.w.toFixed(1) })) + kv(t('info.circuits'), String(c.n));
+  }
+  if (b.aim) {
+    const a = b.aim;
+    const m = Math.round(Math.hypot(a.x - MOUTH.x, a.z - MOUTH.z) / 100);
+    const where = a.r === CONFIG.dance.round && m < 1 ? t('info.danceNear') : t('info.aimValue', { dir: sunSide(Math.atan2(a.z - MOUTH.z, a.x - MOUTH.x) - w.clock.sunAzimuth), m });
+    return kv(t('info.aim'), where);
+  }
+  return '';
 }
 
 function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
@@ -202,9 +233,11 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
       ${row(t('colony.brood'), t('colony.broodValue', { e: n.egg, l: n.larva, c: n.capped }))}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
-      ${row(t('colony.since'), t('colony.sinceValue', { b: B.births, d: B.deaths, x: B.lost, l: B.laid }))}
-      ${row(t('colony.out'), t('colony.outValue', { n: out }))}
+      ${row(t('colony.since'), t('colony.sinceValue', { b: B.births, d: B.deaths, l: B.laid }))}
+      ${row(t('colony.out'), t('colony.outValue', { n: out, x: B.lost }))}
       ${row(t('colony.brought'), t('colony.broughtValue', { t: B.trips, n: Math.round(B.nectarIn), p: Math.round(B.pollenIn) }))}
+      ${row(t('colony.dances'), t('colony.dancesValue', { d: B.dances, r: B.recruits, h: B.arrived ? Math.round((B.hits / B.arrived) * 100) : 0 }))}
+      ${row(t('colony.handoff'), t('colony.handoffValue', { h: B.handoffs, s: B.selfStored, t: B.trembles }))}
       ${B.starved ? row(t('colony.starved'), String(B.starved)) : ''}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: w.flowers.patches.length, o: w.flowers.patches.filter((p) => openness(CONFIG.flowers.species[p.species], w.clock.hour) > 0).length }))}
       <p class="desc">${t('colony.todo')}</p>`;
