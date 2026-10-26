@@ -88,7 +88,7 @@ export class App<R extends EntityRef> {
     const C = game.camera;
     this.camera = new THREE.PerspectiveCamera(C.fov, window.innerWidth / window.innerHeight, C.near, C.far);
     this.space = game.space(world);
-    this.controller = new CameraController(this.camera, renderer.domElement, this.space);
+    this.controller = new CameraController(this.camera, renderer.domElement, this.space, C.tuning);
     this.setPose(typeof C.pose === 'function' ? C.pose(this.camera.aspect) : C.pose);
     if (pose) this.setPose(pose);
 

@@ -1,5 +1,12 @@
 # 给开发 Agent 的说明
 
+仓库里有两个游戏和一个示例，共用框架 `src/core`：
+- 蚂蚁（赛博养蚂蚁）：`src/games/ant`，文档在 `docs/`
+- 蜜蜂（赛博养蜂）：`src/games/bee`，文档在 `docs/bee/`（框架的 FRAMEWORK.md、API.md 仍在 `docs/`）
+- 鱼缸示例：`src/games/aquarium`，只用来检验框架
+
+下面写的 `docs/PROGRESS.md` 等是蚂蚁和框架的文档；做蜜蜂时换成 `docs/bee/` 下的同名文档。
+
 ## 开始工作前
 1. 读 `docs/PROGRESS.md`，了解当前状态和已知问题
 2. 读 `docs/ROADMAP.md`，确认要做的是哪个阶段的哪一项
@@ -8,18 +15,18 @@
 
 ## 约定
 - 代码注释用中文；标识符用英文
-- 分层：`src/core` 是可复用的框架层，`src/games/ant` 是蚂蚁游戏的内容。`core` 不能导入 `games/`，跑 `node scripts/core/layercheck.mjs` 检查（DECISIONS T-049）。只有蚂蚁用得上的东西放进 `games/ant`。框架需要游戏的数值或类型时，由游戏传进去（构造参数、泛型），框架不读游戏的配置。`games/aquarium` 是检验框架的鱼缸示例：改了 `src/core` 要跑 `npx tsx scripts/games/aquarium/aquatest.ts`，确认它也能用（T-056）
-- 界面文字不直接写在代码里：中文写进 `src/games/ant/i18n/zh.ts`（键以它为准），英文写进 `src/games/ant/i18n/en.ts`，两边都要有；只有框架代码用的文字写进 `src/core/i18n/` 的两份词典。界面用 `t(键, 参数)` 取文字；模拟层用 `L(键, 参数)` 记下延迟翻译的 `Text`，显示时再 `tr()`（DECISIONS T-040）。改了词典跑 `npx tsx scripts/i18ncheck.ts`
+- 分层：`src/core` 是可复用的框架层，`src/games/<游戏>` 是各游戏的内容。`core` 不能导入 `games/`，一个游戏也不能导入另一个，跑 `node scripts/core/layercheck.mjs` 检查（DECISIONS T-049）。只有一个游戏用得上的东西放进那个游戏的目录；两个游戏都用得上的提到 `core`，已有游戏的行为不能变（蚂蚁的模拟基线逐行不变）。框架需要游戏的数值或类型时，由游戏传进去（构造参数、泛型），框架不读游戏的配置。`games/aquarium` 是检验框架的鱼缸示例：改了 `src/core` 要跑 `npx tsx scripts/games/aquarium/aquatest.ts`，确认它也能用（T-056）
+- 界面文字不直接写在代码里：中文写进游戏的 `i18n/zh.ts`（如 `src/games/ant/i18n/zh.ts`，键以它为准），英文写进同目录的 `en.ts`，两边都要有；只有框架代码用的文字写进 `src/core/i18n/` 的两份词典。界面用 `t(键, 参数)` 取文字；模拟层用 `L(键, 参数)` 记下延迟翻译的 `Text`，显示时再 `tr()`（DECISIONS T-040）。改了词典跑 `npx tsx scripts/i18ncheck.ts`
 - 注释只写代码本身表达不了的约束，不写“下一行做什么”
-- 模拟层（`src/core/sim`、`src/games/ant/sim`、`src/games/ant/world`、`src/games/ant/nest/nest.ts`）不能依赖 WebGL 或 DOM，要能在 Node 中运行 `scripts/games/ant/simtest.ts`
+- 模拟层（`src/core/sim`、`src/games/ant/sim`、`src/games/ant/world`、`src/games/ant/nest/nest.ts`、蜜蜂的 `src/games/bee/world.ts` 和以后的 `src/games/bee/sim`）不能依赖 WebGL 或 DOM，要能在 Node 中运行 `scripts/games/ant/simtest.ts`、`scripts/games/bee/beetest.ts`
 - 模拟里的随机只用 `w.rng`，新对象的编号用 `w.ids.next(类型)`（物品用 `colony.newItem`）；不要用 `Math.random` 和模块级计数器，否则同一个存档读两次跑出来不一样（`savetest` 会查）。只影响画面的随机可以用 `Math.random`
 - 物品位置变化必须通过 `Colony` 的方法，不要直接改 `Item.place`
-- 数值优先放进 `src/games/ant/config.ts`（主循环、后台运行、画质、自动保存这类框架数值在 `src/core/config.ts`）；写在代码里的数值要同步登记到 `docs/BALANCE.md`
+- 数值优先放进游戏的 `config.ts`（`src/games/ant/config.ts`、`src/games/bee/config.ts`；主循环、后台运行、画质、自动保存这类框架数值在 `src/core/config.ts`）；写在代码里的数值要同步登记到游戏的 BALANCE.md（`docs/BALANCE.md`、`docs/bee/BALANCE.md`）
 
 ## 完成一轮开发后
 1. `npm run check` 必须全部通过（类型检查、依赖方向、框架单元测试、界面文字、鱼缸示例、模拟基线、存档 / 工具 / 防御 / 天气测试）。改动中途可以先跑 `npm run check:fast`
 2. 改动了行为或数值：模拟基线会报不同。确认是有意的变化后跑 `node scripts/check.mjs --update-baseline`，基线文件随提交一起提交，指标变化写进 `docs/PROGRESS.md`。只是重构时基线必须不变
-3. 改动了界面或画面：跑 `npm run check:ui`（会构建并更新根目录的 `cyber-ant-farm.html`，即双击就能运行的发布文件，提交时一并提交），再按 `docs/ARCHITECTURE.md` 的“验证工具”一节截图检查
+3. 改动了界面或画面：跑 `npm run check:ui`（会构建并更新根目录的 `cyber-ant-farm.html`，即蚂蚁双击就能运行的发布文件，提交时一并提交），再按 `docs/ARCHITECTURE.md` 的“验证工具”一节截图检查；蜜蜂的截图用 `node scripts/games/bee/beeshots.mjs`
 4. 更新文档：
    - `docs/PROGRESS.md`：追加开发日志，更新当前状态和已知问题
    - `docs/ROADMAP.md`：勾选完成项

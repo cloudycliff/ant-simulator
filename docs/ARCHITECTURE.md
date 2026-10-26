@@ -5,11 +5,13 @@
 ```
 index.html              蚂蚁游戏的页面骨架（各面板的容器）；Vite 的源码模板，不能直接双击运行
 aquarium.html           鱼缸示例的页面骨架（同样的容器，没有主屏幕清单）
+bee.html                蜜蜂游戏（赛博养蜂，开发中）的页面骨架
 cyber-ant-farm.html     构建生成的单文件发布版，双击即可运行（不要手改）
-vite.config.ts          构建配置：默认构建 index.html，--mode aquarium 构建 aquarium.html；singleFile 插件把产物内联成单个 HTML，蚂蚁游戏的再复制到根目录
+vite.config.ts          构建配置：按 mode 查表，默认构建 index.html，--mode aquarium 构建 aquarium.html，--mode bee 构建 bee.html；singleFile 插件把产物内联成单个 HTML，蚂蚁游戏的再复制到根目录
 src/
   main.ts               入口：把蚂蚁游戏模块交给 runApp
   aquarium.ts           鱼缸示例的入口
+  bee.ts                蜜蜂游戏的入口（结构和文档见 docs/bee/）
   style.css             界面样式
   assets/icon.svg       图标原稿；网页小图标在构建时内联进 HTML
   core/                 —— 框架层：同类模拟游戏可以复用，不能导入 games/（见 scripts/core/layercheck.mjs）——

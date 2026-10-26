@@ -4,13 +4,16 @@
 
 ## 当前状态（2026-10-26）
 
-- 当前阶段：第一阶段的设计已定，原型验证完，下一步是工程准备（复制出 `src/games/bee`）。范围见 [ROADMAP.md](ROADMAP.md)，决策见 [DECISIONS.md](DECISIONS.md)
-- 在线地址：计划放在 https://cyberant.pages.dev/bee.html
+- 当前阶段：第一阶段，工程准备做完。页面上有花园（地面、草、树）和空的观察箱，还没有巢脾、蜂和花；副标题写着“开发中”。下一步是巢脾。范围见 [ROADMAP.md](ROADMAP.md)，决策见 [DECISIONS.md](DECISIONS.md)
+- 在线地址：https://cyberant.pages.dev/bee.html （推送到 `main` 随蚂蚁一起自动发布）
+- 本地：`npm run dev` 后打开 http://localhost:5173/bee.html ；无界面测试 `npx tsx scripts/games/bee/beetest.ts`（`npm run check` 的“蜜蜂”一项），截图 `node scripts/games/bee/beeshots.mjs`
+- 构建：`dist/bee.html` 约 590 KB
 
 ## 已知问题
 
 - 手机上的帧率没测过（原型只在台式机显卡的无头 Chrome 和需求方的电脑上跑过）
-- 框架的环境、跟随、镜头速度按蚂蚁调死，蜜蜂用之前要改成参数（T-009）
+- 页面图标还是蚂蚁的 `src/assets/icon.svg`
+- 选中观察箱后“飞过去”是从斜上方俯看（外壳的 `flyTo` 至少抬高 0.45），看巢脾不方便
 
 ## 开发日志
 
@@ -34,3 +37,14 @@
 - 花园里飞行：转向行为手感可以；远处的蜂放大到至少 5 px；跟随镜头跟不上快速飞行
 - 需求方追加：淡化蜂的视图、蜂身细节分级。分级加剔除后三角形从 128～170 万降到 27～90 万
 - 其他发现：顶棚下巢脾太暗要补光；夜里地面偏亮；花园美术粗糙，花丛要远远看得见；跟随镜头会钻进灌木
+
+### 2026-10-26 · 工程准备
+
+**实现**
+- `src/games/bee`：照鱼缸的结构（`config.ts`、`world.ts`、`view.ts`、`game.ts`、两份词典），页面 `bee.html`、入口 `src/bee.ts`。世界只有时钟和地形，能选中的只有观察箱；存档位 `cyber-bee-save`
+- 画面：花园地面、3 万丛草、远处一圈树，地面外接一圈平地铺进雾里（不然从高处看得见地面的边）；观察箱的架子、顶棚、箱体、框条、玻璃（G 键开关）、巢门管；巢脾两面各一盏补光
+- 框架（DECISIONS T-073）：`Environment` 收 `EnvironmentScale`（天空、雾、阴影范围、太阳距离），`GameModule.camera.tuning` 收 `CameraTuning`（按离什么多远定快慢、各项限幅、跟随的追赶速率）。不给时都是蚂蚁原来的值
+- 工程：`vite.config.ts` 按 mode 查表，`npm run build` 依次构建蚂蚁、鱼缸、蜜蜂；`npm run check` 加了“蜜蜂”一项（`scripts/games/bee/beetest.ts`：存档往返、读两次走得一样、坏存档拒读、英文没漏翻）；`i18ncheck` 加上蜜蜂的词典；`AGENTS.md` 列出两个游戏的路径
+- 截图脚本 `scripts/games/bee/beeshots.mjs`：白天、黄昏、夜里、选中、贴近、花园远景、英文，桌面和手机
+
+**结果**：`npm run check` 17 项、`npm run check:ui` 10 项通过，蚂蚁的模拟基线逐行不变

@@ -105,7 +105,7 @@
 
 - `GameModule`：游戏交给 `runApp` 的全部东西
   - `title`、`subtitle`、`loading`（生成世界时显示的文字）、`repoUrl`、`installable`
-  - `camera`：视角、裁剪面、开局视角（`CameraPose`，可以是宽高比的函数，竖屏退远些）
+  - `camera`：视角、裁剪面、开局视角（`CameraPose`，可以是宽高比的函数，竖屏退远些）；`tuning`（可选，`Partial<CameraTuning>`）按世界的尺度调相机，不给的项用蚂蚁游戏的值
   - `configure(params)`：建世界之前读网址参数，返回 true 时不读存档
   - `create(seed, saved?)`：读档时 `saved` 是随后要交给 `save.read` 的存档，世界的生成参数要跟着存档走时（比如开局人口）在这里先设好；新开局时为空
   - `space(world)`、`mount(ctx)`
@@ -138,7 +138,9 @@
 
 #### `core/ui/camera.ts`
 
-- `CameraController`：外壳创建。`mode`（`free` / `follow`）、`setPose`、`follow`、`stopFollow`、`flyTo(at, dist)`、`update`。`onClick`、`onDoubleClick`、`onUserMove`、`onTouchDragStart`、`onTouchDrag` 由外壳占用，游戏不要改
+- `CameraController`：外壳创建，`new CameraController(camera, dom, space, tuning?)`。`mode`（`free` / `follow`）、`setPose`、`follow`、`stopFollow`、`flyTo(at, dist)`、`update`。`onClick`、`onDoubleClick`、`onUserMove`、`onTouchDragStart`、`onTouchDrag` 由外壳占用，游戏不要改
+- `CameraTuning`：相机的快慢和远近，游戏写在 `GameModule.camera.tuning` 里。`clearance(p)`：相机离最近的景物多远，移动、平移、滚轮的快慢都按它算，默认是离参考面的高度（蜂箱架在离地 80 cm 处时，贴着巢脾要按离巢脾的距离算）；`speed`、`wheel`、`reach`：WASD、滚轮、触屏的限幅；`follow`、`followStart`：跟随距离的范围和开始跟随时的范围；`followRate`：跟随时镜头追目标的速率，目标速度除以它约等于镜头落后的距离（飞行的蜂要调大）
+- `DEFAULT_CAMERA_TUNING`：默认值，即蚂蚁游戏的尺度
 
 #### `core/ui/chart.ts`
 
@@ -153,8 +155,9 @@
 
 #### `core/render/environment.ts`
 
-- `Environment`：户外的天空、太阳、月亮、半球光、星空、雾，以及夜里和透视地下时跟着相机的观察灯。`new Environment(scene, levels)`，每帧 `update(clock, camera, focus, xray, cloud?)`；`sun` 可以直接当 `shadowLight`。天空不经过色调映射，自己乘上了玩家的亮度倍数
+- `Environment`：户外的天空、太阳、月亮、半球光、星空、雾，以及夜里和透视地下时跟着相机的观察灯。`new Environment(scene, levels, scale?)`，每帧 `update(clock, camera, focus, xray, cloud?)`；`sun` 可以直接当 `shadowLight`。天空不经过色调映射，自己乘上了玩家的亮度倍数。`scale` 里的 `fog` 和 `shadow` 可以每帧改（下一次 `update` 生效）
 - `LightLevels`：各光源的强度（three.js 单位）
+- `EnvironmentScale`：场景的尺度，不给的项用蚂蚁游戏的值。`sky`：天空球半径（要小于相机的远裁剪面）；`fog`：晴天时雾的起点和终点，阴雨时按比例拉近；`shadow`：阳光阴影覆盖焦点周围的半边长；`sunDistance`：太阳和月亮离焦点多远
 
 #### `core/render/rain.ts`
 

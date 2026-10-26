@@ -28,6 +28,20 @@ export interface LightLevels {
   xrayLamp: number;
 }
 
+/** 户外场景的尺度，单位和游戏一致；默认值是蚂蚁游戏的（cm） */
+export interface EnvironmentScale {
+  /** 天空球半径，要小于相机的远裁剪面；星星在它里面一点 */
+  sky: number;
+  /** 晴天时雾从多远开始、到多远看不见；阴雨时按比例拉近 */
+  fog: [number, number];
+  /** 太阳阴影覆盖焦点周围多大（正方形的半边长） */
+  shadow: number;
+  /** 太阳和月亮离焦点多远；阴影相机的深度是它的两倍 */
+  sunDistance: number;
+}
+
+const DEFAULT_SCALE: EnvironmentScale = { sky: 900, fog: [140, 420], shadow: 45, sunDistance: 200 };
+
 export class Environment {
   sun: THREE.DirectionalLight;
   moon: THREE.DirectionalLight;
@@ -41,21 +55,24 @@ export class Environment {
   private tmpTop = new THREE.Color();
   private tmpBottom = new THREE.Color();
   private tmpCloud = new THREE.Color();
+  /** 阴影相机现在用的范围，scale.shadow 变了才重算投影 */
+  private shadowExtent = 0;
+  /** 游戏可以每帧改 fog 和 shadow（比如镜头从蜂箱飞到花园时放大）；sky 和 sunDistance 只在构造时用 */
+  readonly scale: EnvironmentScale;
 
   constructor(
     scene: THREE.Scene,
     private readonly levels: LightLevels,
+    scale: Partial<EnvironmentScale> = {},
   ) {
+    this.scale = { ...DEFAULT_SCALE, ...scale, fog: [...(scale.fog ?? DEFAULT_SCALE.fog)] };
+    const S = this.scale;
     this.sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    const sc = this.sun.shadow.camera;
-    sc.left = -45;
-    sc.right = 45;
-    sc.top = 45;
-    sc.bottom = -45;
-    sc.near = 1;
-    sc.far = 400;
+    this.sun.shadow.camera.near = 1;
+    this.sun.shadow.camera.far = S.sunDistance * 2;
+    this.applyShadowExtent();
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
     scene.add(this.sun, this.sun.target);
@@ -94,7 +111,7 @@ export class Environment {
           gl_FragColor = vec4(c * gain, 1.0);
         }`,
     });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), this.skyMat);
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(S.sky, 32, 16), this.skyMat);
     this.sky.renderOrder = -1;
     // 天空不经过色调映射，玩家调的亮度倍数要单独乘上
     this.sky.onBeforeRender = (r) => (this.skyMat.uniforms.gain.value = r.toneMappingExposure / ENGINE.render.exposure);
@@ -105,7 +122,7 @@ export class Environment {
     for (let i = 0; i < 1500; i++) {
       const v = new THREE.Vector3().randomDirection();
       if (v.y < 0.05) v.y = Math.abs(v.y) + 0.05;
-      v.normalize().multiplyScalar(850);
+      v.normalize().multiplyScalar(S.sky * (850 / 900));
       sp.push(v.x, v.y, v.z);
     }
     starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
@@ -115,8 +132,20 @@ export class Environment {
     );
     scene.add(this.stars);
 
-    this.fog = new THREE.Fog(0xc9dff0, 140, 420);
+    this.fog = new THREE.Fog(0xc9dff0, S.fog[0], S.fog[1]);
     scene.fog = this.fog;
+  }
+
+  private applyShadowExtent(): void {
+    const e = this.scale.shadow;
+    if (e === this.shadowExtent) return;
+    this.shadowExtent = e;
+    const sc = this.sun.shadow.camera;
+    sc.left = -e;
+    sc.right = e;
+    sc.top = e;
+    sc.bottom = -e;
+    sc.updateProjectionMatrix();
   }
 
   /** cloud：阴雨云量 0..1，天空变灰、阳光变弱、雾气拉近 */
@@ -147,22 +176,25 @@ export class Environment {
     const L = this.levels;
     this.sun.intensity = L.sun * clamp(elev * 3, 0, 1) * (1 - 0.75 * cloud);
     this.sun.color.setHSL(0.09, 0.6 * dusk + 0.2, 0.75 + 0.2 * (1 - dusk));
-    this.sun.position.copy(focus).addScaledVector(dir, 200);
+    const S = this.scale;
+    this.applyShadowExtent();
+    this.sun.position.copy(focus).addScaledVector(dir, S.sunDistance);
     this.sun.target.position.copy(focus);
     this.sun.castShadow = elev > 0.02 && cloud < 0.8;
 
     const moonDir = dir.clone().negate();
     // 月亮一直挂得较高：刚日落时若贴着地平线，平地几乎照不到，反而比深夜更黑
     moonDir.y = Math.abs(moonDir.y) + 1.2;
-    this.moon.position.copy(focus).addScaledVector(moonDir.normalize(), 200);
+    this.moon.position.copy(focus).addScaledVector(moonDir.normalize(), S.sunDistance);
     this.moon.target.position.copy(focus);
     this.moon.intensity = L.moon * (1 - day) * (1 - 0.6 * cloud);
 
     this.hemi.intensity = (L.hemiNight + (L.hemiDay - L.hemiNight) * day) * (1 - 0.15 * cloud);
     this.hemi.color.copy(this.tmpTop).lerp(this.tmpCloud.copy(WHITE).lerp(MOONLIGHT, 1 - day), 0.4 + 0.3 * (1 - day));
     this.fog.color.copy(this.tmpBottom);
-    this.fog.near = 140 - 90 * cloud;
-    this.fog.far = 420 - 200 * cloud;
+    // 全阴时雾的起点缩到约 36%、终点缩到约 52%（蚂蚁场景里是 140 → 50、420 → 220）
+    this.fog.near = S.fog[0] * (1 - (9 / 14) * cloud);
+    this.fog.far = S.fog[1] * (1 - (10 / 21) * cloud);
 
     this.lamp.position.copy(camera.position);
     this.lamp.intensity = xray ? L.xrayLamp * (0.4 + 0.6 * (1 - day)) : L.surfaceLamp * (1 - day);

@@ -93,14 +93,14 @@ export const hiveSave = {
 
 ### 5. 视图
 
-`view.ts` 建场景对象，每帧 `update` 把模拟状态写进网格。个体多时用 `InstancedMesh`。必须交给外壳一盏投影的方向光（`shadowLight`），画质档位调它的阴影贴图。户外用 `core/render/environment.ts`；室内自己放灯。玩家的亮度设置是乘在色调映射曝光上的，普通材质自动跟着变；自己写的 `ShaderMaterial` 不经过色调映射，要亮度一起变就乘上 `renderer.toneMappingExposure / ENGINE.render.exposure`（`Environment` 的天空就是这样做的）。
+`view.ts` 建场景对象，每帧 `update` 把模拟状态写进网格。个体多时用 `InstancedMesh`。必须交给外壳一盏投影的方向光（`shadowLight`），画质档位调它的阴影贴图。户外用 `core/render/environment.ts`，天空、雾、阴影范围默认是蚂蚁那 2.4 m 见方的尺度，场景大小不同时传 `EnvironmentScale`；室内自己放灯。玩家的亮度设置是乘在色调映射曝光上的，普通材质自动跟着变；自己写的 `ShaderMaterial` 不经过色调映射，要亮度一起变就乘上 `renderer.toneMappingExposure / ENGINE.render.exposure`（`Environment` 的天空就是这样做的）。
 
 ### 6. 游戏模块
 
 `game.ts` 导出 `GameModule`：
 
 - `title` / `subtitle` / `loading`、`repoUrl`
-- `camera`：视角、裁剪面、开局视角。开局视角可以是宽高比的函数，竖屏手机退远一些
+- `camera`：视角、裁剪面、开局视角。开局视角可以是宽高比的函数，竖屏手机退远一些。世界的尺度和蚂蚁差得多时给 `tuning`：相机的移动和滚轮快慢、跟随的距离和追赶速度、按离什么东西多远来定快慢
 - `create(seed, saved?)`（读档时收到要读的存档，生成参数要跟存档走时在这里设）、`save`（上面的存档位加 `describe`：存档面板里的一句摘要）、`space(world)`
 - `installable`：要能添加到主屏幕才设。页面要有自己的清单，`public/sw.js` 现在只缓存蚂蚁游戏的页面，第二个可安装的游戏要给它自己的离线缓存脚本
 - `mount(ctx)` 返回 `GameSession`：

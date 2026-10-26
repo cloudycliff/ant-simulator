@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && vite build --mode aquarium",
+    "build": "tsc --noEmit && vite build && vite build --mode aquarium && vite build --mode bee",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "check": "node scripts/check.mjs",

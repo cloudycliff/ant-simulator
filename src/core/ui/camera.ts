@@ -9,6 +9,32 @@ const TAP_SLOP = 10;
 const DOUBLE_TAP_MS = 320;
 const DOUBLE_TAP_PX = 40;
 
+/** 相机的快慢和远近，按世界的尺度给；默认值是蚂蚁游戏的（cm） */
+export interface CameraTuning {
+  /** 相机离最近的景物多远，移动、平移、滚轮的快慢按它算；默认是离参考面（Space.surfaceAt）的高度 */
+  clearance?: (p: THREE.Vector3) => number;
+  /** WASD 每秒移动 clearance 的 1.3 倍，限制在这个范围 */
+  speed: [number, number];
+  /** 滚轮一格推进 clearance 的 0.12 倍，限制在这个范围 */
+  wheel: [number, number];
+  /** 触屏平移、捏合时把视线到景物的距离限制在这个范围 */
+  reach: [number, number];
+  /** 跟随时离目标的距离范围；开始跟随时先把当前距离放进 followStart */
+  follow: [number, number];
+  followStart: [number, number];
+  /** 跟随时镜头追目标的快慢（指数趋近的速率，每秒）。目标移动速度除以它约等于镜头落后的距离 */
+  followRate: number;
+}
+
+export const DEFAULT_CAMERA_TUNING: CameraTuning = {
+  speed: [4, 90],
+  wheel: [0.5, 30],
+  reach: [1.5, 120],
+  follow: [1.6, 120],
+  followStart: [3, 14],
+  followRate: 8,
+};
+
 interface TwoFinger {
   dist: number;
   angle: number;
@@ -48,12 +74,15 @@ export class CameraController {
   private twoStart: TwoFinger | null = null;
   private twoMode: 'zoom' | 'tilt' | null = null;
   private lastPointerTouch = false;
+  private readonly tuning: CameraTuning;
 
   constructor(
     public camera: THREE.PerspectiveCamera,
     private dom: HTMLElement,
     private space: Space,
+    tuning: Partial<CameraTuning> = {},
   ) {
+    this.tuning = { ...DEFAULT_CAMERA_TUNING, ...tuning };
     camera.rotation.order = 'YXZ';
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
     dom.addEventListener('pointerdown', (e) => {
@@ -101,9 +130,9 @@ export class CameraController {
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 
-  private heightAboveGround(): number {
+  private clearance(): number {
     const p = this.camera.position;
-    return Math.abs(p.y - this.space.surfaceAt(p.x, p.z));
+    return this.tuning.clearance ? this.tuning.clearance(p) : Math.abs(p.y - this.space.surfaceAt(p.x, p.z));
   }
 
   private onMove(e: PointerEvent): void {
@@ -127,7 +156,7 @@ export class CameraController {
       this.pitch = clamp(this.pitch - dy * 0.0045, -1.55, 1.55);
       this.applyRotation();
     } else {
-      const s = Math.max(0.6, this.heightAboveGround()) * 0.0025;
+      const s = Math.max(0.6, this.clearance()) * 0.0025;
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
       this.camera.position.addScaledVector(right, -dx * s).addScaledVector(up, dy * s);
@@ -232,7 +261,7 @@ export class CameraController {
     if (this.mode === 'follow') {
       if (this.twoMode === 'tilt') this.followPhi = clamp(this.followPhi - (cur.my - prev.my) * 0.006, 0.08, Math.PI - 0.08);
       else {
-        this.followDist = clamp(this.followDist * (prev.dist / cur.dist), 1.6, 120);
+        this.followDist = clamp(this.followDist * (prev.dist / cur.dist), ...this.tuning.follow);
         this.followTheta -= dAngle;
       }
       return;
@@ -250,7 +279,7 @@ export class CameraController {
 
   /** 沿视线到地面的大致距离，用来把手指移动的像素换算成世界距离 */
   private viewDistance(): number {
-    return clamp(this.heightAboveGround() / Math.max(0.25, Math.sin(-this.pitch)), 1.5, 120);
+    return clamp(this.clearance() / Math.max(0.25, Math.sin(-this.pitch)), ...this.tuning.reach);
   }
 
   /** 沿地面平移，让手指下的地面大致跟着手指走 */
@@ -281,10 +310,10 @@ export class CameraController {
     e.preventDefault();
     this.fly = null;
     if (this.mode === 'follow') {
-      this.followDist = clamp(this.followDist * (e.deltaY > 0 ? 1.12 : 0.89), 1.6, 120);
+      this.followDist = clamp(this.followDist * (e.deltaY > 0 ? 1.12 : 0.89), ...this.tuning.follow);
       return;
     }
-    const s = clamp(this.heightAboveGround() * 0.12, 0.5, 30) * Math.sign(e.deltaY);
+    const s = clamp(this.clearance() * 0.12, ...this.tuning.wheel) * Math.sign(e.deltaY);
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
     this.camera.position.addScaledVector(fwd, -s);
   }
@@ -297,7 +326,7 @@ export class CameraController {
     this.fly = null;
     this.followPos.copy(p);
     const off = this.camera.position.clone().sub(p);
-    this.followDist = clamp(off.length(), 3, 14);
+    this.followDist = clamp(off.length(), ...this.tuning.followStart);
     this.followTheta = Math.atan2(off.x, off.z);
     this.followPhi = clamp(Math.acos(clamp(off.y / (off.length() || 1), -1, 1)), 0.25, 1.3);
   }
@@ -357,7 +386,7 @@ export class CameraController {
         this.stopFollow();
         return;
       }
-      this.followPos.lerp(p, 1 - Math.exp(-dt * 8));
+      this.followPos.lerp(p, 1 - Math.exp(-dt * this.tuning.followRate));
       const sp = Math.sin(this.followPhi);
       const off = new THREE.Vector3(
         Math.sin(this.followTheta) * sp,
@@ -370,7 +399,7 @@ export class CameraController {
     }
 
     const boost = k.has('ShiftLeft') || k.has('ShiftRight') ? 3.5 : 1;
-    const speed = clamp(this.heightAboveGround() * 1.3, 4, 90) * boost * dt;
+    const speed = clamp(this.clearance() * 1.3, ...this.tuning.speed) * boost * dt;
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const p = this.camera.position;

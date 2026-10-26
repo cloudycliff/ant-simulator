@@ -47,22 +47,28 @@ function singleFile(page: string, release: string | null): Plugin {
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// 每个游戏一个页面，各自构建成一个文件：vite build 是蚂蚁（index.html），vite build --mode aquarium 是鱼缸示例
+/** 每个游戏一个页面，各自构建成一个文件：vite build 是蚂蚁（index.html），--mode aquarium 是鱼缸示例，--mode bee 是蜜蜂 */
+const PAGES: Record<string, { page: string; release: string | null }> = {
+  production: { page: 'index.html', release: RELEASE_FILE },
+  aquarium: { page: 'aquarium.html', release: null },
+  bee: { page: 'bee.html', release: null },
+};
+
 export default defineConfig(({ mode }) => {
-  const aquarium = mode === 'aquarium';
-  const page = aquarium ? 'aquarium.html' : 'index.html';
+  const { page, release } = PAGES[mode] ?? PAGES.production;
+  const first = page === 'index.html';
   return {
     base: './',
     server: { port: 5173, open: false },
-    plugins: [singleFile(page, aquarium ? null : RELEASE_FILE)],
+    plugins: [singleFile(page, release)],
     build: {
       target: 'es2022',
       chunkSizeWarningLimit: 1500,
       modulePreload: false,
       cssCodeSplit: false,
       assetsInlineLimit: Number.MAX_SAFE_INTEGER,
-      // 第二个页面不能清空第一个页面的产物
-      emptyOutDir: !aquarium,
+      // 后构建的页面不能清空先构建的页面的产物
+      emptyOutDir: first,
       rollupOptions: { input: resolve(process.cwd(), page), output: { inlineDynamicImports: true } },
     },
   };

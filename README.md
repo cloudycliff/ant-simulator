@@ -19,14 +19,14 @@
 
 当前进度：**第三阶段进行中**（干预工具、存档、天敌、警报与防御、天气已完成）。详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
-代码分成可复用的框架层 `src/core` 和游戏内容 `src/games/`。为了检验框架，仓库里还有一个很小的鱼缸示例（霓虹灯鱼、神仙鱼、鼠鱼，可以喂食、敲玻璃）：https://cyberant.pages.dev/aquarium.html ，本地是 `npm run dev` 后打开 http://localhost:5173/aquarium.html 。
+代码分成可复用的框架层 `src/core` 和游戏内容 `src/games/`。为了检验框架，仓库里还有一个很小的鱼缸示例（霓虹灯鱼、神仙鱼、鼠鱼，可以喂食、敲玻璃）：https://cyberant.pages.dev/aquarium.html ，本地是 `npm run dev` 后打开 http://localhost:5173/aquarium.html 。第二个游戏“赛博养蜂”（花园里的中华蜜蜂观察箱）正在开发，本地地址 http://localhost:5173/bee.html ，设计和进度见 [docs/bee/](docs/bee/)。
 
 ## 运行
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # 类型检查 + 生产构建，输出单个文件 dist/index.html（并复制为根目录的 cyber-ant-farm.html）和鱼缸示例 dist/aquarium.html
+npm run build      # 类型检查 + 生产构建，输出单个文件 dist/index.html（并复制为根目录的 cyber-ant-farm.html）、鱼缸示例 dist/aquarium.html 和蜜蜂 dist/bee.html
 npm run check      # 一键检查：类型、依赖方向、单元测试、文字、模拟基线和各项无界面测试（约 3 分钟）
 npm run check:ui   # 构建 + 无头 Chrome 里的页面测试和各屏幕布局截图（约 6 分钟）
 
@@ -43,6 +43,7 @@ node scripts/core/layercheck.mjs       # 依赖方向检查：框架层 src/core
 node scripts/core/apicheck.mjs         # 框架的每个导出都写进了 docs/API.md
 npx tsx scripts/core/coretest.ts       # 框架层单元测试
 npx tsx scripts/games/aquarium/aquatest.ts       # 鱼缸示例的无界面检查
+npx tsx scripts/games/bee/beetest.ts             # 蜜蜂的无界面检查
 ```
 
 ### 不用服务器直接打开

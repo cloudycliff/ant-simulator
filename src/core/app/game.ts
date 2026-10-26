@@ -4,6 +4,7 @@ import type { SaveMeta, SaveSlot } from '../platform/saveSlot';
 import type { EntityRef } from '../sim/entities';
 import type { Simulation } from '../sim/simulation';
 import type { Space } from '../space/space';
+import type { CameraTuning } from '../ui/camera';
 import type { ToolController } from '../ui/tools';
 
 /** 存档至少有世界种子；camera 由外壳在保存时写入（相机位置 + 注视点） */
@@ -24,8 +25,11 @@ export interface GameModule<W extends Simulation<R>, R extends EntityRef, D exte
   repoUrl?: string;
   /** 能添加到主屏幕：注册离线缓存脚本（public/sw.js）、显示安装按钮。页面要有自己的清单 */
   installable?: boolean;
-  /** 视角（度）、近远裁剪面、开局的相机位置和注视点；pose 可以按屏幕宽高比给（竖屏时退远些把场景装下） */
-  camera: { fov: number; near: number; far: number; pose: CameraPose | ((aspect: number) => CameraPose) };
+  /**
+   * 视角（度）、近远裁剪面、开局的相机位置和注视点；pose 可以按屏幕宽高比给（竖屏时退远些把场景装下）。
+   * tuning 按世界的尺度调相机的快慢和远近，不给的项用蚂蚁游戏的值
+   */
+  camera: { fov: number; near: number; far: number; pose: CameraPose | ((aspect: number) => CameraPose); tuning?: Partial<CameraTuning> };
   /** 创建世界之前读网址参数；返回 true 时不读存档、开新局 */
   configure?(params: URLSearchParams): boolean;
   /** 读档时 saved 是要读的存档（随后交给 save.read），新开局时为空 */

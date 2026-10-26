@@ -1,6 +1,6 @@
 // 一键检查。用法：
-//   node scripts/check.mjs                 类型、依赖、框架单测、词典、鱼缸，固定编号的模拟和基线对比，蚂蚁的存档、工具、防御、天气、瓢虫、性能测试
-//   node scripts/check.mjs --fast          只跑前五项（一分钟内）
+//   node scripts/check.mjs                 类型、依赖、框架单测、词典、鱼缸、蜜蜂，固定编号的模拟和基线对比，蚂蚁的存档、工具、防御、天气、瓢虫、性能测试
+//   node scripts/check.mjs --fast          只跑前八项（一分钟内）
 //   node scripts/check.mjs --ui            构建后跑浏览器测试；开发服务器没开时自己起一个
 //   node scripts/check.mjs --all           全部
 //   node scripts/check.mjs --update-baseline   模拟行为有意改变时，用这次的输出更新基线
@@ -68,6 +68,7 @@ const FAST_STEPS = [
   { name: '框架单元测试', argv: tsx('scripts/core/coretest.ts') },
   { name: '界面文字', argv: tsx('scripts/i18ncheck.ts') },
   { name: '鱼缸示例', argv: tsx('scripts/games/aquarium/aquatest.ts'), judge: lastLine(/模拟 \d+ 秒/) },
+  { name: '蜜蜂', argv: tsx('scripts/games/bee/beetest.ts'), judge: lastLine(/模拟 \d+ 秒/) },
 ];
 
 const NODE_STEPS = [
@@ -83,7 +84,7 @@ const NODE_STEPS = [
 ];
 
 const UI_STEPS = [
-  { name: '构建', argv: [TSC, '--noEmit'], then: [[VITE, 'build'], [VITE, 'build', '--mode', 'aquarium']] },
+  { name: '构建', argv: [TSC, '--noEmit'], then: [[VITE, 'build'], [VITE, 'build', '--mode', 'aquarium'], [VITE, 'build', '--mode', 'bee']] },
   ...['saveui', 'selecttest', 'touchtest', 'mousetest', 'qualitytest', 'pwatest', 'musictest', 'brighttest'].map((n) => ({ name: `浏览器 ${n}`, argv: [`scripts/ui/${n}.mjs`] })),
   {
     name: '各屏幕布局',
