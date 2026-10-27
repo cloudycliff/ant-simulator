@@ -77,6 +77,13 @@ const SCENES = {
   ballinfo: { q: '&hour=14&hornet=1&run=15&select=hornet:1', js: `world.hornets.list[0].left = 1e9; world.hornets.list[0].state = 'land'; ${RUN(20)}`, check: INFO },
   plate: { q: '&hour=14&hornet=1&plate=1&run=20&cam=-42,88,10,-30,82,0' },
   hiveplate: { q: '&hour=11&plate=1&select=hive:0', check: INFO },
+  // 割蜜、换框（T-023）：选中一个封盖蜜的巢房点“割下这一块”；蜂箱面板里换上框先问一句
+  harvestinfo: { q: '&hour=11&select=cell:7539&fly=1', check: INFO },
+  harvest: { q: '&hour=11&select=cell:7539&cam=-2,121,22,-2,121,0', click: ['#info [data-a="harvest"]'], check: `world.keeper.harvests + ' 次 ' + Math.round(world.keeper.harvested) + ' 房'` },
+  harvested: { q: '&hour=11&cam=-2,121,22,-2,121,0', js: `world.harvest(7539); ${RUN(240)}` },
+  swapask: { q: '&hour=11&select=hive:0', click: ['#info [data-a="swapAsk"][data-v="1"]'], check: INFO },
+  swapped: { q: '&hour=11&cam=0,103,58,0,103,0', js: `world.swapFrame(1); ${RUN(5)}`, check: `world.keeper.swaps + ' 次，拿走子 ' + world.keeper.lostBrood` },
+  swapgrow: { q: '&hour=11&cam=0,103,58,0,103,0', js: `world.swapFrame(1); ${RUN(600)}` },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

@@ -10,7 +10,7 @@ import { BeeView, HIVE_BOX } from './view';
 import { HEAT_COLORS, MAP_COLORS, MAP_KEYS, ROLE_COLORS } from './palette';
 import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim/bees';
 import { MOUTH } from './sim/flight';
-import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
+import { CELL, COMB_H, CONTENT_KEYS, GRID, SITES, cellFace, cellSite, siteFrame } from './sim/comb';
 import { SITE_HEAT } from './sim/heat';
 import { SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
@@ -101,7 +101,13 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     action: (a, v) => {
       if (a === 'swat') w.hornets.swat(v ?? -1);
       else if (a === 'plate') ctx.toast(tr(w.togglePlate().msg!));
-      else return false;
+      else if (a === 'harvest') ctx.toast(tr(w.harvest(v ?? -1).msg!));
+      else if (a === 'swapAsk') swapAsk = v ?? null;
+      else if (a === 'swapNo') swapAsk = null;
+      else if (a === 'swap' && swapAsk !== null) {
+        ctx.toast(tr(w.swapFrame(swapAsk).msg!));
+        swapAsk = null;
+      } else return false;
       return true;
     },
     // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）；?rain=1 马上下雨
@@ -122,6 +128,8 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
 const ray = new THREE.Raycaster();
 const _hp = new THREE.Vector3();
 const _seg = new THREE.Ray();
+/** 蜂箱面板里等着确认要换的框（0 下框、1 上框） */
+let swapAsk: number | null = null;
 
 /** 从相机到地面上那一点的视线最近的胡蜂（离视线不到 3 cm 或相机距离的 2.5%）；没有是 -1 */
 function hornetOnRay(w: BeeWorld, cam: THREE.Vector3, p: THREE.Vector3): number {
@@ -189,7 +197,11 @@ function cellInfo(w: BeeWorld, cell: number): string {
     else if (c === CELL.capped) body += kv(t('info.emerge'), t('info.inTime', { t: span(T.egg + T.larva + T.capped - a) }));
     else if (c !== CELL.empty) body += kv(t('info.amount'), t('info.percent', { p: Math.round(cb.amount[cell] * 100) }));
   }
-  return `<h2>${t('info.cell')} · ${t(`cell.${key}`)}</h2>${body}<p class="desc">${t(`cellDesc.${key}`)}</p>`;
+  const area = w.keeper.cutArea(cell);
+  let honey = 0;
+  for (const s of area) for (const k of [s, s + SITES]) if (cb.content[k] >= CELL.nectar && cb.content[k] <= CELL.cappedHoney) honey += cb.amount[k];
+  const cut = area.length ? `<div class="actions"><button data-a="harvest" data-v="${cell}">${t('info.harvestHere', { n: Math.round(honey) })}</button></div>` : '';
+  return `<h2>${t('info.cell')} · ${t(`cell.${key}`)}</h2>${body}<p class="desc">${t(`cellDesc.${key}`)}</p>${cut}`;
 }
 
 /** 7.5 → 7:30 */
@@ -264,6 +276,15 @@ function hornetInfo(w: BeeWorld, id: number, following: boolean): string {
       ${alive ? `<button data-a="swat" data-v="${h.id}">${t('info.swat')}</button>` : ''}
       <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
     </div>`;
+}
+
+/** 换框的按钮；点了一个先问一句（框上的子、蜜会一起拿走） */
+function swapPanel(w: BeeWorld): string {
+  if (swapAsk === null)
+    return `<div class="actions"><button data-a="swapAsk" data-v="1">${t('info.swapUpper')}</button><button data-a="swapAsk" data-v="0">${t('info.swapLower')}</button></div>`;
+  const got = w.keeper.frameContents(swapAsk);
+  return `<p class="desc">${t('info.swapAsk', { frame: t(swapAsk ? 'info.upper' : 'info.lower'), brood: got.brood, honey: Math.round(got.honey) })}</p>
+    <div class="actions"><button data-a="swap">${t('info.swapYes')}</button><button data-a="swapNo">${t('info.swapNo')}</button></div>`;
 }
 
 /** 和太阳方向差 th（从上往下看顺时针为正，也就是面朝太阳时的右边）写成文字 */
@@ -351,6 +372,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.out'), String(out))}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
       ${row(t('colony.hornets'), hn ? t('colony.hornetsValue', { n: hn }) : t('colony.hornetsNone'))}
+      ${row(t('colony.alarm'), t(w.keeper.alarm > 0.05 ? 'colony.alarmOn' : 'colony.alarmOff'))}
       ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
       <h3>${t('colony.since')}</h3>
       <div class="grid">
@@ -363,6 +385,8 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.trembles', B.trembles)}${stat('total.reverted', B.reverted)}
         ${stat('total.hornets', HN.visits)}${stat('total.caught', HN.caught)}
         ${stat('total.balls', HN.balls)}${stat('total.hornetKills', `${HN.killed} / ${HN.swatted}`)}
+        ${stat('total.harvests', w.keeper.harvests)}${stat('total.harvested', Math.round(w.keeper.harvested))}
+        ${stat('total.swaps', w.keeper.swaps)}${stat('total.lostBrood', w.keeper.lostBrood)}
       </div>`;
       },
     },
@@ -372,7 +396,8 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       <div class="kv"><span>${t('info.size')}</span><b>${t('info.sizeValue', { w: H.combW, h: H.frameH })}</b></div>
       <div class="kv"><span>${t('info.plate')}</span><b>${t(w.hornets.plate ? 'info.plateOn' : 'info.plateOff')}</b></div>
       <p class="desc">${t('info.hiveDesc')}</p>
-      <div class="actions"><button data-a="plate">${t(w.hornets.plate ? 'info.plateRemove' : 'info.plateAdd')}</button></div>`,
+      <div class="actions"><button data-a="plate">${t(w.hornets.plate ? 'info.plateRemove' : 'info.plateAdd')}</button></div>
+      ${swapPanel(w)}`,
       cell: (r) => cellInfo(w, r.id),
       flower: (r) => flowerInfo(w, r.id),
       bee: (r) => beeInfo(w, r.id, following()),

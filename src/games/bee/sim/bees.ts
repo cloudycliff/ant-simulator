@@ -28,6 +28,16 @@ const NODE_HEAT = (() => {
   return a;
 })();
 
+/** 每个位置离所在那框框梁中间多远（按框的半宽、高度归一化的椭圆半径），补巢脾时先补小的 */
+const REPAIR_K = (() => {
+  const a = new Float32Array(SITES);
+  for (let s = 0; s < SITES; s++) {
+    const top = (s >= GRID.rows * GRID.cols ? GRID.frameStep : 0) + H.frameH;
+    a[s] = Math.hypot((siteU(s) - H.combW / 2) / (H.combW / 2), (top - siteV(s)) / H.frameH);
+  }
+  return a;
+})();
+
 /** 每个位置在育儿区（0）、外面放花粉的一圈（1）还是再往外放花蜜（2）；按开局育儿区的椭圆，不随蜂群变 */
 const ZONE = (() => {
   const O = CONFIG.opening.brood;
@@ -282,6 +292,8 @@ export interface BeeEnv {
   heat: Heat;
   /** 胡蜂（T-022）：巢门外有没有、采集蜂不敢出去的机会、管口装没装防护片、热球的中心 */
   hornets: { threat(): boolean; danger(): number; plate(): boolean; ballAt(id: number): Point3 | null };
+  /** 开箱后蜂躁动的程度（0..1，T-023） */
+  alarm(): number;
 }
 
 /**
@@ -425,6 +437,24 @@ export class Bees {
     }
   }
 
+  /**
+   * 割蜜、换框以后脚下没有巢脾的蜂挪到还在的巢脾上，手里的活作废：换框时是那一框上的蜂（frame），
+   * 割蜜时挪到 (u, v) 附近 keeper.scatter 以内
+   */
+  dislodge(frame: number, u = NaN, v = NaN): void {
+    this.map.sync(this.comb);
+    const r = CONFIG.keeper.scatter;
+    for (const b of this.list) {
+      if (b.out || !b.alive) continue;
+      const onFrame = frame >= 0 && (frame ? b.v > H.frameH + H.bar : b.v < H.frameH);
+      if (!onFrame && this.map.ok(b.u, b.v)) continue;
+      this.unpark(b);
+      b.wrap = 0;
+      this.placeAt(b, frame >= 0 ? (n, _f, nv) => this.map.walk[n] === 1 && (frame ? nv < H.frameH : nv > H.frameH + H.bar) : (_n, _f, nv, nu) => Math.hypot(nu - u, nv - v) < r);
+      b.brain.start(this.idle(b, 0.8));
+    }
+  }
+
   /** 羽化：新的蜂从巢房里钻出来 */
   emerge(cell: number): void {
     const drone = this.comb.drone[cellSite(cell)] === 1;
@@ -442,6 +472,7 @@ export class Bees {
 
   update(dt: number): void {
     this.map.sync(this.comb);
+    this.syncRepair();
     this.dt = dt;
     this.dancers.length = 0;
     this.receivers.length = 0;
@@ -1056,6 +1087,22 @@ export class Bees {
     return b > 0 && b < 1;
   };
 
+  /** 割掉、换掉后要补的地方，蜂先补这里；只补离框梁中间最近的一圈，新巢脾像舌头一样从框梁往下长 */
+  private isRepair = (c: number) => this.isFrontier(c) && this.comb.repair[cellSite(c)] === 1 && REPAIR_K[cellSite(c)] <= this.repairK;
+  private repairK = Infinity;
+  private repairAt = '';
+
+  /** 要补的那一圈只在有位置开始造、补好时变（读档后第一步按同样的巢脾重算，走得一样） */
+  private syncRepair(): void {
+    const cb = this.comb;
+    const at = `${cb.shape}|${cb.repairs}`;
+    if (at === this.repairAt) return;
+    this.repairAt = at;
+    let k = Infinity;
+    for (let s = 0; s < SITES; s++) if (cb.repair[s] && cb.build[s] > 0 && cb.build[s] < 1) k = Math.min(k, REPAIR_K[s]);
+    this.repairK = k + CONFIG.keeper.repairBand;
+  }
+
   private field(key: FieldKey): Field {
     const f = this.fields[key];
     const now = this.now();
@@ -1099,6 +1146,15 @@ export class Bees {
         yield n + NODES;
       }
       return;
+    }
+    if (key === 'frontier') {
+      let found = 0;
+      for (let c = 0; c < CELLS; c++)
+        if (this.isRepair(c)) {
+          found++;
+          yield cellNode(c);
+        }
+      if (found) return;
     }
     if (key === 'layable') {
       let drones = 0;
@@ -1185,7 +1241,7 @@ export class Bees {
       case 'house':
         return yield* this.house(b);
       case 'guard':
-        if (this.rng.chance(this.threat ? HN.threatGuards : C.guards)) {
+        if (this.rng.chance(this.threat || this.env.alarm() > CONFIG.keeper.alarmGuard ? HN.threatGuards : C.guards)) {
           b.act = 'guard';
           if ((yield { k: 'go', f: 'entrance', near: this.rng.int(2, 14), t: 90 }) as boolean) yield { k: 'rest', t: this.rng.range(10, 20) };
           else yield* this.idle(b);
@@ -1252,8 +1308,9 @@ export class Bees {
     b.act = 'leave';
     // 挤到巢门花了太久，花已经合上了、天变了就不出去
     if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || (p && !this.isOpen(p)) || !this.env.flyable()) return yield* this.idle(b);
-    // 巢门外有胡蜂悬停，不敢出去（采集停滞）
-    if (this.rng.chance(this.env.hornets.danger())) return yield* this.wait(b);
+    // 巢门外有胡蜂悬停、刚开过箱，不敢出去（采集停滞）
+    const stop = 1 - (1 - this.env.hornets.danger()) * (1 - this.env.alarm() * CONFIG.keeper.alarmStop);
+    if (this.rng.chance(stop)) return yield* this.wait(b);
     if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 10 }) as boolean)) return yield* this.idle(b);
     b.act = scout ? 'scout' : p ? 'flyOut' : 'flyAim';
     yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };
@@ -1658,13 +1715,21 @@ export class Bees {
       }
       return;
     }
-    const build = this.rng.chance(C.builders);
+    const build = this.rng.chance(this.comb.repairs ? CONFIG.keeper.repairBuilders : C.builders);
     if (build) {
-      const cell = yield* this.seek(b, 'frontier', this.isFrontier, 'goBuild');
+      const cell = yield* this.seek(b, 'frontier', this.isFrontier, 'goBuild', this.comb.repairs ? this.isRepair : this.isFrontier);
       if (cell >= 0) {
         yield* this.work(b, cell, 'build', C.work.build);
         this.comb.buildUp(cellSite(cell), C.build, C.start);
         b.crop = Math.max(0, b.crop - C.buildCost);
+        // 补巢脾的蜂挂在缺口边上接着造，不每造一下就走开
+        for (let i = 1; i < CONFIG.keeper.repairStay && this.comb.repairs && b.crop > B.hungry; i++) {
+          const next = this.findNear(b, this.isRepair, 2.4);
+          if (next < 0 || !((yield { k: 'to', cell: next, t: 6 }) as boolean)) break;
+          yield* this.work(b, next, 'build', C.work.build);
+          this.comb.buildUp(cellSite(next), C.build, C.start);
+          b.crop = Math.max(0, b.crop - C.buildCost);
+        }
         return yield* this.maybeRest(b);
       }
     }

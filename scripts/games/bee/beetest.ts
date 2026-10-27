@@ -1,13 +1,13 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、割蜜和换框、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
 import { setLang, t, tr } from '../../../src/core/i18n';
 import { CombView } from '../../../src/games/bee/combView';
 import { CONFIG } from '../../../src/games/bee/config';
-import { CELL, CELLS, CONTENT_KEYS, SITES, cellPos, siteAt, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
+import { CELL, CELLS, CONTENT_KEYS, GRID, SITES, cellPos, siteAt, siteFrame, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
 import { ACTS, CASTE, ageRoleOf, roleOf, type Act } from '../../../src/games/bee/sim/bees';
 import { Flowers, SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
 import { nodeAt } from '../../../src/games/bee/sim/walk';
@@ -403,6 +403,59 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   run(z, 5);
   check('下雨了，胡蜂飞走', z.hornets.list.every((o) => o.state === 'dead' || o.state === 'leave') || z.hornets.list.filter((o) => o.state !== 'dead').length === 0);
 }
+{
+  // 养蜂人：割蜜、换框（T-023）。另开世界
+  const x = new BeeWorld(7);
+  run(x, 10);
+  const K = x.keeper;
+  const Hv = CONFIG.hive;
+  let brood = -1;
+  let cell = -1;
+  for (let c = 0; c < CELLS; c++) {
+    if (brood < 0 && x.comb.content[c] === CELL.capped) brood = c;
+    if (cell < 0 && x.comb.content[c] === CELL.cappedHoney && K.cutArea(c).length > 80) cell = c;
+  }
+  const area = K.cutArea(cell);
+  const h0 = x.comb.census().honeyCells;
+  const cut = x.harvest(cell);
+  const h1 = x.comb.census().honeyCells;
+  const off = () => x.bees.list.filter((b) => !b.out && !x.bees.map.ok(b.u, b.v)).length;
+  check(
+    '割蜜：割下一块封盖蜜，有子的地方不割，蜂挪到还在的巢脾上',
+    !x.harvest(brood).ok && cut.ok && area.every((s) => x.comb.build[s] < 1) && Math.abs(h0 - h1 - K.harvested) < 1 && off() === 0 && K.alarm > 0.5,
+    `${area.length} 个位置，${Math.round(K.harvested)} 房蜜`,
+  );
+  run(x, 60);
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved && r1.comb.repairs === x.comb.repairs;
+  run(r1, 20);
+  run(r2, 20);
+  check('补巢脾时存档往返一致、读两次走得一样', same && fingerprint(r1) === fingerprint(r2));
+  run(x, 400);
+  const rebuilt = area.filter((s) => x.comb.build[s] >= 1).length;
+  check('割掉的缺口大半天补回来，躁动退了', rebuilt > area.length * 0.8 && K.alarm < 0.05, `补好 ${rebuilt} / ${area.length}，躁动 ${K.alarm.toFixed(3)}`);
+  const upper = () => {
+    let n = 0;
+    for (let s = 0; s < SITES; s++) if (siteFrame(s) === 1 && x.comb.build[s] > 0) n++;
+    return n;
+  };
+  const was = K.frameContents(1);
+  const swapped = x.swapFrame(1).ok;
+  const n0 = upper();
+  check(
+    '换框：上框换成空巢框，只剩框梁下中间一段，上面的蜂挪到下框',
+    swapped && n0 > 0 && n0 < GRID.cols / 2 && off() === 0 && x.bees.list.every((b) => b.out || b.v < Hv.frameH + Hv.bar) && K.lostBrood === was.brood && K.stress > 0.3,
+    `拿走子 ${was.brood} 个、蜜 ${Math.round(was.honey)} 房`,
+  );
+  run(x, 300);
+  check('空巢框从框梁中间往下造', upper() > 4 * n0, `${n0} → ${upper()} 个位置`);
+}
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -442,7 +495,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', lo: 1, hi: 2, f: 3 }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', lo: 1, hi: 2, f: 3, brood: 4, honey: 5 }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

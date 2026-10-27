@@ -133,6 +133,7 @@ export interface CombSave {
   amount: string;
   age: string;
   pollen: string;
+  repair: string;
 }
 
 export interface CombCensus {
@@ -161,6 +162,10 @@ export class Comb {
   /** 卵、幼虫、封盖子从产卵起过了多少秒；花蜜是酿到了几成（0..1） */
   readonly age = new Float32Array(CELLS);
   readonly pollen = new Uint8Array(CELLS);
+  /** 割掉、换掉以后要补的位置（T-023）：蜂先补这里，造好了清掉 */
+  readonly repair = new Uint8Array(SITES);
+  /** repair 里还有几个 */
+  repairs = 0;
   /** 内容变了加一 */
   version = 0;
   /** 有没有巢房变了（新开始造一个位置）加一，走路的方格按它重建 */
@@ -269,6 +274,7 @@ export class Comb {
    * 酿的进度按量摊开，原来的蜂蜜算酿好的
    */
   addNectar(cell: number, x: number): number {
+    if (this.build[cellSite(cell)] < 1) return 0;
     const c = this.content[cell];
     if (c === CELL.empty) {
       if (this.amount[cell] > 0) return 0;
@@ -288,6 +294,7 @@ export class Comb {
 
   /** 往空房或花粉房里放 x 房花粉（kind 是颜色，空房才用得上），返回放进去多少 */
   addPollen(cell: number, x: number, kind: number): number {
+    if (this.build[cellSite(cell)] < 1) return 0;
     const c = this.content[cell];
     if (c === CELL.empty) {
       if (this.amount[cell] > 0) return 0;
@@ -317,12 +324,46 @@ export class Comb {
     this.version++;
   }
 
+  /**
+   * 割掉、换掉这些位置的巢房（两面一起），返回拿走的蜜（满房数）、子；缺口边上挨着造好的巢房的位置从 start 起重新造
+   */
+  remove(sites: readonly number[], start: number): { honey: number; brood: number } {
+    let honey = 0;
+    let brood = 0;
+    for (const s of sites) {
+      for (const cell of [s, s + SITES]) {
+        const c = this.content[cell];
+        if (c === CELL.nectar || c === CELL.honey || c === CELL.cappedHoney) honey += this.amount[cell];
+        else if (c >= CELL.egg && c <= CELL.capped) brood++;
+        this.empty(cell);
+      }
+      this.build[s] = 0;
+      this.drone[s] = 0;
+      if (!this.repair[s]) this.repairs++;
+      this.repair[s] = 1;
+    }
+    for (const s of sites) if (siteNeighbors(s, this.nb).some((n) => this.build[n] >= 1)) this.build[s] = start;
+    this.shape++;
+    this.version++;
+    return { honey, brood };
+  }
+
+  /** 空巢框：框梁下面中间三分之一的位置从 start 起造（框梁在每框的上沿） */
+  seedTop(frame: number, start: number): void {
+    const base = (frame * GRID.rows + GRID.rows - 1) * GRID.cols;
+    for (let c = Math.floor(GRID.cols / 3); c < Math.ceil((GRID.cols * 2) / 3); c++) this.build[base + c] = start;
+    this.shape++;
+    this.version++;
+  }
+
   /** 位置加高 d，造好时旁边还没有的位置开始造 */
   buildUp(site: number, d: number, start: number): void {
     const b = this.build[site];
     if (b <= 0 || b >= 1) return;
-    this.build[site] = Math.min(1, b + d);
+    this.build[site] = Math.min(1, b + d * (this.repair[site] ? CONFIG.keeper.repairBoost : 1));
     if (this.build[site] >= 1) {
+      if (this.repair[site]) this.repairs--;
+      this.repair[site] = 0;
       let grew = false;
       for (const n of siteNeighbors(site, this.nb))
         if (this.build[n] <= 0) {
@@ -420,6 +461,7 @@ export class Comb {
       amount: encode(this.amount),
       age: encode(this.age),
       pollen: encode(this.pollen),
+      repair: encode(this.repair),
     };
   }
 
@@ -430,6 +472,8 @@ export class Comb {
     decode(d.amount, this.amount);
     decode(d.age, this.age);
     decode(d.pollen, this.pollen);
+    decode(d.repair, this.repair);
+    this.repairs = this.repair.reduce((a, x) => a + x, 0);
     this.version++;
     this.shape++;
   }

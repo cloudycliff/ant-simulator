@@ -346,6 +346,28 @@ export const CONFIG = {
     deadTime: 300,
     length: 2.8,
   },
+  /**
+   * 养蜂人开箱（P-013、T-023）。割蜜割下点的那一块封盖蜜脾：从点的位置往外 cutR cm 以内、连成一片、两面都没有子和花粉、
+   * 至少一面是封盖蜜的巢房，割掉的地方蜂再从缺口边上造回来（有要补的地方时内勤蜂 repairBuilders 的机会去筑巢，先去补，补的时候一次加高 repairBoost 倍，一趟在缺口边上接着造最多 repairStay 下；
+   * 只补离框梁中间最近的一圈：按框的半宽、高度归一化的椭圆半径比最近的要补的位置大不过 repairBand）；被割掉的巢脾上的蜂挪到 scatter cm 以内还在的巢脾上。
+   * 换框把一框换成空巢框，只有框梁下中间三分之一刚起头的巢房。开箱让蜂躁动（割蜜加 alarm.harvest、换框加 alarm.swap，最多 1），
+   * 按 alarmTime 秒的时间常数退；躁动时采集蜂走到巢门有 躁动 × alarmStop 的机会不出去，过 alarmGuard 时守卫日龄的蜂
+   * 像有胡蜂时一样多去巢门。惊扰的压力（割蜜加 stress.harvest、换框加 stress.swap）按 stressDays 天的时间常数退，飞逃用
+   */
+  keeper: {
+    cutR: 3,
+    scatter: 8,
+    repairBoost: 30,
+    repairBuilders: 0.7,
+    repairBand: 0.3,
+    repairStay: 6,
+    alarm: { harvest: 0.6, swap: 1 },
+    alarmTime: 90,
+    alarmStop: 0.6,
+    alarmGuard: 0.3,
+    stress: { harvest: 0.15, swap: 0.3 },
+    stressDays: 1.5,
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {
