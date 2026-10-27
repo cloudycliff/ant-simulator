@@ -102,7 +102,8 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   onAction: ((a: string, arg?: number) => void) | null = null;
   onEvent: ((e: SimEvent<R>) => void) | null = null;
   private shownEvents: SimEvent<R>[] = [];
-  private eventsKey = '';
+  /** null 表示要重写；一开始没有事件时 key 是空串，也要写一次标题和“还没有事件” */
+  private eventsKey: string | null = null;
   state = { stats: false, following: false, background: true };
   /** 手机布局：一行顶栏 + 底栏，面板改为抽屉（见 updateMode） */
   compact = false;
@@ -411,7 +412,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     this.syncDock();
     this.toolKey = '';
     this.saveKey = '';
-    this.eventsKey = '';
+    this.eventsKey = null;
     this.statsDirty = true;
   }
 

@@ -57,7 +57,14 @@ const SCENES = {
   cells: { q: '&hour=11&cam=0,103,58,0,103,0&view=cells,fade' },
   cellsnear: { q: '&hour=11&cam=0,107,9,0,107,0&view=cells' },
   both: { q: '&hour=11&cam=0,103,40,0,100,0&view=cells,roles' },
+  // 手机的抽屉：点底栏的按钮打开（只拍手机）
+  sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
+  sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },
+  sheettools: { q: '&hour=11', phone: true, click: ['#dock [data-v="2"]'] },
+  sheetevents: { q: '&hour=11', phone: true, js: `${PLANT}; ${RUN(60)}`, click: ['#dock [data-v="3"]'] },
+  ensheet: { q: '&hour=11&run=120&lang=en', phone: true, click: ['#dock [data-v="0"]'] },
   en: { q: '&hour=11&lang=en' },
+  encolony: { q: '&hour=11&run=120&lang=en' },
   endancer: { q: '&hour=11&run=120&select=bee:262&fly=1&lang=en', check: INFO },
 };
 
@@ -69,11 +76,12 @@ try {
   for (const [vp, w, h, touch] of VIEWPORTS) {
     for (const [scene, s] of Object.entries(SCENES)) {
       const name = `${vp}-${scene}`;
-      if (!want(name)) continue;
+      if (!want(name) || (s.phone && !touch)) continue;
       const p = await b.page();
       await p.viewport(w, h, touch);
       await p.open(BASE + Q + s.q);
       if (s.js) await p.ev(s.js);
+      for (const sel of s.click ?? []) await p.ev(`document.querySelector('${sel}').click()`);
       for (const code of s.keys ?? []) {
         await p.send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: code.slice(-1) });
         await p.send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: code.slice(-1) });

@@ -105,6 +105,17 @@ export class WalkMap {
   }
 }
 
+/** 同一面的两格之间直着走，路上都能站（每 1/4 格查一次） */
+function sight(map: WalkMap, a: number, b: number): boolean {
+  const au = nodeU(a);
+  const av = nodeV(a);
+  const du = nodeU(b) - au;
+  const dv = nodeV(b) - av;
+  const k = Math.ceil((Math.hypot(du, dv) / WALK.step) * 4);
+  for (let i = 1; i < k; i++) if (!map.ok(au + (du * i) / k, av + (dv * i) / k)) return false;
+  return true;
+}
+
 /**
  * 路程场：两面所有格子到最近的源头走几步（绕边算一步）。要去某类地方的蜂沿着它下坡走，
  * 不会卡在没造好的缺口里（T-008）
@@ -116,6 +127,15 @@ export class Field {
   shape = -1;
   sources = 0;
   private queue = new Int32Array(2 * NODES);
+  /**
+   * 拉直的路：从这一格能直着走到的、顺着下坡路最远的一格（同一面）。8 方向每步都算 1，下坡常有几格一样低，
+   * 只顺着格子走，四面八方的蜂会并到同一条 45° 斜线上排成一列；去巢门、舞场这种远路的场才算
+   */
+  readonly via?: Int32Array;
+
+  constructor(straight = false) {
+    if (straight) this.via = new Int32Array(2 * NODES);
+  }
 
   compute(map: WalkMap, sources: Iterable<number>, at: number): void {
     this.at = at;
@@ -148,6 +168,14 @@ export class Field {
           q[tail++] = m;
         }
       }
+    }
+    const via = this.via;
+    if (!via) return;
+    // 队列按路程从近到远，下坡的那一格先算好了
+    for (let head = 0; head < tail; head++) {
+      const n = q[head];
+      const m = this.next(map, n);
+      via[n] = m < 0 ? n : (m >= NODES) === (n >= NODES) && sight(map, n, via[m]) ? via[m] : m;
     }
   }
 

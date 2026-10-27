@@ -301,7 +301,7 @@ export class Bees {
   /** 这一步开头在巢外的蜂（管里、飞着、在花上） */
   private outside = 0;
   private byId = new Map<number, Bee>();
-  private fields = Object.fromEntries(FIELD_KEYS.map((k) => [k, new Field()])) as Record<FieldKey, Field>;
+  private fields = Object.fromEntries(FIELD_KEYS.map((k) => [k, new Field(k === 'entrance' || k === 'floor')])) as Record<FieldKey, Field>;
   private dt = 0;
   /** 快到地方的蜂不再绕开停着的蜂，直接从它们身上爬过去（目标周围总挤着蜂，绕来绕去走不到） */
   private pushing = false;
@@ -625,7 +625,10 @@ export class Bees {
           if (!this.startWrap(b)) this.forward(b, this.speed(b) * dt);
           return false;
         }
-        this.walkTo(b, nodeU(m), nodeV(m), this.occ[m] > 0 || f.dist[n] <= c.near + 2);
+        // 拉直的路的那一格有蜂站着就按格子走，否则会一直朝着它顶
+        const v = f.via ? f.via[n] : m;
+        const w = (v >= NODES) === (b.face === 1) && this.occ[v] === 0 ? v : m;
+        this.walkTo(b, nodeU(w), nodeV(w), this.occ[m] > 0 || f.dist[n] <= c.near + 2);
         return false;
       }
       case 'to': {
@@ -993,7 +996,7 @@ export class Bees {
       for (let n = 0; n < NODES; n++) {
         const u = nodeU(n);
         const v = nodeV(n);
-        if (u < 0 && Math.abs(v - 3) < 1) {
+        if (u < 0 && Math.abs(v - DOOR.v) < 1) {
           yield n;
           yield n + NODES;
         }
@@ -1156,7 +1159,8 @@ export class Bees {
   private *goOut(b: Bee, p: FlowerPatch | null, scout = false): Routine {
     if (b.crop < F.depart) return yield* this.eat(b);
     b.act = 'leave';
-    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean)) return yield* this.idle(b);
+    // 挤到巢门花了太久，花已经合上了就不出去
+    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || (p && !this.isOpen(p))) return yield* this.idle(b);
     if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 10 }) as boolean)) return yield* this.idle(b);
     b.act = scout ? 'scout' : p ? 'flyOut' : 'flyAim';
     yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };

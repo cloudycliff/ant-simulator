@@ -239,6 +239,8 @@ function danceRows(w: BeeWorld, b: Bee): string {
 
 function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<BeeRef> {
   const row = (label: string, value: string) => `<div class="row">${label}<b>${value}</b></div>`;
+  const sub = (label: string, value: number) => `<div class="row sub">${label}<b>${value}</b></div>`;
+  const stat = (key: Parameters<typeof t>[0], value: number | string) => `<span>${t(key)}</span><b>${value}</b>`;
   return {
     status: () => ({ icon: w.clock.isNight ? '🌙' : '☀️', text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status') }),
     perfExtra: () => '',
@@ -270,20 +272,29 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
       ${row(t('colony.season'), t('colony.summer'))}
       ${row(t('colony.bees'), t('colony.beesValue', { n: B.list.length, d: drones }))}
-      ${ROLE_KEYS.map((k) => `<div class="row sub">${t(`role.${k}`)}<b>${roles[k]}</b></div>`).join('')}
-      ${row(t('colony.shift'), t('colony.shiftValue', { a: early, b: late, r: B.reverted }))}
+      ${ROLE_KEYS.map((k) => sub(t(`role.${k}`), roles[k])).join('')}
+      ${row(t('colony.shift'), t('colony.shiftValue', { a: early, b: late }))}
+      <h3>${t('colony.comb')}</h3>
       ${row(t('colony.cells'), t('colony.cellsValue', { n: c.built * 2, b: c.building * 2 }))}
-      ${row(t('colony.brood'), t('colony.broodValue', { e: n.egg, l: n.larva, c: n.capped }))}
+      ${row(t('colony.brood'), String(n.egg + n.larva + n.capped))}
+      ${sub(t('colony.eggs'), n.egg)}${sub(t('colony.larvae'), n.larva)}${sub(t('colony.capped'), n.capped)}
+      ${B.starved ? sub(t('colony.starved'), B.starved) : ''}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
-      ${row(t('colony.since'), t('colony.sinceValue', { b: B.births, d: B.deaths, l: B.laid }))}
-      ${row(t('colony.out'), t('colony.outValue', { n: out, x: B.lost }))}
-      ${row(t('colony.brought'), t('colony.broughtValue', { t: B.trips, n: Math.round(B.nectarIn), p: Math.round(B.pollenIn) }))}
-      ${row(t('colony.dances'), t('colony.dancesValue', { d: B.dances, r: B.recruits, h: B.arrived ? Math.round((B.hits / B.arrived) * 100) : 0 }))}
-      ${row(t('colony.handoff'), t('colony.handoffValue', { h: B.handoffs, s: B.selfStored, t: B.trembles }))}
-      ${B.starved ? row(t('colony.starved'), String(B.starved)) : ''}
+      <h3>${t('colony.forage')}</h3>
+      ${row(t('colony.out'), String(out))}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
-      ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}`;
+      ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
+      <h3>${t('colony.since')}</h3>
+      <div class="grid">
+        ${stat('total.emerged', B.births)}${stat('total.died', B.deaths)}
+        ${stat('total.laid', B.laid)}${stat('total.lost', B.lost)}
+        ${stat('total.trips', B.trips)}${stat('total.dances', B.dances)}
+        ${stat('total.nectar', Math.round(B.nectarIn))}${stat('total.pollen', Math.round(B.pollenIn))}
+        ${stat('total.recruits', B.recruits)}${stat('total.hits', `${B.arrived ? Math.round((B.hits / B.arrived) * 100) : 0}%`)}
+        ${stat('total.handoffs', B.handoffs)}${stat('total.selfStored', B.selfStored)}
+        ${stat('total.trembles', B.trembles)}${stat('total.reverted', B.reverted)}
+      </div>`;
       },
     },
     infoHint: () => t('info.hint'),
