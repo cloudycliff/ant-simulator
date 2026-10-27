@@ -8,6 +8,7 @@ import { BeesView } from './beeView';
 import { CombView } from './combView';
 import { CONFIG } from './config';
 import { DanceView } from './danceView';
+import { HeatView } from './heatView';
 import { FlowerView } from './flowerView';
 import { COMB_H } from './sim/comb';
 import type { BeeRef, BeeWorld } from './world';
@@ -32,6 +33,7 @@ export class BeeView {
   readonly flowers: FlowerView;
   readonly bees: BeesView;
   readonly dance: DanceView;
+  readonly heat: HeatView;
   private rain = new RainView();
   /** 点选用：观察箱的各个部件，userData.ref 指向它们；花丛的圆柱在 flowers.pickables */
   private hiveParts: THREE.Object3D[] = [];
@@ -62,7 +64,8 @@ export class BeeView {
     this.flowers = new FlowerView(w);
     this.bees = new BeesView(w);
     this.dance = new DanceView(w);
-    this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group);
+    this.heat = new HeatView(w);
+    this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group, this.heat.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.8, depthTest: false }));
     this.outline.position.set(0, H.baseY + COMB_H / 2 + 6, 0);
@@ -255,5 +258,6 @@ export class BeeView {
     this.flowers.update(this.w.clock.hour, sel?.kind === 'flower' ? sel.id : null);
     this.bees.update(camera, viewportH, sel?.kind === 'bee' ? sel.id : null);
     this.dance.update(camera);
+    this.heat.update();
   }
 }

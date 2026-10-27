@@ -351,7 +351,8 @@ export class Comb {
    * 卵、幼虫、封盖子长大 dt 秒，到了时间换下一阶段。幼虫越来越饿，饿过 starve 秒就死了；
    * 羽化和饿死的巢房空出来、要清理，各自回调一次
    */
-  develop(dt: number, onEmerge: (cell: number) => void, onStarve: (cell: number) => void): void {
+  /** rate：这个巢房里的子发育快慢的倍数；dies：这一回冻死、热死没有（T-021），死了和饿死的一样留下要清理的房 */
+  develop(dt: number, onEmerge: (cell: number) => void, onStarve: (cell: number) => void, rate: (cell: number) => number = () => 1, dies: (cell: number) => boolean = () => false): void {
     let changed = false;
     const W = CONFIG.brood.worker;
     const D = CONFIG.brood.drone;
@@ -361,14 +362,15 @@ export class Comb {
     for (let cell = 0; cell < CELLS; cell++) {
       const c = this.content[cell];
       if (c < CELL.egg || c > CELL.capped) continue;
-      if (c === CELL.larva && (this.amount[cell] -= hunger) < dead) {
+      const starved = c === CELL.larva && (this.amount[cell] -= hunger) < dead;
+      if (starved || dies(cell)) {
         this.empty(cell);
         this.amount[cell] = 1;
         changed = true;
-        onStarve(cell);
+        if (starved) onStarve(cell);
         continue;
       }
-      const a = (this.age[cell] += dt);
+      const a = (this.age[cell] += dt * rate(cell));
       const T = this.drone[cellSite(cell)] ? D : W;
       const next = a < T.egg ? CELL.egg : a < T.egg + T.larva ? CELL.larva : a < T.egg + T.larva + T.capped ? CELL.capped : CELL.empty;
       if (next === c) continue;

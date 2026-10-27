@@ -14,6 +14,9 @@ export interface WeatherSave {
   rain: number;
   cloud: number;
   hourAcc: number;
+  warm: number;
+  warmTo: number;
+  day: number;
 }
 
 /**
@@ -29,6 +32,10 @@ export class Weather {
   rain = 0;
   cloud = 0;
   private hourAcc = 0;
+  /** 今天比平常热几度，慢慢变到 warmTo；每过一天重新挑一个 */
+  private warm = 0;
+  private warmTo = 0;
+  private day = 0;
 
   constructor(
     private readonly rng: Rng,
@@ -51,7 +58,7 @@ export class Weather {
   /** 气温（°C）：清早最低、下午两点最高，阴雨按云量降温 */
   air(hour: number): number {
     const k = (Math.cos(((hour - W.warmest) / 24) * TAU) + 1) / 2;
-    return W.air[0] + (W.air[1] - W.air[0]) * k - W.rainCool * this.cloud;
+    return W.air[0] + (W.air[1] - W.air[0]) * k + this.warm - W.rainCool * this.cloud;
   }
 
   /** 马上转阴、接着下雨；now 为真时直接下起来（测试、截图用） */
@@ -66,6 +73,12 @@ export class Weather {
 
   update(dt: number): void {
     this.phaseT -= dt;
+    const day = Math.floor(this.clock.totalDays);
+    if (day !== this.day) {
+      this.day = day;
+      this.warmTo = this.rng.range(W.swing[0], W.swing[1]);
+    }
+    this.warm += (this.warmTo - this.warm) * Math.min(1, dt / (this.dayLength / 6));
     if (this.phase === 'clear') {
       this.hourAcc += dt;
       if (this.hourAcc >= this.dayLength / 24) {
@@ -99,7 +112,7 @@ export class Weather {
 
   toSave(): WeatherSave {
     const r = (v: number) => Math.round(v * 1000) / 1000;
-    return { phase: this.phase, phaseT: r(this.phaseT), strength: r(this.strength), rain: r(this.rain), cloud: r(this.cloud), hourAcc: r(this.hourAcc) };
+    return { phase: this.phase, phaseT: r(this.phaseT), strength: r(this.strength), rain: r(this.rain), cloud: r(this.cloud), hourAcc: r(this.hourAcc), warm: r(this.warm), warmTo: r(this.warmTo), day: this.day };
   }
 
   restore(s: WeatherSave): void {

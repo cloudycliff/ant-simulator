@@ -249,7 +249,8 @@ export const CONFIG = {
    * 天气（T-020）。平均每天 rainPerDay 场阵雨，第 firstRainDay 天以前不下；showers 点之间下雨的机会是平时的 showerPeak 倍，
    * 其余时候 showerOff 倍（一天平均是 1）。转阴 overcast 秒后下雨，雨下 hours 小时，雨势 strength。
    * 转阴时在外面的蜂每秒有 recall[0] 的机会往回飞，下雨时 recall[1]；雨把花里的花蜜、花粉冲掉，大雨 wash 秒冲掉约六成。
-   * 气温（°C）在 air 之间，最热在 warmest 点、最凉在它前后 12 小时；阴雨按云量最多降 rainCool
+   * 气温（°C）在 air 之间，最热在 warmest 点、最凉在它前后 12 小时；每天整体偏冷偏热 swing 之间（半天里慢慢变过去）；
+   * 阴雨按云量最多降 rainCool
    */
   weather: {
     rainPerDay: 0.5,
@@ -264,7 +265,37 @@ export const CONFIG = {
     wash: 90,
     air: [23, 33] as [number, number],
     warmest: 14,
+    swing: [-3, 4] as [number, number],
     rainCool: 5,
+  },
+  /**
+   * 巢脾上的温度（T-021、P-011）。温度格 cell cm 见方，两面共用。每秒每格：每只蜂升温 bee °C，振翅产热的蜂再加 heater；
+   * 往外面的空气散 loss × 和气温的差，在巢门扇风的蜂每只让散热快 vent 倍；和四邻拉平 spread。
+   * 蜂产的热随温度降，到 cook 不再产；振翅产热的蜂到 ideal 上沿就停。扇风的蜂到 fanFull 只时蒸发让巢里比气温凉 evap 度。
+   * 子在 ideal 之间发育正常，偏出去每度慢 slowPerC（最慢 slowest 倍）；低于 chill、高于 cook 每秒有（差几度 + 1）/ killTime 的机会死。
+   * 有子不到 broodCells 个的格不算育儿区。育儿区里冷的子占的比例 × heaters 是清理蜂、内勤蜂去子脾上产热的机会，
+   * 热的比例 × fanners 是内勤蜂、守卫去巢门扇风的机会；一次 hold 秒。冷的子 refresh 秒重找一次
+   */
+  heat: {
+    cell: 2,
+    bee: 0.012,
+    heater: 0.08,
+    loss: 0.01,
+    vent: 0.015,
+    evap: 4,
+    fanFull: 150,
+    spread: 0.1,
+    ideal: [34, 36] as [number, number],
+    slowPerC: 0.07,
+    slowest: 0.3,
+    chill: 28,
+    cook: 38,
+    killTime: 2500,
+    broodCells: 3,
+    heaters: 1,
+    fanners: 0.5,
+    hold: [20, 40] as [number, number],
+    refresh: 5,
   },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },

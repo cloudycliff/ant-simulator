@@ -62,3 +62,13 @@ export const FLOWER_COLORS: Record<string, { leaf: number; bloom: number; tint: 
   corn: { leaf: 0x5f9032, bloom: 0xd8c47c, tint: 0x86a848 },
   sugar: { leaf: 0x8a6238, bloom: 0xe8b85a, tint: 0x9a8a60 },
 };
+
+/** 温度视图的色阶（°C, 颜色）：冷的蓝、子正好的绿、热的橙红；中间按温度插值 */
+export const HEAT_COLORS: [number, number][] = [
+  [24, 0x2a3cb4],
+  [30, 0x3cb4e6],
+  [34, 0x58d058],
+  [36, 0x58d058],
+  [37.5, 0xf0b428],
+  [40, 0xe63228],
+];

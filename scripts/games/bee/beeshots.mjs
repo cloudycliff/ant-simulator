@@ -60,6 +60,9 @@ const SCENES = {
   cells: { q: '&hour=11&cam=0,103,58,0,103,0&view=cells,fade' },
   cellsnear: { q: '&hour=11&cam=0,107,9,0,107,0&view=cells' },
   both: { q: '&hour=11&cam=0,103,40,0,100,0&view=cells,roles' },
+  heat: { q: '&hour=4&run=30&cam=0,103,58,0,103,0&view=heat' },
+  heatback: { q: '&hour=15&run=30&cam=0,103,-58,0,103,0&view=heat,fade' },
+  heatcell: { q: '&hour=4&run=60&select=cell:3900', check: INFO },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

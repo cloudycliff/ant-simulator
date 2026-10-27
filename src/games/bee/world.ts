@@ -5,11 +5,12 @@ import { Simulation } from '../../core/sim/simulation';
 import { clamp } from '../../core/util/math';
 import { Noise2D } from '../../core/util/random';
 import { CONFIG } from './config';
-import { CELLS, COMB_H, Comb, cellFace, cellPos, type CombSave } from './sim/comb';
+import { CELLS, COMB_H, Comb, cellFace, cellPos, cellSite, type CombSave } from './sim/comb';
 import { Bees, type Bee, type BeesSave } from './sim/bees';
 import type { ToolResult } from '../../core/ui/tools';
 import { Flowers, SUGAR, type FlowerSave } from './sim/flowers';
 import { Weather, type WeatherSave } from './sim/weather';
+import { Heat, SITE_HEAT, broodRate, broodRisk, type HeatSave } from './sim/heat';
 
 /** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
 export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number };
@@ -20,6 +21,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   readonly flowers = new Flowers();
   readonly bees: Bees;
   readonly weather: Weather;
+  readonly heat = new Heat();
   private noise: Noise2D;
   private followPos: Point3 = { x: 0, y: 0, z: 0 };
   private broodClock = 0;
@@ -37,20 +39,32 @@ export class BeeWorld extends Simulation<BeeRef> {
       sun: () => this.clock.sunAzimuth,
       ground: (x, z) => this.groundAt(x, z),
       flyable: () => this.weather.flyable,
+      heat: this.heat,
       recall: () => (this.weather.phase === 'rain' ? CONFIG.weather.recall[1] : this.weather.phase === 'overcast' ? CONFIG.weather.recall[0] : 0),
     });
     this.bees.generate();
+    this.heat.update(0, this.weather.air(this.clock.hour), this.bees.list, this.comb);
     this.addSystem('brood', (dt) => {
       this.broodClock += dt;
       if (this.broodClock < 1) return;
+      const step = this.broodClock;
+      const temp = this.heat.temp;
       this.comb.develop(
-        this.broodClock,
+        step,
         (cell) => this.bees.emerge(cell),
         () => this.bees.starved++,
+        (cell) => broodRate(temp[SITE_HEAT[cellSite(cell)]]),
+        (cell) => {
+          const r = broodRisk(temp[SITE_HEAT[cellSite(cell)]]);
+          if (r <= 0 || !this.rng.chance(r * step)) return false;
+          this.heat.chilled++;
+          return true;
+        },
       );
       this.broodClock = 0;
     });
     this.addSystem('weather', (dt) => this.weather.update(dt));
+    this.addSystem('heat', (dt) => this.heat.update(dt, this.weather.air(this.clock.hour), this.bees.list, this.comb));
     this.addSystem('bees', (dt) => this.bees.update(dt));
     this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour, this.weather.rain));
     this.saves.add(
@@ -70,6 +84,11 @@ export class BeeWorld extends Simulation<BeeRef> {
       'flowers',
       () => this.flowers.toSave(),
       (d: FlowerSave) => this.flowers.restore(d),
+    );
+    this.saves.add(
+      'heat',
+      () => this.heat.toSave(),
+      (d: HeatSave) => this.heat.restore(d),
     );
     this.saves.add(
       'weather',
@@ -169,7 +188,7 @@ export class BeeWorld extends Simulation<BeeRef> {
 const COMPASS = ['dir.e', 'dir.se', 'dir.s', 'dir.sw', 'dir.w', 'dir.nw', 'dir.n', 'dir.ne'] as const;
 const fail = (key: Parameters<typeof L>[0]): ToolResult => ({ ok: false, msg: L(key) });
 
-const SAVE_VERSION = 9;
+const SAVE_VERSION = 10;
 
 export interface BeeSaveData {
   version: number;

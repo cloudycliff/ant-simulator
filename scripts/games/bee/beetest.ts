@@ -1,6 +1,6 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -134,6 +134,7 @@ let badFlight = 0;
 const garden = CONFIG.garden.size / 2;
 const stepT0 = performance.now();
 let hand300 = 0;
+const heat = { lo: Infinity, hi: -Infinity, top: -Infinity, heaters: 0, fanners: 0 };
 for (let s = 0; s < CONFIG.clock.dayLength; s += 10) {
   run(w, 10);
   if (s === 290) hand300 = bees.handoffs;
@@ -146,6 +147,12 @@ for (let s = 0; s < CONFIG.clock.dayLength; s += 10) {
     if (Math.abs(p.x) > garden || Math.abs(p.z) > garden || p.y < w.groundAt(p.x, p.z) || p.y > 1000 || !Number.isFinite(p.x + p.y + p.z)) badFlight++;
   }
   maxOut = Math.max(maxOut, out);
+  const h = w.heat;
+  heat.lo = Math.min(heat.lo, h.broodMean);
+  heat.hi = Math.max(heat.hi, h.broodMean);
+  heat.top = Math.max(heat.top, h.broodMax);
+  heat.heaters = Math.max(heat.heaters, h.heating);
+  heat.fanners = Math.max(heat.fanners, h.fanning);
   if (w.clock.hour > 23 || w.clock.hour < 3) outAtNight = Math.max(outAtNight, out);
 }
 const stepMs = (performance.now() - stepT0) / (CONFIG.clock.dayLength * 30);
@@ -154,6 +161,9 @@ check('采空的花丛一天里长回来、不超过满', patches.every((p) => p
 check('蜂箱周围的地面是平的', w.groundAt(0, 0) === 0 && w.groundAt(40, -30) === 0);
 const ms = performance.now() - t0;
 const c1 = comb.census().counts;
+check('温度：一天里育儿区的平均温度在 33～36.5 °C，没有格子热过 cook', heat.lo > 33 && heat.hi < 36.5 && heat.top < CONFIG.heat.cook, `平均 ${heat.lo.toFixed(1)}～${heat.hi.toFixed(1)}，最热的格 ${heat.top.toFixed(1)} °C`);
+check('温度：凉的时候有蜂产热、热的时候有蜂扇风', heat.heaters > 20 && heat.fanners > 5, `最多 ${heat.heaters} 只产热、${heat.fanners} 只扇风`);
+check('温度：冻死、热死的子很少', w.heat.chilled < (c0.egg + c0.larva + c0.capped) * 0.01, `${w.heat.chilled} 个`);
 check('一天里有子羽化成蜂', bees.births > 0 && bees.list.filter((b) => b.age < CONFIG.clock.dayLength).length > 0, `${bees.births} 只`);
 check('一天后蜂都还站在巢脾或框条上', offComb() === 0);
 const face1 = bees.list.filter((b) => b.face === 1).length;
@@ -276,6 +286,8 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   const nectar = () => wild.reduce((s, p) => s + p.nectar / nectarCap(p), 0) / wild.length;
   const out0 = outside();
   Wx.startRain();
+  // 雨势定成大雨，冲淡花蜜的多少才不随随机数变
+  Wx.strength = 0.9;
   run(x, CONFIG.weather.overcast + 5);
   const cool = Wx.air(x.clock.hour);
   const cloud = Wx.cloud;
@@ -351,7 +363,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x' }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', lo: 1, hi: 2, f: 3 }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

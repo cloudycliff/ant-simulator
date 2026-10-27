@@ -9,6 +9,7 @@ import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteU, siteV, type Comb }
 import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './flight';
 import { landingPoint, patchOpenness, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
+import { HEAT, heatAt, type Heat } from './heat';
 
 const B = CONFIG.bees;
 const C = CONFIG.care;
@@ -18,6 +19,13 @@ const F = CONFIG.forage;
 const D = CONFIG.dance;
 const S = CONFIG.shift;
 const SPECIES = CONFIG.flowers.species;
+const HT = CONFIG.heat;
+/** 每个走路格在哪个温度格 */
+const NODE_HEAT = (() => {
+  const a = new Int16Array(NODES);
+  for (let n = 0; n < NODES; n++) a[n] = heatAt(nodeU(n), nodeV(n));
+  return a;
+})();
 
 /** 每个位置在育儿区（0）、外面放花粉的一圈（1）还是再往外放花蜜（2）；按开局育儿区的椭圆，不随蜂群变 */
 const ZONE = (() => {
@@ -79,11 +87,15 @@ export const ACTS = [
   'goReceive',
   'receive',
   'takeNectar',
+  'goHeat',
+  'heat',
+  'goFan',
+  'fan',
 ] as const;
 export type Act = (typeof ACTS)[number];
 
 /** 要去的地方各有一张路程场 */
-const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance', 'floor'] as const;
+const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance', 'floor', 'cold'] as const;
 type FieldKey = (typeof FIELD_KEYS)[number];
 
 /** 行为协程交给运动层的指令；t 是剩下的秒数，执行时就地减，存档时连进度一起存 */
@@ -115,7 +127,10 @@ export type Cmd =
   | { k: 'meet'; t: number }
   | { k: 'give'; t: number }
   /** 内勤蜂停着等采集蜂来交花蜜；结果是接没接到 */
-  | { k: 'receive'; t: number };
+  | { k: 'receive'; t: number }
+  /** 停在子脾上振翅产热；停在巢门边背着巢门扇风 */
+  | { k: 'heat'; t: number }
+  | { k: 'fan'; t: number };
 /** 跳舞：中心 (cu, cv)，摆动的方向 a（巢面里的角度），摆动段 w 秒、长 len cm（w 为 0 是圆舞）；还剩 n 圈，这一圈过了 ph 秒 */
 export type DanceCmd = { k: 'dance'; cu: number; cv: number; a: number; w: number; len: number; n: number; ph: number };
 type Routine = CoreRoutine<Cmd>;
@@ -183,7 +198,7 @@ export class Bee {
   haul = 0;
   /** 跟舞读出来、还没去的地方 */
   aim: Aim | null = null;
-  /** 只给画面：这一步在摆动（1）还是在颤抖（2） */
+  /** 只给画面：这一步在摆动（1）、颤抖（2）还是振翅产热（3） */
   waggle = 0;
   act: Act = 'rest';
   readonly brain = new Behavior<Cmd>();
@@ -246,6 +261,8 @@ export interface BeesSave {
   laid: number;
   starved: number;
   hungry: number;
+  coldNeed: number;
+  hotNeed: number;
 }
 
 /** 蜂在巢外要知道的：花丛、此刻几点、太阳的方位（atan2(z, x)）、地面多高；天气能不能出巢、在外面的蜂每秒往回飞的机会 */
@@ -256,6 +273,7 @@ export interface BeeEnv {
   ground: (x: number, z: number) => number;
   flyable: () => boolean;
   recall: () => number;
+  heat: Heat;
 }
 
 /**
@@ -292,6 +310,9 @@ export class Bees {
   pollenNeed = 0.5;
   /** 缺蜜程度 0..1，储蜜在 honeyTarget 时是 0.5；也是每 10 秒算一次 */
   honeyNeed = 0.5;
+  /** 子脾冷、热的程度 0..1（冷的、热的子占多少），也是每 10 秒算一次（T-021） */
+  coldNeed = 0;
+  hotNeed = 0;
   /** 每种分工的蜂分工日龄长得多快（按 ROLE_KEYS），和缺蜜、缺粉一起算 */
   pace = ROLE_KEYS.map(() => 1);
   /** 缺哺育蜂时退回去哺育的内勤蜂、守卫 */
@@ -467,6 +488,20 @@ export class Bees {
    * 再多就有内勤蜂、守卫退回去哺育；采集蜂少了，内勤蜂、守卫提前去采集，多了推后
    */
   private assess(): void {
+    const ht = this.env.heat;
+    let cold = 0;
+    let hot = 0;
+    let all = 0;
+    for (let i = 0; i < HEAT.n; i++) {
+      const n = ht.brood[i];
+      if (!n) continue;
+      const t = ht.temp[i];
+      all += n;
+      cold += n * clamp((HT.ideal[0] - t) / 2, 0, 1);
+      hot += n * clamp((t - HT.ideal[1]) / 2, 0, 1);
+    }
+    this.coldNeed = all ? r4(cold / all) : 0;
+    this.hotNeed = all ? r4(hot / all) : 0;
     const c = this.comb.census();
     this.pollenNeed = clamp((D.pollenTarget - c.pollenCells) / (D.pollenTarget / 2), 0, 1);
     this.honeyNeed = clamp((D.honeyTarget - c.honeyCells) / D.honeySpan + 0.5, 0, 1);
@@ -675,6 +710,17 @@ export class Bees {
         }
         if ((c.t -= dt) > 0) return false;
         b.brain.result = false;
+        return true;
+      }
+      case 'heat':
+      case 'fan': {
+        this.settle(b);
+        if (c.k === 'heat') b.waggle = 3;
+        else b.h = turnToward(b.h, 0, B.turn, dt);
+        // 焐热了、凉下来了就不用再待着
+        const done = c.k === 'heat' ? this.env.heat.temp[heatAt(b.u, b.v)] >= HT.ideal[1] - 0.5 : this.hotNeed <= 0.01;
+        if ((c.t -= dt) > 0 && !done) return false;
+        this.unpark(b);
         return true;
       }
       case 'sip':
@@ -990,7 +1036,7 @@ export class Bees {
   private field(key: FieldKey): Field {
     const f = this.fields[key];
     const now = this.now();
-    const every = key === 'entrance' || key === 'floor' ? Infinity : C.refresh[key];
+    const every = key === 'entrance' || key === 'floor' ? Infinity : key === 'cold' ? HT.refresh : C.refresh[key];
     if (f.shape !== this.map.shape || now - f.at >= every) f.compute(this.map, this.sources(key), now);
     return f;
   }
@@ -1016,6 +1062,18 @@ export class Bees {
         let near = Infinity;
         for (let n = 0; n < NODES; n++) if (m[n] === 1 && e[face * NODES + n] < near) near = e[face * NODES + n];
         for (let n = 0; n < NODES; n++) if (m[n] === 1 && e[face * NODES + n] <= near + D.floor) yield face * NODES + n;
+      }
+      return;
+    }
+    if (key === 'cold') {
+      // 育儿区里比该有的温度低的格
+      const ht = this.env.heat;
+      const m = this.map.walk;
+      for (let n = 0; n < NODES; n++) {
+        const i = NODE_HEAT[n];
+        if (m[n] !== 1 || ht.brood[i] < HT.broodCells || ht.temp[i] >= HT.ideal[0]) continue;
+        yield n;
+        yield n + NODES;
       }
       return;
     }
@@ -1092,7 +1150,11 @@ export class Bees {
     if (b.caste === CASTE.queen) return yield* this.queenTask(b);
     if (b.crop < B.hungry) return yield* this.eat(b);
     if (b.caste === CASTE.drone) return yield* this.idle(b, 0.6);
-    switch (roleOf(b)) {
+    const role = roleOf(b);
+    // 子脾冷了年轻的蜂去抱团产热，热了去巢门扇风（T-021）
+    if (this.coldNeed > 0 && b.load <= 0 && (role === 'cleaner' || role === 'house') && this.rng.chance(this.coldNeed * HT.heaters)) return yield* this.warm(b);
+    if (this.hotNeed > 0 && b.load <= 0 && (role === 'house' || role === 'guard') && this.rng.chance(this.hotNeed * HT.fanners)) return yield* this.fan(b);
+    switch (role) {
       case 'cleaner':
         return yield* this.clean(b);
       case 'nurse':
@@ -1474,6 +1536,22 @@ export class Bees {
     yield* this.maybeRest(b);
   }
 
+  /** 走到冷的子脾上，停着振翅产热 */
+  private *warm(b: Bee): Routine {
+    b.act = 'goHeat';
+    if (!((yield { k: 'go', f: 'cold', near: 0, t: 60 }) as boolean)) return yield* this.idle(b);
+    b.act = 'heat';
+    yield { k: 'heat', t: this.rng.range(HT.hold[0], HT.hold[1]) };
+  }
+
+  /** 走到巢门边扇风：中蜂扇风时头背着巢门（意蜂朝着巢门，BALANCE） */
+  private *fan(b: Bee): Routine {
+    b.act = 'goFan';
+    if (!((yield { k: 'go', f: 'entrance', near: this.rng.int(1, 8), t: 60 }) as boolean)) return yield* this.idle(b);
+    b.act = 'fan';
+    yield { k: 'fan', t: this.rng.range(HT.hold[0], HT.hold[1]) };
+  }
+
   /** 内勤蜂：带着接来的花蜜先放下；有花开着时一部分去巢门附近等着接蜜（颤抖舞之后更多） */
   private *house(b: Bee): Routine {
     if (b.load > 0) return yield* this.store(b);
@@ -1544,6 +1622,8 @@ export class Bees {
       laid: this.laid,
       starved: this.starved,
       hungry: this.hungry,
+      coldNeed: this.coldNeed,
+      hotNeed: this.hotNeed,
     };
   }
 
@@ -1583,6 +1663,8 @@ export class Bees {
     this.laid = d.laid;
     this.starved = d.starved;
     this.hungry = d.hungry;
+    this.coldNeed = d.coldNeed;
+    this.hotNeed = d.hotNeed;
     for (const f of Object.values(this.fields)) f.at = -Infinity;
   }
 }

@@ -7,10 +7,11 @@ import { ToolController, type ToolDef } from '../../core/ui/tools';
 import { wrapAngle } from '../../core/util/math';
 import { CONFIG } from './config';
 import { BeeView, HIVE_BOX } from './view';
-import { MAP_COLORS, MAP_KEYS, ROLE_COLORS } from './palette';
+import { HEAT_COLORS, MAP_COLORS, MAP_KEYS, ROLE_COLORS } from './palette';
 import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim/bees';
 import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
+import { SITE_HEAT } from './sim/heat';
 import { SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
@@ -81,6 +82,7 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     { id: 'dance', label: () => t('ui.dance'), key: 'V', on: () => view.dance.on, toggle: () => (view.dance.on = !view.dance.on) },
     { id: 'roles', label: () => t('ui.roles'), key: 'T', on: () => view.bees.roles, toggle: () => (view.bees.roles = !view.bees.roles) },
     { id: 'cells', label: () => t('ui.cells'), key: 'C', on: () => view.comb.contentMap, toggle: () => (view.comb.contentMap = !view.comb.contentMap) },
+    { id: 'heat', label: () => t('ui.heat'), key: 'K', on: () => view.heat.on, toggle: () => (view.heat.on = !view.heat.on) },
   ];
   return {
     shadowLight: view.env.sun,
@@ -133,6 +135,7 @@ function cellInfo(w: BeeWorld, cell: number): string {
   });
   const drone = cb.drone[site] === 1;
   let body = kv(t('info.where'), where) + kv(t('info.caste'), t(drone ? 'info.drone' : 'info.worker'));
+  body += kv(t('info.temp'), t('info.tempValue', { t: w.heat.temp[SITE_HEAT[site]].toFixed(1) }));
   let key: (typeof CONTENT_KEYS)[number] | 'building';
   if (cb.build[site] < 1) {
     key = 'building';
@@ -284,6 +287,9 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.brood'), String(n.egg + n.larva + n.capped))}
       ${sub(t('colony.eggs'), n.egg)}${sub(t('colony.larvae'), n.larva)}${sub(t('colony.capped'), n.capped)}
       ${B.starved ? sub(t('colony.starved'), B.starved) : ''}
+      ${w.heat.chilled ? sub(t('colony.chilled'), w.heat.chilled) : ''}
+      ${row(t('colony.broodTemp'), t('colony.broodTempValue', { t: w.heat.broodMean.toFixed(1), lo: w.heat.broodMin.toFixed(1), hi: w.heat.broodMax.toFixed(1) }))}
+      ${row(t('colony.climate'), t('colony.climateValue', { h: w.heat.heating, f: w.heat.fanning }))}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
       <h3>${t('colony.forage')}</h3>
@@ -324,9 +330,16 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
             [ROLE_COLORS.queen, t('caste.queen')],
           ]);
         if (view.comb.contentMap) html += chips(t('legend.cells'), MAP_KEYS.map((k) => [MAP_COLORS[k], t(`legend.cell.${k}`)]));
+        if (view.heat.on) {
+          const [a, b] = CONFIG.heat.ideal;
+          const stops = HEAT_COLORS.filter(([v]) => v !== b);
+          const label = (v: number, i: number) =>
+            v === a ? t('legend.heatIdeal', { a, b }) : t(i === 0 ? 'legend.heatBelow' : i === stops.length - 1 ? 'legend.heatAbove' : 'legend.heatDeg', { t: v });
+          html += chips(t('legend.heat'), stops.map(([v, c], i): [number, string] => [c, label(v, i)]));
+        }
         return html;
       },
-      visible: () => view.bees.roles || view.comb.contentMap,
+      visible: () => view.bees.roles || view.comb.contentMap || view.heat.on,
     },
     help: {
       mouse: ['help.move', 'help.mouse', 'help.click', 'help.follow', 'help.views', 'help.tools'],

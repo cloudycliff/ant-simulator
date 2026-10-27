@@ -164,10 +164,12 @@ const TAU = Math.PI * 2;
 const WING_FLY = [1, 1];
 const WING_FAN = [0.55, 0.8];
 const WING_WAGGLE = [0.2, 0.3];
+/** 振翅产热：翅膀收着，飞行肌空转，只看得出一点颤 */
+const WING_SHIVER = [0.05, 0.12];
 const WING_REST = [0, 0];
-/** 摇摆舞的摆动段身子左右摆（每秒 13 次），颤抖舞抖得小些（cm） */
+/** 摇摆舞的摆动段身子左右摆（每秒 13 次），颤抖舞抖得小些，振翅产热只微微颤（cm） */
 const SHAKE_HZ = 13;
-const SHAKE = [0, 0.12, 0.05];
+const SHAKE = [0, 0.12, 0.05, 0.015];
 
 /**
  * 蜂身的朝向：巢面上背朝外；绕边时背从这一面的法线转到边的外侧再转到另一面。
@@ -310,7 +312,7 @@ export class BeesView {
       if (lod === 0) this.anim.setXYZ(n[lod], gs.g, t * RA.antennaHz * TAU + b.id, b.out === 2 ? 1 : 0);
       mesh.setColorAt(n[lod]++, this.roles ? tintOf(b) : CASTE_TINT[b.caste]);
       if (lod < 2 && !this.fade) {
-        const [spread, beat] = b.out === 2 ? WING_FLY : b.act === 'ripen' ? WING_FAN : b.waggle === 1 ? WING_WAGGLE : WING_REST;
+        const [spread, beat] = b.out === 2 ? WING_FLY : b.act === 'ripen' || b.act === 'fan' ? WING_FAN : b.waggle === 1 ? WING_WAGGLE : b.waggle === 3 ? WING_SHIVER : WING_REST;
         this.wingAnim.setXYZ(nw, spread, beat, t * RA.wingHz * TAU + b.id * 2.3);
         this.wings.setMatrixAt(nw++, _m);
       }
