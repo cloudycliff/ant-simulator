@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CONFIG } from './config';
-import { CASTE, type Bee } from './sim/bees';
+import { ROLE_COLORS } from './palette';
+import { CASTE, roleOf, type Bee } from './sim/bees';
 import type { BeeWorld } from './world';
 
 const B = CONFIG.bees;
@@ -74,6 +75,8 @@ function models(): { near: THREE.BufferGeometry; mid: THREE.BufferGeometry; far:
 /** 蜂王身子长、发红褐；雄蜂粗壮、发黑 */
 const CASTE_SCALE = [v3(1, 1, 1), v3(1.15, 1.25, 1.3), v3(1.45, 1.05, 1.05)];
 const CASTE_TINT = [new THREE.Color(1, 1, 1), new THREE.Color(0.72, 0.68, 0.64), new THREE.Color(1, 0.78, 0.6)];
+const ROLE_TINT = Object.fromEntries(Object.entries(ROLE_COLORS).map(([k, c]) => [k, new THREE.Color(c)])) as Record<keyof typeof ROLE_COLORS, THREE.Color>;
+const tintOf = (b: Bee) => (b.caste === CASTE.queen ? ROLE_TINT.queen : b.caste === CASTE.drone ? ROLE_TINT.drone : ROLE_TINT[roleOf(b)!]);
 
 const _m = new THREE.Matrix4();
 const _f = new THREE.Vector3();
@@ -117,13 +120,16 @@ function orient(b: Bee, fwd: THREE.Vector3, up: THREE.Vector3): void {
   fwd.set(Math.cos(b.h), Math.sin(b.h), 0);
 }
 
-/** 巢里的蜂：每级细节一个实例网格，画面外和巢脾背后的不画；淡化时半透明、不画翅膀（P-009） */
+/** 巢里的蜂：每级细节一个实例网格，画面外和巢脾背后的不画；淡化时半透明、不画翅膀（P-009）；分工着色时整只蜂涂成分工的颜色 */
 export class BeesView {
   readonly group = new THREE.Group();
   fade = false;
+  roles = false;
   private meshes: THREE.InstancedMesh[] = [];
   private wings!: THREE.InstancedMesh;
   private bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 });
+  private roleMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
+  private colored = false;
   private wingMat = new THREE.MeshStandardMaterial({ color: 0xe8eef4, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, roughness: 0.2 });
   private geo = models();
   private cap = 0;
@@ -154,7 +160,8 @@ export class BeesView {
       this.group.add(m);
       return m;
     };
-    this.meshes = [make(this.geo.near, this.bodyMat), make(this.geo.mid, this.bodyMat), make(this.geo.far, this.bodyMat)];
+    const mat = this.roles ? this.roleMat : this.bodyMat;
+    this.meshes = [make(this.geo.near, mat), make(this.geo.mid, mat), make(this.geo.far, mat)];
     this.wings = make(this.geo.wings, this.wingMat);
     this.wings.renderOrder = 6;
   }
@@ -171,7 +178,11 @@ export class BeesView {
     if (list.length > this.cap) this.alloc(Math.ceil(list.length * 1.5));
     if (this.fade !== this.faded) {
       this.faded = this.fade;
-      Object.assign(this.bodyMat, { transparent: this.fade, opacity: this.fade ? RB.fade : 1, depthWrite: !this.fade, needsUpdate: true });
+      for (const m of [this.bodyMat, this.roleMat]) Object.assign(m, { transparent: this.fade, opacity: this.fade ? RB.fade : 1, depthWrite: !this.fade, needsUpdate: true });
+    }
+    if (this.roles !== this.colored) {
+      this.colored = this.roles;
+      for (const m of this.meshes) m.material = this.roles ? this.roleMat : this.bodyMat;
     }
     _fr.setFromProjectionMatrix(_pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     const cam = camera.position;
@@ -192,7 +203,7 @@ export class BeesView {
       _m.setPosition(_p);
       const mesh = this.meshes[lod];
       mesh.setMatrixAt(n[lod], _m);
-      mesh.setColorAt(n[lod]++, CASTE_TINT[b.caste]);
+      mesh.setColorAt(n[lod]++, this.roles ? tintOf(b) : CASTE_TINT[b.caste]);
       if (lod < 2 && !this.fade) this.wings.setMatrixAt(nw++, b.out === 2 ? _m.multiply(FLAP) : _m);
     }
     this.meshes.forEach((m, i) => {

@@ -99,7 +99,7 @@ export interface GameUi<R extends EntityRef> {
   info: InfoPanels<R>;
   /** 统计面板：html 在创建时写入一次，draw 在打开时调用，force 为真时必须重画 */
   stats?: { html: string; draw(force: boolean): void };
-  /** 图例（比如信息素颜色） */
+  /** 图例（比如信息素颜色）；html 可以随显示开关变，外壳每次刷新面板时比一下，变了才重写 */
   legend?: { html(): string; visible(): boolean };
   /** 帮助面板的各行；手机布局里 help.events 换成 help.dockEvents */
   help: { mouse: MsgKey[]; touch: MsgKey[] };

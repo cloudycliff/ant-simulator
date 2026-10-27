@@ -83,6 +83,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   private toastEl = document.getElementById('toast')!;
   private statsEl = document.getElementById('stats')!;
   private legendEl = document.getElementById('legend')!;
+  private legendHtml: string | null = null;
   private toolEl = document.getElementById('tool')!;
   private toolKey = '';
   quality: Quality | null = null;
@@ -361,7 +362,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     // 手机布局的“添加到主屏幕”在“更多”菜单里，平板放在帮助里，免得挤占顶栏
     const install = this.compact ? '' : `<div class="install hidden" id="install-row"><button data-a="install" id="btn-install">${t('ui.install')}</button><span>${t('ui.installTitle')}</span></div>`;
     this.helpEl.innerHTML = `<b>${t('help.title')}</b>` + lines.map((k) => `<div>${t(k)}</div>`).join('') + install;
-    this.legendEl.innerHTML = this.ui.legend?.html() ?? '';
+    this.legendHtml = null;
   }
 
   /** 桌面顶栏的下拉菜单（语言、亮度） */
@@ -500,7 +501,13 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     this.top.querySelectorAll<HTMLElement>('#quality-opts button').forEach((b) => b.classList.toggle('on', QUALITY_MODES[Number(b.dataset.v)] === this.quality?.mode));
     for (const v of this.views) document.getElementById(`btn-${v.id}`)?.classList.toggle('on', v.on());
     this.statsEl.classList.toggle('hidden', !this.state.stats);
-    this.legendEl.classList.toggle('hidden', !this.ui.legend?.visible());
+    const legendOn = !!this.ui.legend?.visible();
+    const legend = legendOn ? this.ui.legend!.html() : '';
+    if (legend !== this.legendHtml) {
+      this.legendHtml = legend;
+      this.legendEl.innerHTML = legend;
+    }
+    this.legendEl.classList.toggle('hidden', !legendOn);
     if (this.state.stats && this.ui.stats) {
       this.ui.stats.draw(this.statsDirty);
       this.statsDirty = false;

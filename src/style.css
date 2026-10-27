@@ -650,6 +650,20 @@ body.tooling canvas {
 #legend i {
   flex: none;
 }
+#legend .chips {
+  flex-wrap: wrap;
+  column-gap: 12px;
+}
+#legend .chips span {
+  white-space: nowrap;
+}
+#legend .chips i {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+#legend .chips + b {
+  display: block;
+  margin-top: 4px;
+}
 #legend i {
   display: inline-block;
   width: 22px;

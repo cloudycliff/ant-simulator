@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp } from '../../core/util/math';
 import { CONFIG } from './config';
-import { LARVA_GAP, PALETTE, glossy, larvaTurn } from './palette';
+import { MAP_COLORS, MAP_KEYS, LARVA_GAP, PALETTE, glossy, larvaTurn, type MapKey } from './palette';
 import { CELL, COMB_H, GRID, SITES, cellPos, siteAt, type Comb } from './sim/comb';
 
 const H = CONFIG.hive;
@@ -19,6 +19,33 @@ const DIRTY = 0.62;
 /** 巢房内容变得很勤（每步都有蜂在改），状态纹理和近处的实例最多隔这么久（ms）才重做一次 */
 const SYNC_MS = 250;
 const f = (x: number) => x.toFixed(6);
+/** 内容着色时房壁是房里颜色的几成 */
+const MAP_WALL = 0.5;
+const ci = (k: MapKey) => `${MAP_KEYS.indexOf(k)}.0`;
+
+/** 巢房在内容着色里是哪一类（和着色器里的分类一样） */
+function contentOf(comb: Comb, cell: number): MapKey {
+  const site = cell % SITES;
+  if (comb.build[site] < 1) return 'building';
+  switch (comb.content[cell]) {
+    case CELL.egg:
+      return 'egg';
+    case CELL.larva:
+      return 'larva';
+    case CELL.capped:
+      return comb.drone[site] ? 'droneCap' : 'capped';
+    case CELL.nectar:
+      return 'nectar';
+    case CELL.honey:
+      return 'honey';
+    case CELL.cappedHoney:
+      return 'cappedHoney';
+    case CELL.pollen:
+      return 'pollen';
+    default:
+      return comb.amount[cell] > 0 ? 'dirty' : 'empty';
+  }
+}
 
 /** 着色器平板：按巢面坐标找所在的巢房，从状态纹理取内容（换算和 sim/comb.ts 的 siteAt 一样） */
 const DEFINES = `
@@ -37,6 +64,7 @@ const DEFINES = `
 #define COMB_HALF ${f(H.combHalf)}
 #define BASE_Y ${f(H.baseY)}
 #define LARVA_GAP ${f(LARVA_GAP)}
+#define MAP_WALL ${f(MAP_WALL)}
 `;
 
 const FRAG_HEAD = `
@@ -47,6 +75,8 @@ uniform float uNear;
 uniform float uNearFace;
 uniform vec3 uWax, uNewWax, uBottom, uEgg, uLarva, uCapped, uDroneCap, uNectar, uHoney, uCappedHoney;
 uniform vec3 uPollen[${PALETTE.pollen.length}];
+uniform float uMap;
+uniform vec3 uMapCol[${MAP_KEYS.length}];
 varying vec2 vComb;
 varying vec3 vTanU;
 varying vec3 vTanV;
@@ -140,10 +170,26 @@ float combRough = 0.85;
     inner = mix(inner, uPollen[int(pk)] * (0.88 + 0.2 * grain), 0.4 + 0.6 * amount);
     tilt = dir * t * 0.2;
   }
+  // 内容着色：每类一种平的颜色，房壁压暗（分类和 contentOf 一样）
+  if (uMap > 0.5) {
+    float mi = ${ci('empty')};
+    if (build < 1.0) mi = ${ci('building')};
+    else if (content == ${CELL.empty}.0 && amount > 0.0) mi = ${ci('dirty')};
+    else if (content == ${CELL.egg}.0) mi = ${ci('egg')};
+    else if (content == ${CELL.larva}.0) mi = ${ci('larva')};
+    else if (content == ${CELL.capped}.0) mi = drone > 0.5 ? ${ci('droneCap')} : ${ci('capped')};
+    else if (content == ${CELL.nectar}.0) mi = ${ci('nectar')};
+    else if (content == ${CELL.honey}.0) mi = ${ci('honey')};
+    else if (content == ${CELL.cappedHoney}.0) mi = ${ci('cappedHoney')};
+    else if (content == ${CELL.pollen}.0) mi = ${ci('pollen')};
+    inner = uMapCol[int(mi)];
+    tilt = vec2(0.0);
+    combRough = 0.85;
+  }
 
   // 房壁：顶上圆，和房里交界的地方压暗一线
   float wallMix = smoothstep(edge - 0.012, edge + 0.004, hd);
-  vec3 wallCol = (build < 1.0 ? uNewWax : uWax) * (0.95 + 0.15 * clamp((hd - edge) / wallW, 0.0, 1.0));
+  vec3 wallCol = uMap > 0.5 ? inner * MAP_WALL : (build < 1.0 ? uNewWax : uWax) * (0.95 + 0.15 * clamp((hd - edge) / wallW, 0.0, 1.0));
   float ao = 1.0 - 0.35 * smoothstep(edge - 0.05, edge, hd) * (1.0 - wallMix);
   vec3 sharp = mix(inner * ao, wallCol, wallMix);
   tilt = mix(tilt, dir * (2.0 * clamp((hd - edge) / wallW, 0.0, 1.0) - 1.0) * 0.5, wallMix);
@@ -263,6 +309,8 @@ export class CombView {
       uHoney: { value: col(PALETTE.honey) },
       uCappedHoney: { value: col(PALETTE.cappedHoney) },
       uPollen: { value: PALETTE.pollen.map(col) },
+      uMap: { value: 0 },
+      uMapCol: { value: MAP_KEYS.map((k) => col(MAP_COLORS[k])) },
     };
     for (const face of [0, 1]) {
       const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
@@ -315,6 +363,16 @@ export class CombView {
     this.mark.renderOrder = 21;
     this.mark.visible = false;
     this.group.add(this.mark);
+  }
+
+  /** 巢房内容着色的视图 */
+  get contentMap(): boolean {
+    return this.uniforms.uMap.value > 0.5;
+  }
+
+  set contentMap(on: boolean) {
+    this.uniforms.uMap.value = on ? 1 : 0;
+    this.nearFace = -1;
   }
 
   private nearMeshes(): THREE.InstancedMesh[] {
@@ -413,10 +471,13 @@ export class CombView {
     let nv = 0;
     const near2 = near * near;
     const cp = this.nearCam;
+    const map = this.contentMap;
+    let mapColor = 0;
     const put = (mesh: THREE.InstancedMesh, i: number, z: number, sx: number, sz: number, color: number, k = 1, rot: THREE.Quaternion = q) => {
       _p.set(_cell.x, _cell.y, out * z);
       mesh.setMatrixAt(i, _m.compose(_p, rot, _s.set(sx, sx, sz)));
-      mesh.setColorAt(i, _c.set(color).multiplyScalar(k));
+      if (map) mesh.setColorAt(i, _c.set(mapColor).multiplyScalar(mesh === this.walls ? MAP_WALL : mesh === this.blobs && color === PALETTE.bottom ? 0.4 : 1));
+      else mesh.setColorAt(i, _c.set(color).multiplyScalar(k));
     };
     for (let site = 0; site < SITES; site++) {
       const b = cb.build[site];
@@ -424,6 +485,7 @@ export class CombView {
       const cell = face * SITES + site;
       cellPos(cell, _cell);
       if ((_cell.x - cp.x) ** 2 + (_cell.y - cp.y) ** 2 + (_cell.z - cp.z) ** 2 >= near2) continue;
+      if (map) mapColor = MAP_COLORS[contentOf(cb, cell)];
       put(this.walls, nw++, MIDRIB + C.depth * b, 1, C.depth * b, b < 1 ? PALETTE.newWax : PALETTE.wax);
       if (b < 1) {
         put(this.layer, nl++, MIDRIB, 1, 0.01, PALETTE.newWax, 0.85);

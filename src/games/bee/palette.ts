@@ -17,6 +17,34 @@ export const PALETTE = {
   pollen: [0xf0be2c, 0xe5822a, 0xb4582e, 0xa8a656, 0xece2c4],
 };
 
+/** 分工着色的视图：和蜡黄、褐色的巢脾分得开的颜色；蜂王白色（像养蜂人在蜂王背上点的漆） */
+export const ROLE_COLORS = {
+  cleaner: 0x58d2e8,
+  nurse: 0xf272bc,
+  house: 0x6cd04a,
+  guard: 0xec4a3a,
+  forager: 0x4c74f2,
+  drone: 0x6e6e6e,
+  queen: 0xffffff,
+};
+
+/** 巢房内容着色的视图：子脾由浅到深的红、蜜由浅到深的蓝、花粉橙、空房暗。顺序就是着色器里的编号 */
+export const MAP_COLORS = {
+  building: 0x9c9c9c,
+  empty: 0x34302c,
+  dirty: 0x6e5438,
+  egg: 0xffe2ee,
+  larva: 0xf28aaa,
+  capped: 0xc8304e,
+  droneCap: 0x7c2a5c,
+  nectar: 0x9ed8ff,
+  honey: 0x3f8ae8,
+  cappedHoney: 0x1c4aa2,
+  pollen: 0xf49a1a,
+};
+export type MapKey = keyof typeof MAP_COLORS;
+export const MAP_KEYS = Object.keys(MAP_COLORS) as MapKey[];
+
 /** 幼虫蜷成 C 形，缺口朝哪边：按行列错开，平板和实例网格算法一样（弧度，巢面坐标里） */
 export const larvaTurn = (row: number, col: number) => (((row * 7 + col * 3) % 6) * Math.PI) / 3 + 0.4;
 /** C 形的缺口占的角度的一半 */

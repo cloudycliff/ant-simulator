@@ -7,6 +7,7 @@ import { ToolController, type ToolDef } from '../../core/ui/tools';
 import { wrapAngle } from '../../core/util/math';
 import { CONFIG } from './config';
 import { BeeView } from './view';
+import { MAP_COLORS, MAP_KEYS, ROLE_COLORS } from './palette';
 import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim/bees';
 import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
@@ -80,6 +81,8 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     { id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) },
     { id: 'fade', label: () => t('ui.fade'), key: 'B', on: () => view.bees.fade, toggle: () => (view.bees.fade = !view.bees.fade) },
     { id: 'dance', label: () => t('ui.dance'), key: 'V', on: () => view.dance.on, toggle: () => (view.dance.on = !view.dance.on) },
+    { id: 'roles', label: () => t('ui.roles'), key: 'T', on: () => view.bees.roles, toggle: () => (view.bees.roles = !view.bees.roles) },
+    { id: 'cells', label: () => t('ui.cells'), key: 'C', on: () => view.comb.contentMap, toggle: () => (view.comb.contentMap = !view.comb.contentMap) },
   ];
   return {
     shadowLight: view.env.sun,
@@ -93,7 +96,7 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     },
     syncViews: () => view.syncViews(),
     update: (_dt, f) => view.update(camera, dom.clientHeight, f.focus, f.following, f.selection),
-    ui: beeUi(w, ctx.following),
+    ui: beeUi(w, view, ctx.following),
   };
 }
 
@@ -234,7 +237,7 @@ function danceRows(w: BeeWorld, b: Bee): string {
   return '';
 }
 
-function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
+function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<BeeRef> {
   const row = (label: string, value: string) => `<div class="row">${label}<b>${value}</b></div>`;
   return {
     status: () => ({ icon: w.clock.isNight ? '🌙' : '☀️', text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status') }),
@@ -292,6 +295,23 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
       cell: (r) => cellInfo(w, r.id),
       flower: (r) => flowerInfo(w, r.id),
       bee: (r) => beeInfo(w, r.id, following()),
+    },
+    legend: {
+      html: () => {
+        const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
+        const chips = (title: string, items: [number, string][]) =>
+          `<b>${title}</b><div class="chips">${items.map(([c, s]) => `<span><i style="background:${hex(c)}"></i>${s}</span>`).join('')}</div>`;
+        let html = '';
+        if (view.bees.roles)
+          html += chips(t('legend.roles'), [
+            ...ROLE_KEYS.map((k): [number, string] => [ROLE_COLORS[k], t(`role.${k}`)]),
+            [ROLE_COLORS.drone, t('caste.drone')],
+            [ROLE_COLORS.queen, t('caste.queen')],
+          ]);
+        if (view.comb.contentMap) html += chips(t('legend.cells'), MAP_KEYS.map((k) => [MAP_COLORS[k], t(`legend.cell.${k}`)]));
+        return html;
+      },
+      visible: () => view.bees.roles || view.comb.contentMap,
     },
     help: {
       mouse: ['help.move', 'help.mouse', 'help.click', 'help.follow', 'help.views', 'help.tools'],

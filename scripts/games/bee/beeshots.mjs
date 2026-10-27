@@ -51,6 +51,12 @@ const SCENES = {
   planted: { q: '&hour=11&cam=150,260,-250,300,0,150', js: `${PLANT}; ${RUN(330 + 345)}` },
   sugar: { q: '&hour=11&cam=-30,90,330,0,45,400', js: `${PLANT}; ${RUN(60)}` },
   tool: { q: '&hour=11&cam=450,280,-750,700,0,-300', keys: ['Digit6', 'Digit6', 'Digit6', 'Digit6'], mouse: [640, 400] },
+  // 视图：分工着色、巢房着色（加淡化蜂看整框的内容）、贴近时的实例网格
+  roles: { q: '&hour=11&run=30&cam=0,103,40,0,100,0&view=roles' },
+  rolesout: { q: '&hour=11&run=30&cam=-150,160,120,-30,100,0&view=roles' },
+  cells: { q: '&hour=11&cam=0,103,58,0,103,0&view=cells,fade' },
+  cellsnear: { q: '&hour=11&cam=0,107,9,0,107,0&view=cells' },
+  both: { q: '&hour=11&cam=0,103,40,0,100,0&view=cells,roles' },
   en: { q: '&hour=11&lang=en' },
   endancer: { q: '&hour=11&run=120&select=bee:262&fly=1&lang=en', check: INFO },
 };

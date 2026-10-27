@@ -122,7 +122,7 @@
   - 可选：`onSelect`、`onToolApplied`、`action`（外壳不认识的按钮动作，比如信息面板里的“移除”）、`applyParams`（在 `?hour=` 之后、`?select=` 之前）
 - `FrameInfo`：`update` 的第二个参数，`time`（页面打开以来的秒数）、`focus`（视线落在表面上的点，或跟随的对象）、`selection`、`following`
 - `ViewToggle`：显示开关，`id`、`label`、`key`、`param`、`dock`、`on`、`toggle`。按钮、快捷键、`?view=`、手机底栏都由外壳生成
-- `GameUi`：面板内容，`status`、`perfExtra`、`panel`、`infoHint`、`info`、`stats`、`legend`、`help`。外壳管面板的位置、开合和手机抽屉，游戏只给 HTML
+- `GameUi`：面板内容，`status`、`perfExtra`、`panel`、`infoHint`、`info`、`stats`、`legend`、`help`。外壳管面板的位置、开合和手机抽屉，游戏只给 HTML。`legend.html()` 可以随显示开关变（外壳刷新面板时比较，变了才重写）
 - `InfoPanels`：每类实体一个信息面板函数，漏一类编译不过；`renderInfo(panels, ref)` 按类型调用
 - `CameraPose`：`[x, y, z, tx, ty, tz]`，相机位置和注视点
 
