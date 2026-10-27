@@ -1,15 +1,16 @@
 import * as THREE from 'three';
-import { t } from '../../core/i18n';
+import { L, t } from '../../core/i18n';
 import type { CameraPose, GameContext, GameModule, GameSession, GameUi, ViewToggle } from '../../core/app/game';
 import { svgIcon } from '../../core/app/shell';
 import { HeightfieldSpace } from '../../core/space/heightfield';
+import { ToolController, type ToolDef } from '../../core/ui/tools';
 import { wrapAngle } from '../../core/util/math';
 import { CONFIG } from './config';
 import { BeeView } from './view';
 import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim/bees';
 import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
-import { nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
+import { SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
 const H = CONFIG.hive;
@@ -53,11 +54,28 @@ export const beeGame: GameModule<BeeWorld, BeeRef, BeeSaveData, BeeSaveMeta> = {
   mount,
 };
 
+type ToolKind = 'plant' | 'sugar';
+/** 种花的选项：开局会长的几种花 */
+const PLANTABLE = CONFIG.flowers.species.map((_, i) => i).filter((i) => CONFIG.flowers.species[i].wild);
+const TOOLS: ToolDef<ToolKind>[] = [
+  {
+    kind: 'plant',
+    name: L('tool.plant'),
+    key: '6',
+    hint: L('tool.plantHint'),
+    options: PLANTABLE.map((i) => ({ label: L(`flower.${CONFIG.flowers.species[i].key}`), radius: CONFIG.flowers.species[i].plantR })),
+  },
+  { kind: 'sugar', name: L('tool.sugar'), key: '7', hint: L('tool.sugarHint'), options: [{ label: L('tool.dish'), radius: CONFIG.flowers.species[SUGAR].plantR + 4 }] },
+];
+
 const ICON = svgIcon('<path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5z"/><path d="M10 7.5l2.2 1.25v2.5L10 12.5l-2.2-1.25v-2.5z"/>');
 
 function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
   const { world: w, scene, camera, dom } = ctx;
   const view = new BeeView(w, scene);
+  const tools = new ToolController<ToolKind>(TOOLS, {
+    run: (def, option, p, _yaw, dry) => (def.kind === 'plant' ? w.plant(PLANTABLE[option], p.x, p.z, dry) : w.feed(p.x, p.z, dry)),
+  });
   const views: ViewToggle[] = [
     { id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) },
     { id: 'fade', label: () => t('ui.fade'), key: 'B', on: () => view.bees.fade, toggle: () => (view.bees.fade = !view.bees.fade) },
@@ -66,7 +84,7 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
   return {
     shadowLight: view.env.sun,
     views,
-    tools: null,
+    tools,
     pick: (x, y, tol) => pick(view, camera, dom, x, y, tol),
     // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）
     applyParams: (params) => {
@@ -138,17 +156,24 @@ function flowerInfo(w: BeeWorld, id: number): string {
   if (!p) return '';
   const sp = CONFIG.flowers.species[p.species];
   const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  const pct = (v: number, cap: number) => (cap > 0 ? t('info.percent', { p: Math.round((v / cap) * 100) }) : t('info.none'));
+  const hours = kv(t(p.species === SUGAR ? 'info.visitHours' : 'info.openHours'), t('info.hoursValue', { a: clockTime(sp.hours[0]), b: clockTime(sp.hours[1]) }));
+  if (p.species === SUGAR)
+    return `<h2>${t('flower.sugar')}</h2>
+    ${kv(t('info.syrup'), pct(p.nectar, nectarCap(p)))}
+    ${hours}
+    <p class="desc">${t('flowerDesc.sugar')}</p>`;
   const k = openness(sp, w.clock.hour);
   const rising = openness(sp, w.clock.hour + 0.1) > k;
-  const now = k >= 1 ? 'info.open' : k <= 0 ? 'info.closed' : rising ? 'info.opening' : 'info.closing';
-  const pct = (v: number, cap: number) => (cap > 0 ? t('info.percent', { p: Math.round((v / cap) * 100) }) : t('info.none'));
+  const now = p.grown < 1 ? 'info.growing' : k >= 1 ? 'info.open' : k <= 0 ? 'info.closed' : rising ? 'info.opening' : 'info.closing';
   return `<h2>${t('info.flower')} · ${t(`flower.${sp.key}`)}</h2>
     ${kv(t('info.plants'), t('info.plantsValue', { n: plantCount(p) }))}
-    ${kv(t('info.openHours'), t('info.hoursValue', { a: clockTime(sp.hours[0]), b: clockTime(sp.hours[1]) }))}
+    ${p.grown < 1 ? kv(t('info.grown'), t('info.grownValue', { p: Math.round(p.grown * 100), t: span((1 - p.grown) * CONFIG.tools.grow) })) : ''}
+    ${hours}
     ${kv(t('info.now'), t(now))}
     ${kv(t('info.nectar'), pct(p.nectar, nectarCap(p)))}
     ${kv(t('info.pollen'), pct(p.pollen, pollenCap(p)))}
-    <p class="desc">${t(`flowerDesc.${sp.key}`)}</p>`;
+    <p class="desc">${t(`flowerDesc.${sp.key}`)}${p.planted ? ` ${t('info.plantedNote')}` : ''}</p>`;
 }
 
 function beeInfo(w: BeeWorld, id: number, following: boolean): string {
@@ -170,7 +195,8 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
   if (role === 'forager') {
     const p = b.patch >= 0 ? w.flowers.get(b.patch) : undefined;
     const goods = t(b.goods ? 'info.goodsPollen' : 'info.goodsNectar');
-    body += kv(t('info.patch'), p ? t('info.patchValue', { flower: t(`flower.${CONFIG.flowers.species[p.species].key}`), goods }) : t('info.noPatch'));
+    const where = !p ? t('info.noPatch') : p.species === SUGAR ? t('info.patchSugar') : t('info.patchValue', { flower: t(`flower.${CONFIG.flowers.species[p.species].key}`), goods });
+    body += kv(t('info.patch'), where);
     if (b.load > 0) body += kv(t('info.load'), `${goods} ${t('info.percent', { p: Math.round(b.load * 100) })}`);
   }
   if (role === 'house' && b.load > 0) body += kv(t('info.load'), `${t('info.goodsNectar')} ${t('info.percent', { p: Math.round(b.load * 100) })}`);
@@ -235,6 +261,8 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
             else if (d < 0) late++;
           } else if (b.caste === CASTE.drone) drones++;
         }
+        const flowers = w.flowers.patches.filter((p) => p.species !== SUGAR);
+        const dishes = w.flowers.patches.filter((p) => p.species === SUGAR);
         return `
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
       ${row(t('colony.season'), t('colony.summer'))}
@@ -251,7 +279,8 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
       ${row(t('colony.dances'), t('colony.dancesValue', { d: B.dances, r: B.recruits, h: B.arrived ? Math.round((B.hits / B.arrived) * 100) : 0 }))}
       ${row(t('colony.handoff'), t('colony.handoffValue', { h: B.handoffs, s: B.selfStored, t: B.trembles }))}
       ${B.starved ? row(t('colony.starved'), String(B.starved)) : ''}
-      ${row(t('colony.flowers'), t('colony.flowersValue', { n: w.flowers.patches.length, o: w.flowers.patches.filter((p) => openness(CONFIG.flowers.species[p.species], w.clock.hour) > 0).length }))}
+      ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
+      ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
       <p class="desc">${t('colony.todo')}</p>`;
       },
     },
@@ -265,7 +294,7 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
       bee: (r) => beeInfo(w, r.id, following()),
     },
     help: {
-      mouse: ['help.move', 'help.mouse', 'help.click', 'help.follow', 'help.views'],
+      mouse: ['help.move', 'help.mouse', 'help.click', 'help.follow', 'help.views', 'help.tools'],
       touch: ['help.touchMove', 'help.touchTap'],
     },
   };

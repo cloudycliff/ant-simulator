@@ -9,8 +9,8 @@ export interface EntityRef {
 export interface EntityKind<R> {
   /** 现在的位置，不在了返回 null。可跟随的类型要返回对象自己的位置（跟随时每帧读一次） */
   pos?: (ref: R) => Point3 | null;
-  /** 相机飞过去时离它多远 */
-  viewDistance?: number;
+  /** 相机飞过去时离它多远；同一类里大小差得多时可以按对象给 */
+  viewDistance?: number | ((ref: R) => number);
   /**
    * 相机飞过去时从哪个方向看：从对象指向相机的方向，不必是单位向量；from 是相机现在的位置。
    * 不给或返回 null 时沿相机现在的方向，并抬高到俯看
@@ -44,7 +44,8 @@ export class EntityRegistry<R extends EntityRef> {
   }
 
   viewDistance(ref: R): number {
-    return this.kinds.get(ref.kind)?.viewDistance ?? this.defaultViewDistance;
+    const d = this.kinds.get(ref.kind)?.viewDistance;
+    return (typeof d === 'function' ? d(ref) : d) ?? this.defaultViewDistance;
   }
 
   viewDir(ref: R, from: Point3): Point3 | null {

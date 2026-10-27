@@ -1,4 +1,4 @@
-import { L, t } from '../../core/i18n';
+import { L, t, type Text } from '../../core/i18n';
 import { SaveSlot, type SaveMeta } from '../../core/platform/saveSlot';
 import type { Point3 } from '../../core/sim/events';
 import { Simulation } from '../../core/sim/simulation';
@@ -7,7 +7,8 @@ import { Noise2D } from '../../core/util/random';
 import { CONFIG } from './config';
 import { CELLS, COMB_H, Comb, cellFace, cellPos, type CombSave } from './sim/comb';
 import { Bees, type Bee, type BeesSave } from './sim/bees';
-import { Flowers, type FlowerSave } from './sim/flowers';
+import type { ToolResult } from '../../core/ui/tools';
+import { Flowers, SUGAR, type FlowerSave } from './sim/flowers';
 
 /** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
 export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number };
@@ -77,9 +78,9 @@ export class BeeWorld extends Simulation<BeeRef> {
     this.entities.define('flower', {
       pos: (r) => {
         const p = this.flowers.get(r.id);
-        return p ? { x: p.x, y: this.groundAt(p.x, p.z) + 30, z: p.z } : null;
+        return p ? { x: p.x, y: this.groundAt(p.x, p.z) + (p.species === SUGAR ? 45 : 30), z: p.z } : null;
       },
-      viewDistance: 450,
+      viewDistance: (r) => (this.flowers.get(r.id)?.species === SUGAR ? 110 : 450),
     });
     this.entities.define('bee', {
       pos: (r) => {
@@ -106,6 +107,46 @@ export class BeeWorld extends Simulation<BeeRef> {
     return out;
   }
 
+  /** 种一片花（species 不能是糖水）；dry 为真时只看能不能种 */
+  plant(species: number, x: number, z: number, dry = false): ToolResult {
+    const T = CONFIG.tools;
+    const sp = CONFIG.flowers.species[species];
+    if (this.flowers.patches.filter((p) => p.planted && p.species !== SUGAR).length >= T.maxPlanted) return { ok: false, msg: L('tool.tooManyPlanted', { n: T.maxPlanted }) };
+    const err = this.flowers.checkSpot(x, z, sp.plantR);
+    if (err) return fail(err);
+    if (dry) return { ok: true };
+    const p = this.flowers.add(this.ids.next('flower'), species, x, z, Math.floor(this.rng.next() * 2 ** 31));
+    const msg = L('tool.planted', { place: this.describePlace(x, z), flower: L(`flower.${sp.key}`) });
+    this.events.push(msg, { kind: 'flower', id: p.id });
+    return { ok: true, msg };
+  }
+
+  /** 放一碟糖水；点在已有的碟子上是添满 */
+  feed(x: number, z: number, dry = false): ToolResult {
+    const T = CONFIG.tools;
+    const dishes = this.flowers.patches.filter((p) => p.species === SUGAR);
+    const near = dishes.find((p) => Math.hypot(p.x - x, p.z - z) < T.refillR);
+    if (near) {
+      if (dry) return { ok: true };
+      near.nectar = CONFIG.flowers.species[SUGAR].nectar;
+      return { ok: true, msg: L('tool.refilled') };
+    }
+    if (dishes.length >= T.maxFeeders) return { ok: false, msg: L('tool.tooManyFeeders', { n: T.maxFeeders }) };
+    const err = this.flowers.checkSpot(x, z, CONFIG.flowers.species[SUGAR].plantR);
+    if (err) return fail(err);
+    if (dry) return { ok: true };
+    const p = this.flowers.add(this.ids.next('flower'), SUGAR, x, z, Math.floor(this.rng.next() * 2 ** 31));
+    const msg = L('tool.fed', { place: this.describePlace(x, z) });
+    this.events.push(msg, { kind: 'flower', id: p.id });
+    return { ok: true, msg };
+  }
+
+  /** 离蜂箱多远、在哪个方向（事件里用） */
+  describePlace(x: number, z: number): Text {
+    const sector = Math.round(Math.atan2(z, x) / (Math.PI / 4));
+    return L('place.dir', { dir: L(COMPASS[(sector + 8) % 8]), m: (Math.hypot(x, z) / 100).toFixed(0) });
+  }
+
   /** 地面高度：蜂箱周围是平的，往外慢慢起伏 */
   groundAt(x: number, z: number): number {
     const G = CONFIG.garden;
@@ -113,7 +154,11 @@ export class BeeWorld extends Simulation<BeeRef> {
   }
 }
 
-const SAVE_VERSION = 7;
+/** 方位：+x 是东，+z 是南（和太阳的方位角一样） */
+const COMPASS = ['dir.e', 'dir.se', 'dir.s', 'dir.sw', 'dir.w', 'dir.nw', 'dir.n', 'dir.ne'] as const;
+const fail = (key: Parameters<typeof L>[0]): ToolResult => ({ ok: false, msg: L(key) });
+
+const SAVE_VERSION = 8;
 
 export interface BeeSaveData {
   version: number;

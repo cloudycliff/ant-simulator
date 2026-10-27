@@ -9,6 +9,8 @@ const VIEWPORTS = [
 const Q = 'bee.html?new=1&seed=7';
 const PERF = `document.getElementById('perf')?.textContent ?? ''`;
 const INFO = `document.querySelector('#info')?.innerText.replace(/\\s+/g, ' ') ?? ''`;
+const PLANT = `world.plant(3, 400, 0); world.feed(0, 400)`;
+const RUN = (s) => `for (let i = 0; i < ${s}; i++) world.advance(1, Infinity, Infinity)`;
 const SCENES = {
   home: { q: '&hour=11' },
   night: { q: '&hour=22.5' },
@@ -44,6 +46,11 @@ const SCENES = {
   danceback: { q: '&hour=11&run=120&cam=-15,101,-9,-15,101,0&view=dance' },
   dancer: { q: '&hour=11&run=120&select=bee:262&fly=1&view=dance', check: INFO },
   dancegarden: { q: '&hour=11&run=120&cam=0,2800,400,0,0,0&view=dance' },
+  // 工具：在蜂箱东边 4 m 种一片薰衣草、南边 4 m 放一碟糖水（七号世界那里是空地），js 在页面打开后执行
+  planting: { q: '&hour=11&cam=150,260,-250,300,0,150', js: `${PLANT}; ${RUN(150)}` },
+  planted: { q: '&hour=11&cam=150,260,-250,300,0,150', js: `${PLANT}; ${RUN(330 + 345)}` },
+  sugar: { q: '&hour=11&cam=-30,90,330,0,45,400', js: `${PLANT}; ${RUN(60)}` },
+  tool: { q: '&hour=11&cam=450,280,-750,700,0,-300', keys: ['Digit6', 'Digit6', 'Digit6', 'Digit6'], mouse: [640, 400] },
   en: { q: '&hour=11&lang=en' },
   endancer: { q: '&hour=11&run=120&select=bee:262&fly=1&lang=en', check: INFO },
 };
@@ -60,6 +67,12 @@ try {
       const p = await b.page();
       await p.viewport(w, h, touch);
       await p.open(BASE + Q + s.q);
+      if (s.js) await p.ev(s.js);
+      for (const code of s.keys ?? []) {
+        await p.send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: code.slice(-1) });
+        await p.send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: code.slice(-1) });
+      }
+      if (s.mouse) await p.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: s.mouse[0], y: s.mouse[1] });
       await sleep(1200);
       await p.shot(`shots/bee/${name}.png`);
       console.log(name, await p.ev(PERF), s.check ? await p.ev(s.check) : '');

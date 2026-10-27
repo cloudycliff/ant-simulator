@@ -207,7 +207,8 @@ export const CONFIG = {
    * 有几份（一份 = 一只采集蜂一趟带回的量），采空后开着的时候 refill 秒长满；pollenKind 是花粉团的颜色
    * （PALETTE.pollen 的编号）。r 是花丛的半径，spacing 是株距；closes 的花合上时画面上也合起来。
    * land 是蜂落在一株上的几个落脚点（株的坐标，cm，没乘个头）：花序顶上、花盘面上、南瓜花的喇叭里、
-   * 薰衣草穗的侧面、玉米雄穗的枝上；画面的南瓜花和前几根薰衣草穗按它摆
+   * 薰衣草穗的侧面、玉米雄穗的枝上；画面的南瓜花和前几根薰衣草穗按它摆。
+   * wild 的花开局会长；plantR 是玩家种一片的半径。refill 为 0 的（糖水）采空了不长回来；花丛比株距的一半还小时只有中间一株
    */
   flowers: {
     patches: 9,
@@ -216,9 +217,11 @@ export const CONFIG = {
     gap: 150,
     margin: 300,
     species: [
-      { key: 'clover', hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false, land: [[0.5, 13.7, 0]] },
+      { key: 'clover', wild: true, plantR: 120, hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false, land: [[0.5, 13.7, 0]] },
       {
         key: 'sunflower',
+        wild: true,
+        plantR: 90,
         hours: [7, 18.5],
         ramp: 1,
         nectar: 0.8,
@@ -230,11 +233,18 @@ export const CONFIG = {
         closes: false,
         land: [[4.3, 171.4, 0], [5.5, 174.1, 0], [4.3, 171.4, 3], [3, 168.7, 0], [4.3, 171.4, -3]],
       },
-      { key: 'pumpkin', hours: [5, 10.5], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
-      { key: 'lavender', hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false, land: [[15.4, 51, 0], [0, 48, 13.4], [-13.3, 55, -5.5], [6.5, 45, -16.3]] },
-      { key: 'corn', hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false, land: [[7, 221.6, 0], [0, 221.6, 7], [-7, 221.6, 0], [0, 221.6, -7]] },
+      { key: 'pumpkin', wild: true, plantR: 110, hours: [5, 10.5], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
+      { key: 'lavender', wild: true, plantR: 90, hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false, land: [[15.4, 51, 0], [0, 48, 13.4], [-13.3, 55, -5.5], [6.5, 45, -16.3]] },
+      { key: 'corn', wild: true, plantR: 90, hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false, land: [[7, 221.6, 0], [0, 221.6, 7], [-7, 221.6, 0], [0, 221.6, -7]] },
+      // 糖水碟：一个木墩上放一碟糖水，只有一“株”；白天蜂才来，喝完了不会自己长回来
+      { key: 'sugar', wild: false, plantR: 10, hours: [6.5, 18.5], ramp: 0.5, nectar: 150, pollen: 0, refill: 0, pollenKind: 0, r: [10, 10], spacing: 60, closes: false, land: [[8, 47.2, 0], [0, 47.2, 8], [-8, 47.2, 0], [0, 47.2, -8], [5.7, 47.2, 5.7], [-5.7, 47.2, -5.7]] },
     ] as const,
   },
+  /**
+   * 玩家的工具（T-016）。种下的花丛 grow 秒长成，长成前不开花；最多种 maxPlanted 片。种花、放糖水的地方离蜂箱至少
+   * hiveClear cm、离别的花丛 gap cm、离花园边 flowers.margin。糖水碟最多 maxFeeders 个，在碟子 refillR cm 内再放一次是添满
+   */
+  tools: { grow: 300, maxPlanted: 12, maxFeeders: 3, hiveClear: 250, gap: 40, refillR: 40 },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

@@ -7,7 +7,7 @@ import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteU, siteV, type Comb } from './comb';
 import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './flight';
-import { landingPoint, openness, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
+import { landingPoint, patchOpenness, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
 
 const B = CONFIG.bees;
@@ -1114,7 +1114,7 @@ export class Bees {
     return yield* this.lookForWork(b);
   }
 
-  private isOpen = (p: FlowerPatch) => openness(SPECIES[p.species], this.env.hour()) >= F.minOpen;
+  private isOpen = (p: FlowerPatch) => patchOpenness(p, this.env.hour()) >= F.minOpen;
 
   /** 认得的花丛开着就去；合上了有时忘了它 */
   private pickPatch(b: Bee): FlowerPatch | null {

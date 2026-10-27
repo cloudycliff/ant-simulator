@@ -4,8 +4,11 @@ import { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 
 const F = CONFIG.flowers;
+const T = CONFIG.tools;
 export type FlowerSpecies = (typeof F.species)[number];
 export const SPECIES_KEYS = F.species.map((s) => s.key);
+/** 糖水碟在 species 里的编号 */
+export const SUGAR = SPECIES_KEYS.indexOf('sugar');
 
 /** 一片花丛。株的位置由 seed 生成（plantsOf），不进存档 */
 export interface FlowerPatch {
@@ -18,12 +21,21 @@ export interface FlowerPatch {
   /** 现在还有几份花蜜、花粉（满是 plants × 每株的量） */
   nectar: number;
   pollen: number;
+  /** 长成了多少：开局的花和糖水碟是 1，玩家种下的从 0 长起，长成前不开花 */
+  grown: number;
+  /** 玩家种的、放的 */
+  planted: boolean;
 }
 
 /** 这种花此刻开了多少：0 没开，1 全开；开前、合后各 ramp 小时渐变 */
 export function openness(sp: FlowerSpecies, hour: number): number {
   const [a, b] = sp.hours;
   return smoothstep(a - sp.ramp, a, hour) * (1 - smoothstep(b, b + sp.ramp, hour));
+}
+
+/** 这片花丛此刻开了多少：还没长成的不开 */
+export function patchOpenness(p: FlowerPatch, hour: number): number {
+  return p.grown < 1 ? 0 : openness(F.species[p.species], hour);
 }
 
 const plantCache = new Map<number, Float32Array>();
@@ -36,6 +48,11 @@ export function plantsOf(p: FlowerPatch): Float32Array {
   const cached = plantCache.get(p.seed);
   if (cached) return cached;
   const sp = F.species[p.species];
+  if (p.r < sp.spacing / 2) {
+    const one = new Float32Array([p.x, p.z, new Rng(p.seed).next()]);
+    plantCache.set(p.seed, one);
+    return one;
+  }
   const r = new Rng(p.seed);
   const a = r.range(0, Math.PI);
   const ca = Math.cos(a);
@@ -95,11 +112,14 @@ export interface FlowerSave {
 /** 花园里的花丛：按时刻开合，开着时花蜜和花粉慢慢长回来 */
 export class Flowers {
   readonly patches: FlowerPatch[] = [];
+  /** 花丛加了或者读了档就加一，画面看它重建 */
+  version = 0;
 
   /** 开局的花丛：每种花至少一片，散在蜂箱周围，互不重叠 */
   generate(rng: Rng, nextId: () => number): void {
-    const kinds = F.species.map((_, i) => i);
-    while (kinds.length < F.patches) kinds.push(rng.int(0, F.species.length - 1));
+    const wild = F.species.map((_, i) => i).filter((i) => F.species[i].wild);
+    const kinds = [...wild];
+    while (kinds.length < F.patches) kinds.push(wild[rng.int(0, wild.length - 1)]);
     const lim = CONFIG.garden.size / 2 - F.margin;
     for (const species of kinds) {
       const sp = F.species[species];
@@ -111,7 +131,7 @@ export class Flowers {
         const z = Math.sin(a) * d;
         if (Math.abs(x) > lim || Math.abs(z) > lim) continue;
         if (this.patches.some((q) => Math.hypot(q.x - x, q.z - z) < q.r * 1.2 + r * 1.2 + F.gap)) continue;
-        const p: FlowerPatch = { id: nextId(), species, x, z, r, seed: Math.floor(rng.next() * 2 ** 31), nectar: 0, pollen: 0 };
+        const p: FlowerPatch = { id: nextId(), species, x, z, r, seed: Math.floor(rng.next() * 2 ** 31), nectar: 0, pollen: 0, grown: 1, planted: false };
         p.nectar = nectarCap(p) * rng.range(0.5, 1);
         p.pollen = pollenCap(p) * rng.range(0.5, 1);
         this.patches.push(p);
@@ -126,9 +146,13 @@ export class Flowers {
 
   update(dt: number, hour: number): void {
     for (const p of this.patches) {
+      if (p.grown < 1) {
+        p.grown = Math.min(1, p.grown + dt / T.grow);
+        continue;
+      }
       const sp = F.species[p.species];
       const k = openness(sp, hour);
-      if (k <= 0) continue;
+      if (k <= 0 || sp.refill <= 0) continue;
       p.nectar = Math.min(nectarCap(p), p.nectar + (nectarCap(p) * k * dt) / sp.refill);
       p.pollen = Math.min(pollenCap(p), p.pollen + (pollenCap(p) * k * dt) / sp.refill);
     }
@@ -136,10 +160,29 @@ export class Flowers {
 
   /** 采走最多 want 份花蜜或花粉，返回实际采到的；没开的花采不到，半开时只采得到相应的一部分 */
   take(p: FlowerPatch, what: 'nectar' | 'pollen', want: number, hour: number): number {
-    const k = openness(F.species[p.species], hour);
+    const k = patchOpenness(p, hour);
     const got = Math.max(0, Math.min(want, p[what] * k));
     p[what] -= got;
     return got;
+  }
+
+  /** 玩家种花、放糖水的地方行不行：返回不行的原因（词典的键），行就是 null */
+  checkSpot(x: number, z: number, r: number): 'tool.outside' | 'tool.nearHive' | 'tool.overlap' | null {
+    const lim = CONFIG.garden.size / 2 - F.margin;
+    if (Math.abs(x) + r > lim || Math.abs(z) + r > lim) return 'tool.outside';
+    if (Math.hypot(x, z) < T.hiveClear + r) return 'tool.nearHive';
+    if (this.patches.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + r + T.gap)) return 'tool.overlap';
+    return null;
+  }
+
+  /** 加一片花丛：种下的花从 0 长起，糖水碟放下就是满的 */
+  add(id: number, species: number, x: number, z: number, seed: number): FlowerPatch {
+    const sp = F.species[species];
+    const p: FlowerPatch = { id, species, x, z, r: sp.plantR, seed, nectar: 0, pollen: 0, grown: species === SUGAR ? 1 : 0, planted: true };
+    if (species === SUGAR) p.nectar = nectarCap(p);
+    this.patches.push(p);
+    this.version++;
+    return p;
   }
 
   toSave(): FlowerSave {
@@ -149,5 +192,6 @@ export class Flowers {
   restore(d: FlowerSave): void {
     this.patches.length = 0;
     for (const p of d.patches) this.patches.push({ ...p });
+    this.version++;
   }
 }

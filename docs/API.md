@@ -39,7 +39,7 @@
 #### `core/sim/entities.ts`
 
 - `EntityRef`：指向一个对象，`{ kind }` 加上游戏自己的字段（通常是 `id`）。游戏的引用类型是各类引用的联合
-- `EntityKind`：`define` 的第二个参数。`pos`：现在的位置，不在了返回 null；可跟随的类型要返回对象自己的位置向量，跟随时每帧读一次。`viewDistance`：飞过去时离多远。`viewDir(ref, from)`：飞过去时从哪个方向看（从对象指向相机，`from` 是相机现在的位置），不给或返回 null 时沿现在的方向抬高到俯看。`follow`：能否跟随。`unstable`：读档后编号会重新分配，事件存档时只留位置
+- `EntityKind`：`define` 的第二个参数。`pos`：现在的位置，不在了返回 null；可跟随的类型要返回对象自己的位置向量，跟随时每帧读一次。`viewDistance`：飞过去时离多远，可以是数，也可以是 `(ref) => number`（同一类里大小差得多时）。`viewDir(ref, from)`：飞过去时从哪个方向看（从对象指向相机，`from` 是相机现在的位置），不给或返回 null 时沿现在的方向抬高到俯看。`follow`：能否跟随。`unstable`：读档后编号会重新分配，事件存档时只留位置
 - `EntityRegistry`：`define(kind, spec)`（重复登记报错）、`has`、`pos`、`viewDistance`、`viewDir`、`canFollow`、`stable`、`defaultViewDistance`。选中、飞过去、跟随、事件定位都查它
 
 #### `core/sim/events.ts`

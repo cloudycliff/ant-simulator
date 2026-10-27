@@ -32,4 +32,5 @@ export const FLOWER_COLORS: Record<string, { leaf: number; bloom: number; tint: 
   pumpkin: { leaf: 0x3d6e26, bloom: 0xf6a01e, tint: 0x6f9a34 },
   lavender: { leaf: 0x7f9c7a, bloom: 0x8b6cd0, tint: 0x9a86c8 },
   corn: { leaf: 0x5f9032, bloom: 0xd8c47c, tint: 0x86a848 },
+  sugar: { leaf: 0x8a6238, bloom: 0xe8b85a, tint: 0x9a8a60 },
 };

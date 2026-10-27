@@ -9,7 +9,7 @@ import { CombView } from '../../../src/games/bee/combView';
 import { CONFIG } from '../../../src/games/bee/config';
 import { CELL, CELLS, CONTENT_KEYS, SITES, cellPos, siteAt, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
 import { ACTS, CASTE, ageRoleOf, roleOf, type Act } from '../../../src/games/bee/sim/bees';
-import { Flowers, nectarCap, openness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
+import { Flowers, SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
 import { nodeAt } from '../../../src/games/bee/sim/walk';
 import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
 import { MOUTH } from '../../../src/games/bee/sim/flight';
@@ -91,7 +91,7 @@ for (let cell = 0; cell < CELLS; cell += 37) {
 check('斜着点巢房选中的是那一个', pickBad === 0, `${picked} 个里 ${pickBad} 个不对`);
 const F = CONFIG.flowers;
 const patches = w.flowers.patches;
-check('花丛：片数对、每种花都有', patches.length === F.patches && F.species.every((_, i) => patches.some((p) => p.species === i)), patches.map((p) => SPECIES_KEYS[p.species]).join(' '));
+check('花丛：片数对、每种野花都有、没有糖水', patches.length === F.patches && F.species.every((s, i) => !s.wild || patches.some((p) => p.species === i)) && patches.every((p) => F.species[p.species].wild), patches.map((p) => SPECIES_KEYS[p.species]).join(' '));
 const lim = CONFIG.garden.size / 2 - F.margin;
 const misplaced = patches.filter((p) => {
   const d = Math.hypot(p.x, p.z);
@@ -226,6 +226,45 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   const honeyEnd = h.comb.census().honeyCells;
   check('蜜多了少接蜜、储蜜往回落', h.bees.handoffs < hand300 * 0.2 && honeyEnd < honeyUp, `交接 ${h.bees.handoffs}（平常 ${hand300}），自己放 ${h.bees.selfStored}，储蜜 ${honeyUp.toFixed(0)} → ${honeyEnd.toFixed(0)}`);
 }
+{
+  // 工具：种花、放糖水。另开一个世界，不影响上面一天的数
+  const x = new BeeWorld(7);
+  const fl = x.flowers;
+  const n0 = fl.patches.length;
+  const clover = SPECIES_KEYS.indexOf('clover');
+  const lavender = SPECIES_KEYS.indexOf('lavender');
+  // 离蜂箱 4 m 左右找两处空地
+  const spot: number[][] = [];
+  for (let a = 0; a < 6.28 && spot.length < 2; a += 0.2) {
+    const [sx, sz] = [Math.cos(a) * 400, Math.sin(a) * 400];
+    if (!fl.checkSpot(sx, sz, F.species[lavender].plantR) && spot.every(([px, pz]) => Math.hypot(px - sx, pz - sz) > 300)) spot.push([sx, sz]);
+  }
+  const dry = x.plant(lavender, spot[0][0], spot[0][1], true);
+  check('种花：试一下能种、不改世界', dry.ok && fl.patches.length === n0);
+  const bad = [x.plant(clover, 50, 50), x.plant(clover, fl.patches[0].x, fl.patches[0].z), x.plant(clover, CONFIG.garden.size / 2 - 10, 0)];
+  check('种花：离蜂箱太近、压着别的花丛、出了花园都种不了', bad.every((r) => !r.ok) && fl.patches.length === n0, bad.map((r) => tr(r.msg!)).join(' / '));
+  const ok = x.plant(lavender, spot[0][0], spot[0][1]);
+  const planted = fl.patches[fl.patches.length - 1];
+  check('种花：种下了，还没长成、不开花', ok.ok && fl.patches.length === n0 + 1 && planted.planted && planted.grown === 0 && patchOpenness(planted, 12) === 0 && x.events.entries.length > 0, tr(ok.msg!));
+  const fed = x.feed(spot[1][0], spot[1][1]);
+  const dish = fl.patches[fl.patches.length - 1];
+  check('放糖水：一碟、满的、只有一“株”、只有蜜', fed.ok && dish.species === SUGAR && plantCount(dish) === 1 && dish.nectar === nectarCap(dish) && pollenCap(dish) === 0, tr(fed.msg!));
+  check('放糖水：白天蜂来、夜里不来', patchOpenness(dish, 12) === 1 && patchOpenness(dish, 23) === 0);
+  run(x, CONFIG.tools.grow + 30);
+  const took = nectarCap(dish) - dish.nectar;
+  check('种下的花长成了、开花', planted.grown === 1 && patchOpenness(planted, 12) === 1, `长成 ${(planted.grown * 100).toFixed(0)}%`);
+  check('蜂找到了糖水、在喝', took > 5 && x.bees.list.some((b) => b.patch === dish.id), `喝了 ${took.toFixed(0)} 份（满 ${nectarCap(dish)}）`);
+  // 长成时已经天黑，跑到第二天中午
+  run(x, (((12 - x.clock.hour + 24) % 24) / 24) * CONFIG.clock.dayLength);
+  const visitors = x.bees.list.filter((b) => b.patch === planted.id).length;
+  check('蜂也去种下的花丛', visitors > 0 && planted.nectar < nectarCap(planted), `${visitors} 只认得它，花蜜还剩 ${((planted.nectar / nectarCap(planted)) * 100).toFixed(0)}%`);
+  const refill = x.feed(dish.x + 5, dish.z);
+  check('在碟子上再放一次是添满', refill.ok && dish.nectar === nectarCap(dish) && fl.patches.length === n0 + 2);
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const y = new BeeWorld(7);
+  beeSave.read(y, JSON.parse(saved) as BeeSaveData);
+  check('读档后种的花、糖水一样', JSON.stringify(y.flowers.patches) === JSON.stringify(fl.patches) && JSON.stringify(beeSave.write(y, 1)) === saved);
+}
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -265,7 +304,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x' }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x' }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

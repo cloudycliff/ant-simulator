@@ -18,6 +18,7 @@ const HIVE_REF: BeeRef = { kind: 'hive', id: 0 };
 /** 蜂箱的中心，相机离它近时阴影围着它 */
 const HIVE_CENTER = new THREE.Vector3(0, H.baseY + COMB_H / 2, 0);
 const _dir = new THREE.Vector3();
+const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _focus = new THREE.Vector3();
 
 /** 花园和观察箱的画面 */
@@ -28,12 +29,16 @@ export class BeeView {
   readonly flowers: FlowerView;
   readonly bees: BeesView;
   readonly dance: DanceView;
-  /** 点选用：观察箱的各个部件、花丛的圆柱，userData.ref 指向它们 */
-  readonly pickables: THREE.Object3D[] = [];
+  /** 点选用：观察箱的各个部件，userData.ref 指向它们；花丛的圆柱在 flowers.pickables */
+  private hiveParts: THREE.Object3D[] = [];
   glass = true;
   private glassMeshes: THREE.Mesh[] = [];
   private fills: THREE.DirectionalLight[] = [];
   private outline: THREE.LineSegments;
+  /** 每丛草的位置 (x, z)；种了花就把花丛里的草藏起来 */
+  private grass!: THREE.InstancedMesh;
+  private grassAt!: Float32Array;
+  private grassFor = -1;
 
   constructor(
     private readonly w: BeeWorld,
@@ -53,7 +58,6 @@ export class BeeView {
     this.flowers = new FlowerView(w);
     this.bees = new BeesView(w);
     this.dance = new DanceView(w);
-    this.pickables.push(...this.flowers.pickables);
     this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.8, depthTest: false }));
@@ -62,6 +66,11 @@ export class BeeView {
     this.outline.visible = false;
     this.group.add(this.outline);
     scene.add(this.group);
+  }
+
+  /** 点选用：观察箱的部件和花丛的圆柱 */
+  get pickables(): THREE.Object3D[] {
+    return [...this.hiveParts, ...this.flowers.pickables];
   }
 
   syncViews(): void {
@@ -104,6 +113,8 @@ export class BeeView {
       blades.push(b.rotateZ(0.25).rotateY((k / 5) * Math.PI * 2 + 0.3).translate(Math.cos(k * 1.3) * 0.8, 0, Math.sin(k * 1.3) * 0.8));
     }
     const grass = new THREE.InstancedMesh(mergeGeometries(blades)!, new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9 }), 30000);
+    this.grass = grass;
+    this.grassAt = new Float32Array(grass.count * 2);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
@@ -119,9 +130,12 @@ export class BeeView {
       }
       m.compose(new THREE.Vector3(x, w.groundAt(x, z), z), q.setFromAxisAngle(up, r.range(0, 3)), new THREE.Vector3(1, r.range(5, 16), 1));
       grass.setMatrixAt(i, m);
+      this.grassAt[i * 2] = x;
+      this.grassAt[i * 2 + 1] = z;
       grass.setColorAt(i, c.setHSL(0.24 + r.range(-0.04, 0.03), 0.5, r.range(0.28, 0.42)));
     }
     this.group.add(grass);
+    this.grassFor = w.flowers.version;
 
     // 花园边上的一圈树
     const trunk = new THREE.MeshStandardMaterial({ color: 0x5a3e28 });
@@ -141,6 +155,19 @@ export class BeeView {
     }
   }
 
+  /** 花丛里不长草：种了花以后把新花丛里的草藏起来（只会多不会少，藏了不用再露出来） */
+  private trimGrass(): void {
+    this.grassFor = this.w.flowers.version;
+    const P = this.w.flowers.patches;
+    const at = this.grassAt;
+    for (let i = 0; i < this.grass.count; i++) {
+      const x = at[i * 2];
+      const z = at[i * 2 + 1];
+      if (P.some((p) => Math.abs(p.x - x) < p.r && Math.abs(p.z - z) < p.r && Math.hypot(p.x - x, p.z - z) < p.r)) this.grass.setMatrixAt(i, ZERO);
+    }
+    this.grass.instanceMatrix.needsUpdate = true;
+  }
+
   /** 架子、顶棚、箱体、两框的框条、玻璃、巢门管 */
   private buildHive(): void {
     const wood = new THREE.MeshStandardMaterial({ color: WOOD, roughness: 0.8 });
@@ -149,7 +176,7 @@ export class BeeView {
       b.position.set(x, y, z);
       b.castShadow = b.receiveShadow = true;
       b.userData.ref = HIVE_REF;
-      this.pickables.push(b);
+      this.hiveParts.push(b);
       this.group.add(b);
       return b;
     };
@@ -216,6 +243,7 @@ export class BeeView {
     for (const f of this.fills) f.intensity = R.fill * k;
     this.outline.visible = sel?.kind === 'hive';
     this.comb.update(camera, viewportH, sel?.kind === 'cell' ? sel.id : null);
+    if (this.grassFor !== this.w.flowers.version) this.trimGrass();
     this.flowers.update(this.w.clock.hour, sel?.kind === 'flower' ? sel.id : null);
     this.bees.update(camera, viewportH, sel?.kind === 'bee' ? sel.id : null);
     this.dance.update(camera);
