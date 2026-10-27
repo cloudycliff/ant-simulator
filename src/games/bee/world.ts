@@ -14,6 +14,7 @@ import { Heat, SITE_HEAT, broodRate, broodRisk, type HeatSave } from './sim/heat
 import { Hornets, type HornetsSave } from './sim/hornets';
 import { Keeper, type KeeperSave } from './sim/keeper';
 import { Pests, type PestsSave } from './sim/pests';
+import { Abscond, type AbscondSave } from './sim/abscond';
 
 /** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
 export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number } | { kind: 'hornet'; id: number };
@@ -28,6 +29,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   readonly hornets: Hornets;
   readonly keeper: Keeper;
   readonly pests: Pests;
+  readonly abscond: Abscond;
   private noise: Noise2D;
   private followPos: Point3 = { x: 0, y: 0, z: 0 };
   private broodClock = 0;
@@ -55,6 +57,8 @@ export class BeeWorld extends Simulation<BeeRef> {
       },
       alarm: () => this.keeper.alarm,
       infect: (cell) => this.pests.infect(cell),
+      swarm: () => this.abscond.swarm,
+      unrest: () => this.abscond.unrest,
     });
     this.hornets = new Hornets(this.rng, () => this.ids.next('hornet'), CONFIG.clock.dayLength, {
       bees: this.bees,
@@ -69,6 +73,16 @@ export class BeeWorld extends Simulation<BeeRef> {
       bees: () => this.bees.list,
       clock: this.clock,
       log: (msg, cell) => this.events.push(msg, cell === undefined ? undefined : { kind: 'cell', id: cell }),
+    });
+    this.abscond = new Abscond(this.rng, CONFIG.clock.dayLength, {
+      bees: this.bees,
+      comb: this.comb,
+      stress: () => this.keeper.stress,
+      danger: () => this.hornets.danger(),
+      worms: () => this.pests.worms.length,
+      flyable: () => this.weather.flyable,
+      clock: this.clock,
+      log: (msg) => this.events.push(msg, { kind: 'hive', id: 0 }),
     });
     this.bees.generate();
     this.heat.update(0, this.weather.air(this.clock.hour), this.bees.list, this.comb);
@@ -102,6 +116,7 @@ export class BeeWorld extends Simulation<BeeRef> {
     this.addSystem('hornets', (dt) => this.hornets.update(dt));
     this.addSystem('keeper', (dt) => this.keeper.update(dt));
     this.addSystem('pests', (dt) => this.pests.update(dt));
+    this.addSystem('abscond', (dt) => this.abscond.update(dt));
     this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour, this.weather.rain));
     this.saves.add(
       'comb',
@@ -140,6 +155,11 @@ export class BeeWorld extends Simulation<BeeRef> {
       'pests',
       () => this.pests.toSave(),
       (d: PestsSave) => this.pests.restore(d),
+    );
+    this.saves.add(
+      'abscond',
+      () => this.abscond.toSave(),
+      (d: AbscondSave) => this.abscond.restore(d),
     );
     this.saves.add(
       'weather',
@@ -285,7 +305,7 @@ export class BeeWorld extends Simulation<BeeRef> {
 const COMPASS = ['dir.e', 'dir.se', 'dir.s', 'dir.sw', 'dir.w', 'dir.nw', 'dir.n', 'dir.ne'] as const;
 const fail = (key: Parameters<typeof L>[0]): ToolResult => ({ ok: false, msg: L(key) });
 
-const SAVE_VERSION = 13;
+const SAVE_VERSION = 14;
 
 export interface BeeSaveData {
   version: number;

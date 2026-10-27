@@ -1,6 +1,6 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、割蜜和换框、巢虫和中囊病、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、割蜜和换框、巢虫和中囊病、飞逃和野生蜂群、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -529,6 +529,70 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   y.swapFrame(wf);
   check('换框连巢虫一起拿走', onFrame > 0 && Y.culled === onFrame && Y.worms.every((m) => siteFrame(m.site) !== wf), `拿走 ${Y.culled} 条`);
 }
+{
+  // 飞逃和野生蜂群（T-025）
+  const U = CONFIG.abscond;
+  const x = new BeeWorld(7);
+  const A = x.abscond;
+  const heard = new Set<string>();
+  const told = (key: Parameters<typeof L>[0]) => heard.has(key);
+  const fast = (secs: number, each = () => {}) => {
+    for (let i = 0; i < secs; i++) {
+      each();
+      x.advance(1, Infinity, Infinity);
+      for (const b of x.bees.list) seen.add(b.act);
+      for (const e of x.events.entries) if (typeof e.msg === 'object' && 'k' in e.msg) heard.add(e.msg.k);
+    }
+  };
+  // 开箱的压力一天里一直是满的：压力涨了，还没到征兆，更不会飞逃
+  fast(600, () => (x.keeper.stress = 1));
+  const p1 = A.pressure;
+  check('飞逃：处境不好一天，压力涨了但没到征兆', p1 > 0.1 && p1 < U.restless && A.swarm.phase === 'home' && !A.restless, `压力 ${p1.toFixed(3)}，处境 ${A.bad}`);
+  A.pressure = U.restless + 0.01;
+  fast(10, () => (x.keeper.stress = 1));
+  check('飞逃：压力过了一道线有征兆，记进事件', A.restless && A.unrest > 0 && told('ev.restless'), `征兆 ${A.unrest.toFixed(3)}`);
+  const n0 = x.bees.list.length;
+  A.leave();
+  fast(40);
+  const outside = x.bees.list.filter((b) => b.out >= 2).length;
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved;
+  run(r1, 20);
+  run(r2, 20);
+  check('飞逃时存档往返一致、读两次走得一样', same && outside > 0 && fingerprint(r1) === fingerprint(r2), `40 秒出来 ${outside} / ${n0} 只`);
+  let t = 0;
+  for (; t < 600 && A.swarm.phase !== 'empty'; t += 10) fast(10);
+  check(
+    '飞逃：蜂从巢门涌出、在箱外盘旋、飞走，箱子空了，子死在房里',
+    A.swarm.phase === 'empty' && x.bees.list.length === 0 && A.left > n0 * 0.9 && A.abandoned > 1000 && told('ev.abscond') && told('ev.gone') && x.comb.census().counts.larva === 0,
+    `${t} 秒飞走 ${A.left} 只，丢下 ${A.abandoned} 个子`,
+  );
+  const honey0 = x.comb.census().honeyCells;
+  for (t = 0; t < 3 * CONFIG.clock.dayLength && A.swarm.phase !== 'home'; t += 10) fast(10);
+  const inside = x.bees.list.filter((b) => !b.out).length;
+  const brought = x.comb.census().honeyCells - honey0;
+  check(
+    '空箱：侦察蜂来看过，野生蜂群搬进来，有蜂王，带来了蜜',
+    A.swarm.phase === 'home' && A.moveIns === 1 && inside > U.workers[0] * 0.8 && !!x.bees.queen && !x.bees.queen.out && told('ev.scouts') && told('ev.moveIn') && brought > U.workers[0] * U.carry * 0.5,
+    `空了约 ${(t / CONFIG.clock.dayLength).toFixed(1)} 天，搬进来 ${x.bees.list.length} 只，${inside} 只在巢里，带来约 ${Math.round(brought)} 房蜜`,
+  );
+  const laid = x.bees.laid;
+  fast(200);
+  check('野生蜂群住下来，蜂王产卵', x.bees.laid > laid + 20 && x.bees.list.every((b) => !b.swarm || b.out), `200 秒产了 ${x.bees.laid - laid} 粒`);
+  // 蜂快死光了：和飞逃一样空出箱子
+  const y = new BeeWorld(7);
+  const few = y.bees.list.filter((b) => b.caste !== CASTE.worker).concat(y.bees.list.filter((b) => b.caste === CASTE.worker).slice(0, U.collapse - 5));
+  y.bees.list.length = 0;
+  y.bees.list.push(...few);
+  for (let i = 0; i < 10; i++) y.advance(1, Infinity, Infinity);
+  check('蜂快死光了，箱子空出来', y.abscond.swarm.phase === 'empty' && y.bees.list.length === 0);
+}
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -568,7 +632,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', lo: 1, hi: 2, f: 3, brood: 4, honey: 5 }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', cause: 'x', lo: 1, hi: 2, f: 3, brood: 4, honey: 5 }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

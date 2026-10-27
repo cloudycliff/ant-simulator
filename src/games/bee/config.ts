@@ -411,6 +411,58 @@ export const CONFIG = {
       cleanWork: 2,
     },
   },
+  /**
+   * 飞逃和野生蜂群（P-010、T-025）。每 every 秒看一次蜂群的处境，四样压力各 0..1：开箱（keeper.stress / stressFull）、
+   * 缺蜜（储蜜从 hungerAt 满房往下到 hungerFull 由 0 到 1）、胡蜂（胡蜂的危险程度按 hornetDays 天平滑后 / hornetFull）、
+   * 病虫（巢里的白头蛹、死囊加 worm 倍的巢虫数 / pestFull）。按 weights 加权加起来（最多 1）是处境，飞逃的压力按 days 天的
+   * 时间常数趋向处境（储蜜不到 hungerFull 时快 starveRate 倍）：处境一直是 1 也要两天多才飞逃，一样压力到头也不够。
+   * 压力过 restless 有征兆（回到 calm 以下才消失），征兆的程度按压力从 calm 到 leave 由 0 到 1：采集蜂走到巢门有 征兆 × stopForage
+   * 的机会不出去，蜂王每回有 征兆 × stopLaying 的机会不产卵，蜂吃到 gorge 才停。压力过 leave、在 hours 点之间、能飞时飞逃。
+   * 工蜂少于 collapse 只时蜂群没了，和飞逃一样箱子空出来。
+   * 飞逃：巢里的蜂做完手上的事就去巢门出去，在外面的丢下活飞过去，在 cloud 附近 cloudR 内盘旋；都出来了（最多 leaveMax 秒）
+   * 再盘旋 cloudTime 秒，然后以 speed cm/s 飞走，飞出 farR 整群没了，留下的子死了。
+   * 空箱 vacant 天以后、scoutHours 点之间能飞时来 scouts 只侦察蜂，在巢门进进出出 scoutTime 秒；然后（hours 点之间、能飞时）
+   * workers 只工蜂、drones 只雄蜂和一只蜂王的野生蜂群从 farR 外飞来，在 land 附近 landR 内盘旋，每只每盘旋一趟有 enter 的机会进巢，
+   * 过 landMax 秒剩下的都进去；每只工蜂带来 carry 房蜜，吐进最靠上的空房
+   */
+  abscond: {
+    every: 5,
+    stressFull: 0.6,
+    hungerAt: 250,
+    hungerFull: 20,
+    hornetDays: 1,
+    hornetFull: 0.2,
+    worm: 3,
+    pestFull: 240,
+    weights: { stress: 0.6, hunger: 0.8, hornets: 0.5, pests: 0.5 },
+    days: 2,
+    starveRate: 4,
+    restless: 0.45,
+    calm: 0.35,
+    leave: 0.7,
+    stopForage: 0.6,
+    stopLaying: 0.7,
+    gorge: 0.9,
+    hours: [9, 14] as [number, number],
+    collapse: 30,
+    cloud: { x: -350, y: 300, z: 0 },
+    cloudR: 150,
+    leaveMax: 120,
+    cloudTime: 20,
+    speed: 120,
+    farR: 3000,
+    vacant: [0.5, 1.5] as [number, number],
+    scoutHours: [8, 12] as [number, number],
+    scouts: [6, 12] as [number, number],
+    scoutTime: 100,
+    workers: [1400, 2000] as [number, number],
+    carry: 0.12,
+    drones: [10, 30] as [number, number],
+    land: { x: -120, y: 130, z: 0 },
+    landR: 70,
+    enter: 0.08,
+    landMax: 150,
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

@@ -16,6 +16,7 @@ const WEAK = `{ const keep = world.bees.list.filter((b, i) => b.caste !== 0 || i
 const LOOK = (cell, d = 7) =>
   `{ const id = ${cell}; const p = id >= 0 ? world.entities.pos({ kind: 'cell', id }) : null; if (p) { const V = camera.position.constructor; const z = id >= world.comb.content.length / 2 ? -1 : 1; controller.setPose(new V(p.x + 0.5, p.y + 1, p.z + z * ${d}), new V(p.x, p.y, p.z)) } }`;
 const PESTS = `'巢虫 ' + world.pests.worms.length + '/' + world.pests.hatched + ' 白头蛹 ' + world.pests.bald + ' 死囊 ' + world.pests.sacs`;
+const ABS = `world.abscond.swarm.phase + ' 压力 ' + world.abscond.pressure.toFixed(2) + ' 蜂 ' + world.bees.list.length + ' 在外面 ' + world.bees.list.filter((b) => b.out).length`;
 const SCENES = {
   home: { q: '&hour=11' },
   night: { q: '&hour=22.5' },
@@ -93,6 +94,12 @@ const SCENES = {
   moth: { q: '&hour=11&view=fade', js: `${WEAK}; world.pests.lay(8); ${RUN(1200)}; ${LOOK('world.pests.worms[0]?.cell')}`, check: PESTS },
   mothmap: { q: '&hour=11&view=cells,fade', js: `${WEAK}; world.pests.lay(8); ${RUN(1200)}; ${LOOK('world.pests.worms[0]?.cell', 16)}`, check: PESTS },
   sac: { q: '&hour=11&view=fade', js: `world.pests.outbreak(); let sac = -1; for (let k = 0; k < 200 && sac < 0; k++) { ${RUN(10)}; sac = world.comb.content.indexOf(8) } ${LOOK('sac')}`, check: `${PESTS} + ' ' + world.comb.content.indexOf(8) + ' ' + camera.position.toArray().map((x) => x.toFixed(1))` },
+  // 飞逃和野生蜂群（T-025）：蜂从巢门涌出、在箱外盘旋成一团；空箱以后野蜂飞来；蜂箱面板的压力
+  abscond: { q: '&hour=10&cam=200,200,520,-260,200,0', js: `world.abscond.leave(); ${RUN(70)}`, check: ABS },
+  abscondtube: { q: '&hour=10&cam=-14,95,30,-16,84,0', js: `world.abscond.leave(); ${RUN(25)}`, check: ABS },
+  swarmin: { q: '&hour=10&cam=120,160,330,-120,120,0', js: `world.abscond.leave(); for (let k = 0; k < 400 && world.abscond.swarm.phase !== 'landing'; k++) ${RUN(10)}; ${RUN(40)}`, check: ABS },
+  pressure: { q: '&hour=11&select=hive:0', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: INFO },
+  restless: { q: '&hour=11', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: ABS },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

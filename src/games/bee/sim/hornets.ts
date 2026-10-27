@@ -139,7 +139,8 @@ export class Hornets {
       this.today = host.clock.totalDays >= N.firstDay && this.rng.chance(N.days);
     }
     const hour = host.clock.hour;
-    const open = this.today && host.flyable() && hour >= N.hours[0] && hour < N.hours[1];
+    // 箱子空着（T-025）没有蜂可抓，不来
+    const open = this.today && host.flyable() && hour >= N.hours[0] && hour < N.hours[1] && host.bees.list.length > 0;
     this.hourAcc += dt;
     if (this.hourAcc >= this.dayLength / 24) {
       this.hourAcc = 0;

@@ -10,6 +10,7 @@ import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './
 import { landingPoint, patchOpenness, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
 import { HEAT, heatAt, type Heat } from './heat';
+import type { SwarmState } from './abscond';
 
 const B = CONFIG.bees;
 const C = CONFIG.care;
@@ -22,6 +23,7 @@ const SPECIES = CONFIG.flowers.species;
 const HT = CONFIG.heat;
 const HN = CONFIG.hornets;
 const SB = CONFIG.pests.sacbrood;
+const U = CONFIG.abscond;
 /** 每个走路格在哪个温度格 */
 const NODE_HEAT = (() => {
   const a = new Int16Array(NODES);
@@ -106,6 +108,8 @@ export const ACTS = [
   'shimmer',
   'goBall',
   'ball',
+  'swarm',
+  'scoutHive',
 ] as const;
 export type Act = (typeof ACTS)[number];
 
@@ -217,6 +221,8 @@ export class Bee {
   aim: Aim | null = null;
   /** 带着中囊病的病毒到什么时候（模拟秒，T-024） */
   virus = 0;
+  /** 跟着蜂群走（T-025）：1 飞逃，2 野生蜂群搬进来，3 来看空箱的侦察蜂；0 平时 */
+  swarm = 0;
   /** 只给画面：这一步在摆动（1）、颤抖或抖翅（2）还是振翅产热（3） */
   waggle = 0;
   act: Act = 'rest';
@@ -254,7 +260,7 @@ type BeeSave = [
   ...[id: number, caste: number, age: number, life: number, face: number, u: number, v: number, h: number, crop: number, jelly: number, wrap: number, wn: number, fast: number],
   ...[act: Act, cmd: Cmd | null, started: number],
   ...[out: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, patch: number, goods: number, load: number],
-  ...[partner: number, waited: number, haul: number, aim: number[] | null, dev: number, virus: number],
+  ...[partner: number, waited: number, haul: number, aim: number[] | null, dev: number, virus: number, swarm: number],
 ];
 export interface BeesSave {
   bees: BeeSave[];
@@ -299,6 +305,9 @@ export interface BeeEnv {
   alarm(): number;
   /** 一只幼虫染上中囊病（T-024） */
   infect(cell: number): void;
+  /** 飞逃、搬进来的蜂群在哪（T-025）；飞逃的征兆有多重（0..1） */
+  swarm(): SwarmState;
+  unrest(): number;
 }
 
 /**
@@ -470,6 +479,9 @@ export class Bees {
     b.v = siteV(cellSite(cell));
     b.h = this.rng.range(-Math.PI, Math.PI);
     b.crop = 0.5;
+    // 蜂群正在飞逃时出房的也跟着走
+    const ph = this.env.swarm().phase;
+    if (ph === 'leaving' || ph === 'cloud' || ph === 'away') b.swarm = 1;
     this.place(b);
     Object.assign(b.prev, b.pos);
     this.births++;
@@ -518,7 +530,7 @@ export class Bees {
         continue;
       }
       // 要下雨了：飞着的、停在花上的蜂丢下手里的活往回飞
-      if (recall > 0 && b.out >= 2 && b.act !== 'flyHome' && b.act !== 'ball' && this.rng.chance(recall)) b.brain.start(this.comeHome(b));
+      if (recall > 0 && b.out >= 2 && !b.swarm && b.act !== 'flyHome' && b.act !== 'ball' && this.rng.chance(recall)) b.brain.start(this.comeHome(b));
       if (b.wrap > 0) this.stepWrap(b, dt);
       else b.brain.run(b.next, b.exec);
       this.place(b);
@@ -1230,9 +1242,13 @@ export class Bees {
   // ---- 任务 ----
 
   private *task(b: Bee): Routine {
+    if (b.swarm === 1) return yield* this.flee(b);
+    if (b.swarm === 2) return yield* this.landIn(b);
+    if (b.swarm === 3) return yield* this.scoutHive(b);
     if (b.out) return yield* this.comeHome(b);
     if (b.caste === CASTE.queen) return yield* this.queenTask(b);
-    if (b.crop < B.hungry) return yield* this.eat(b);
+    // 要飞逃的蜂群吃得饱饱的（T-025）
+    if (b.crop < B.hungry + (U.gorge - B.hungry) * this.env.unrest()) return yield* this.eat(b);
     if (b.caste === CASTE.drone) return yield* this.idle(b, 0.6);
     const role = roleOf(b);
     // 子脾冷了年轻的蜂去抱团产热，热了去巢门扇风（T-021）
@@ -1314,7 +1330,7 @@ export class Bees {
     // 挤到巢门花了太久，花已经合上了、天变了就不出去
     if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || (p && !this.isOpen(p)) || !this.env.flyable()) return yield* this.idle(b);
     // 巢门外有胡蜂悬停、刚开过箱，不敢出去（采集停滞）
-    const stop = 1 - (1 - this.env.hornets.danger()) * (1 - this.env.alarm() * CONFIG.keeper.alarmStop);
+    const stop = 1 - (1 - this.env.hornets.danger()) * (1 - this.env.alarm() * CONFIG.keeper.alarmStop) * (1 - this.env.unrest() * U.stopForage);
     if (this.rng.chance(stop)) return yield* this.wait(b);
     if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 10 }) as boolean)) return yield* this.idle(b);
     b.act = scout ? 'scout' : p ? 'flyOut' : 'flyAim';
@@ -1587,6 +1603,7 @@ export class Bees {
   }
 
   private *queenTask(b: Bee): Routine {
+    if (this.rng.chance(this.env.unrest() * U.stopLaying)) return yield* this.idle(b, 0.8);
     const cell = yield* this.seek(b, 'layable', this.isLayable, 'seek');
     if (cell < 0) return yield* this.idle(b, 0.8);
     yield* this.work(b, cell, 'inspect', C.inspect);
@@ -1661,7 +1678,7 @@ export class Bees {
     const pick: [number, Bee][] = [];
     for (const b of this.list) {
       const r = roleOf(b);
-      if (b.out || b.wrap > 0 || b.load > 0 || (r !== 'house' && r !== 'guard' && r !== 'forager')) continue;
+      if (b.out || b.swarm || b.wrap > 0 || b.load > 0 || (r !== 'house' && r !== 'guard' && r !== 'forager')) continue;
       const node = this.nodeOf(b);
       if (node >= 0 && f.reachable(node)) pick.push([f.dist[node], b]);
     }
@@ -1713,6 +1730,111 @@ export class Bees {
     b.h = Math.atan2(-dz, -dx);
     b.waggle = 3;
     return false;
+  }
+
+  /** 整群飞逃（T-025）：手上的事做完了就跟着走；巢门管里的、围着胡蜂的做完这一步再走 */
+  abscond(): void {
+    for (const b of this.list) {
+      b.swarm = 1;
+      const k = b.brain.cmd?.k;
+      if (k === 'tube' || k === 'ball' || b.wrap > 0) continue;
+      this.unpark(b);
+      this.release(b);
+      b.brain.abort();
+    }
+  }
+
+  /** 蜂群飞远了：剩下的蜂都算走了，返回走了几只 */
+  depart(): number {
+    const n = this.list.length;
+    this.list.length = 0;
+    this.byId.clear();
+    this.occ.fill(0);
+    this.dancers.length = 0;
+    this.receivers.length = 0;
+    return n;
+  }
+
+  /**
+   * 从 s 附近飞来 n 只工蜂、drones 只雄蜂，queen 为真时带一只蜂王；mode 是 Bee.swarm（2 野生蜂群，3 侦察蜂）。
+   * 野生蜂群的工蜂日龄在寿命的前八成里，侦察蜂都是采集蜂
+   */
+  incoming(n: number, drones: number, queen: boolean, s: SwarmState, mode: number): void {
+    const rng = this.rng;
+    const put = (b: Bee) => {
+      b.out = 2;
+      b.swarm = mode;
+      b.crop = 1;
+      b.act = mode === 3 ? 'scoutHive' : 'swarm';
+      b.pos.x = s.x + rng.range(-1, 1) * s.r;
+      b.pos.y = s.y + rng.range(-0.5, 0.5) * s.r;
+      b.pos.z = s.z + rng.range(-1, 1) * s.r;
+      Object.assign(b.prev, b.pos);
+    };
+    if (queen) put(this.add(CASTE.queen, rng.range(0, 3000), 1e9));
+    for (let i = 0; i < n; i++) {
+      const life = rng.range(B.life[0], B.life[1]);
+      put(this.add(CASTE.worker, mode === 3 ? rng.range(B.roles.forager, life * 0.95) : rng.range(0, life * 0.8), life));
+    }
+    for (let i = 0; i < drones; i++) {
+      const life = rng.range(B.droneLife[0], B.droneLife[1]);
+      put(this.add(CASTE.drone, rng.range(0, life * 0.5), life));
+    }
+  }
+
+  /** 在蜂群中心 r 以内随便一点上飞一段；离得远就全速追 */
+  private *mill(b: Bee, s: SwarmState, act: Act = 'swarm'): Routine {
+    b.act = act;
+    const far = Math.hypot(b.pos.x - s.x, b.pos.y - s.y, b.pos.z - s.z) > 2 * s.r;
+    const a = this.rng.range(0, TAU);
+    const r = s.r * Math.sqrt(this.rng.next());
+    const y = Math.max(this.env.ground(s.x, s.z) + 30, s.y + this.rng.range(-0.4, 0.4) * s.r);
+    yield { k: 'fly', x: s.x + Math.cos(a) * r, y, z: s.z + Math.sin(a) * r, r: 15, v: far ? F.speed : F.speed * 0.4, stop: false, t: 3 };
+  }
+
+  /** 飞逃的蜂：巢里的先吃饱、走到巢门出去，外面的飞到蜂群里跟着；蜂群飞远了 Abscond 一起收走 */
+  private *flee(b: Bee): Routine {
+    const s = this.env.swarm();
+    if (s.phase === 'home' || s.phase === 'empty') {
+      b.swarm = 0;
+      return;
+    }
+    if (b.out === 0) {
+      if (b.caste !== CASTE.queen && b.crop < U.gorge) yield* this.eat(b);
+      b.act = 'leave';
+      if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean)) return yield* this.idle(b, 0.8);
+      if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+    }
+    yield* this.mill(b, s);
+  }
+
+  /** 搬进来的野生蜂群：跟着蜂群飞到巢门前盘旋，盘旋时每一趟有 enter 的机会进巢，蜂群住下了就都进去 */
+  private *landIn(b: Bee): Routine {
+    const s = this.env.swarm();
+    if (b.out === 0 || s.phase === 'home' || (s.phase === 'landing' && this.rng.chance(U.enter))) {
+      b.swarm = 0;
+      return;
+    }
+    yield* this.mill(b, s);
+  }
+
+  /** 来看空箱的侦察蜂：在巢门前飞，进去在巢脾上转一圈再出来；野生蜂群来了就混进去 */
+  private *scoutHive(b: Bee): Routine {
+    const s = this.env.swarm();
+    if (s.phase !== 'scouts') {
+      b.swarm = s.phase === 'arriving' || s.phase === 'landing' ? 2 : 0;
+      return;
+    }
+    if (b.out === 0) {
+      b.act = 'scoutHive';
+      yield { k: 'wander', t: this.rng.range(5, 15) };
+      b.act = 'leave';
+      if (!((yield { k: 'go', f: 'entrance', near: 0, t: 60 }) as boolean)) return yield* this.idle(b);
+      if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+      return;
+    }
+    if (this.rng.chance(0.6)) return yield* this.mill(b, { ...s, x: U.land.x, y: U.land.y, z: U.land.z, r: U.landR }, 'scoutHive');
+    yield* this.comeHome(b);
   }
 
   /** 内勤蜂：带着接来的花蜜先放下；有花开着时一部分去巢门附近等着接蜜（颤抖舞之后更多） */
@@ -1768,7 +1890,7 @@ export class Bees {
           ...[b.act, c ? (c.k === 'dance' ? { ...c, ph: r4(c.ph) } : { ...c, t: r4(c.t) }) : null, c && b.brain.started ? 1 : 0],
           // 巢脾上的蜂位置由 u、v 算出来，不存
           ...[b.out, ...(b.out ? [r4(p.x), r4(p.y), r4(p.z), r4(v.x), r4(v.y), r4(v.z)] : [0, 0, 0, 0, 0, 0]), b.patch, b.goods, r4(b.load)],
-          ...[b.partner, r4(b.waited), r4(b.haul), b.aim ? [r4(b.aim.at), r4(b.aim.x), r4(b.aim.z), b.aim.r, b.aim.sp, b.aim.goods, b.aim.patch] : null, r4(b.dev), r4(b.virus)],
+          ...[b.partner, r4(b.waited), r4(b.haul), b.aim ? [r4(b.aim.at), r4(b.aim.x), r4(b.aim.z), b.aim.r, b.aim.sp, b.aim.goods, b.aim.patch] : null, r4(b.dev), r4(b.virus), b.swarm],
         ] as BeeSave;
       }),
       trips: this.trips,
@@ -1802,9 +1924,9 @@ export class Bees {
     this.list.length = 0;
     this.byId.clear();
     this.occ.fill(0);
-    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load, partner, waited, haul, aim, dev, virus] of d.bees) {
+    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load, partner, waited, haul, aim, dev, virus, swarm] of d.bees) {
       const b = this.add(caste, age, life, id);
-      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load, partner, waited, haul, dev, virus });
+      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load, partner, waited, haul, dev, virus, swarm });
       b.aim = aim ? { at: aim[0], x: aim[1], z: aim[2], r: aim[3], sp: aim[4], goods: aim[5], patch: aim[6] } : null;
       Object.assign(b.pos, { x, y, z });
       Object.assign(b.vel, { x: vx, y: vy, z: vz });

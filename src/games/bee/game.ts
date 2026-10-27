@@ -12,6 +12,7 @@ import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim
 import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, SITES, cellFace, cellSite, siteFrame } from './sim/comb';
 import { SITE_HEAT } from './sim/heat';
+import { FACTORS } from './sim/abscond';
 import { SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap } from './sim/flowers';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
@@ -119,6 +120,8 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
       // ?moth=条数：飞进一只蜡螟产一窝卵；?sac=1 发一次中囊病（T-024）
       if (params.get('moth')) w.pests.lay(Math.min(20, Number(params.get('moth')) || 3));
       if (params.get('sac')) w.pests.outbreak();
+      // ?abscond=1：马上飞逃（T-025）
+      if (params.get('abscond')) w.abscond.leave();
       const secs = Math.min(600, Number(params.get('run')) || 0);
       for (let s = 0; s < secs; s += 1) w.advance(1, Infinity, Infinity);
     },
@@ -293,6 +296,32 @@ function swapPanel(w: BeeWorld): string {
     <div class="actions"><button data-a="swap">${t('info.swapYes')}</button><button data-a="swapNo">${t('info.swapNo')}</button></div>`;
 }
 
+/** 蜂群面板里飞逃的压力那一行（T-025）：按飞逃那一档算百分比，蜂群不在家时写在哪一步 */
+function moodText(w: BeeWorld): string {
+  const a = w.abscond;
+  const ph = a.swarm.phase;
+  if (ph === 'leaving' || ph === 'cloud' || ph === 'away') return t('colony.moodLeaving');
+  if (ph === 'empty') return t('colony.moodEmpty');
+  if (ph === 'scouts') return t('colony.moodScouts');
+  if (ph === 'arriving' || ph === 'landing') return t('colony.moodArriving');
+  const p = Math.round(Math.min(1, a.pressure / CONFIG.abscond.leave) * 100);
+  if (p < 5) return t('colony.moodCalm');
+  return t(a.restless ? 'colony.moodRestless' : 'colony.moodValue', { p });
+}
+
+/** 蜂箱面板：飞逃的压力、它正往哪里走，各样压力占了多少（加起来就是要往的那个数） */
+function pressureRows(w: BeeWorld): string {
+  const a = w.abscond;
+  if (a.swarm.phase !== 'home') return '';
+  const U = CONFIG.abscond;
+  const pct = (x: number) => Math.round((x / U.leave) * 100);
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  return (
+    kv(t('info.pressure'), t('info.pressureValue', { p: Math.min(100, pct(a.pressure)), b: pct(a.bad) })) +
+    FACTORS.map((f) => kv(t(`info.factor.${f}`), `${pct(U.weights[f] * a.factors[f])}%`)).join('')
+  );
+}
+
 /** 和太阳方向差 th（从上往下看顺时针为正，也就是面朝太阳时的右边）写成文字 */
 function sunSide(th: number): string {
   const d = Math.round((wrapAngle(th) * 180) / Math.PI);
@@ -379,6 +408,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
       ${row(t('colony.hornets'), hn ? t('colony.hornetsValue', { n: hn }) : t('colony.hornetsNone'))}
       ${row(t('colony.alarm'), t(w.keeper.alarm > 0.05 ? 'colony.alarmOn' : 'colony.alarmOff'))}
+      ${row(t('colony.mood'), moodText(w))}
       ${row(t('colony.pests'), w.pests.worms.length || n.sac ? t('colony.pestsValue', { w: w.pests.worms.length, s: n.sac }) : t('colony.hornetsNone'))}
       ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
       <h3>${t('colony.since')}</h3>
@@ -397,6 +427,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.worms', w.pests.hatched)}${stat('total.wormsRemoved', w.pests.removed)}
         ${stat('total.bald', w.pests.bald)}${stat('total.entangled', w.pests.entangled)}
         ${stat('total.sacbrood', w.pests.outbreaks)}${stat('total.sacs', w.pests.sacs)}
+        ${stat('total.absconds', w.abscond.absconds)}${stat('total.moveIns', w.abscond.moveIns)}
       </div>`;
       },
     },
@@ -405,6 +436,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       hive: () => `<h2>${t('info.hive')}</h2>
       <div class="kv"><span>${t('info.size')}</span><b>${t('info.sizeValue', { w: H.combW, h: H.frameH })}</b></div>
       <div class="kv"><span>${t('info.plate')}</span><b>${t(w.hornets.plate ? 'info.plateOn' : 'info.plateOff')}</b></div>
+      ${pressureRows(w)}
       <p class="desc">${t('info.hiveDesc')}</p>
       <div class="actions"><button data-a="plate">${t(w.hornets.plate ? 'info.plateRemove' : 'info.plateAdd')}</button></div>
       ${swapPanel(w)}`,

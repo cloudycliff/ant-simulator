@@ -396,6 +396,33 @@ export class Comb {
     this.version++;
   }
 
+  /** 蜂群走了（T-025）：卵、幼虫、封盖子没有蜂照顾都死在房里，留下要清理的房；返回死了几个 */
+  abandon(): number {
+    let n = 0;
+    for (let cell = 0; cell < CELLS; cell++) {
+      const c = this.content[cell];
+      if (c < CELL.egg || c > CELL.capped) continue;
+      this.empty(cell);
+      this.amount[cell] = 1;
+      n++;
+    }
+    this.version++;
+    return n;
+  }
+
+  /** 搬进来的蜂群把带来的蜜吐进最靠上的空房（T-025），返回吐进去多少房 */
+  unload(x: number): number {
+    const free: number[] = [];
+    for (let cell = 0; cell < CELLS; cell++) if (this.content[cell] === CELL.empty && this.amount[cell] === 0 && this.build[cellSite(cell)] >= 1) free.push(cell);
+    free.sort((a, b) => siteV(cellSite(b)) - siteV(cellSite(a)) || a - b);
+    let left = x;
+    for (const cell of free) {
+      if (left <= 1e-6) break;
+      left -= this.addNectar(cell, Math.min(1, left));
+    }
+    return x - left;
+  }
+
   private empty(cell: number): void {
     this.content[cell] = CELL.empty;
     this.amount[cell] = 0;
