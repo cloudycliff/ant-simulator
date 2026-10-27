@@ -283,8 +283,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.handoff'), t('colony.handoffValue', { h: B.handoffs, s: B.selfStored, t: B.trembles }))}
       ${B.starved ? row(t('colony.starved'), String(B.starved)) : ''}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
-      ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
-      <p class="desc">${t('colony.todo')}</p>`;
+      ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}`;
       },
     },
     infoHint: () => t('info.hint'),

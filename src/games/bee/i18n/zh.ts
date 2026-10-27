@@ -11,7 +11,6 @@ export const zh = {
   'colony.title': '蜂群',
   'colony.fold': '点击收起',
   'colony.unfold': '点击展开',
-  'colony.todo': '还没做：蜂身的动作（爬的时候迈腿、飞的时候扇翅膀）。',
   'colony.shift': '分工调整',
   'colony.shiftValue': '提前 {a} · 推后 {b} · 退回 {r}',
   'colony.season': '季节',

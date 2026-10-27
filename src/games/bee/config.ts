@@ -266,6 +266,11 @@ export const CONFIG = {
     comb: { nearPx: 10, rebuild: 0.5 },
     /** 蜂身（T-006）：屏幕上长过 nearPx 像素画完整的模型，短于 farPx 画八面体，中间画三个球；淡化时的不透明度（P-009） */
     bees: { nearPx: 30, farPx: 8, fade: 0.18 },
+    /**
+     * 蜂身的动作：腿迈一步走 stride cm；翅膀在画面上一秒扇 wingHz 次（真的约 230 次，画出来只能是频闪）；
+     * 触角一秒摆 antennaHz 次。一帧里腿最多转 maxGait 弧度，快进时不乱成一团
+     */
+    anim: { stride: 0.3, wingHz: 19, antennaHz: 1.3, maxGait: 1.6 },
     /** 飞着的蜂短于 minPx 像素时放大到 minPx（T-007）；巢里的蜂不放大，不然远看整箱是一团 */
     minPx: 5,
   },

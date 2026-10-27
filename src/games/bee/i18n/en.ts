@@ -14,7 +14,6 @@ export const en: Record<keyof typeof zh, Entry> = {
   'colony.title': 'Colony',
   'colony.fold': 'Click to fold',
   'colony.unfold': 'Click to unfold',
-  'colony.todo': 'Not yet: body animation (legs walking, wings beating).',
   'colony.shift': 'Job shifts',
   'colony.shiftValue': 'ahead {a} · behind {b} · back {r}',
   'colony.season': 'Season',
