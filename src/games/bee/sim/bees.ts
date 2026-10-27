@@ -248,12 +248,14 @@ export interface BeesSave {
   hungry: number;
 }
 
-/** 蜂在巢外要知道的：花丛、此刻几点、太阳的方位（atan2(z, x)）、地面多高 */
+/** 蜂在巢外要知道的：花丛、此刻几点、太阳的方位（atan2(z, x)）、地面多高；天气能不能出巢、在外面的蜂每秒往回飞的机会 */
 export interface BeeEnv {
   flowers: Flowers;
   hour: () => number;
   sun: () => number;
   ground: (x: number, z: number) => number;
+  flyable: () => boolean;
+  recall: () => number;
 }
 
 /**
@@ -424,6 +426,7 @@ export class Bees {
       this.assess();
     }
     let dead = 0;
+    const recall = this.env.recall() * dt;
     for (const b of this.list) {
       b.waggle = 0;
       b.prev.x = b.pos.x;
@@ -443,6 +446,8 @@ export class Bees {
         dead++;
         continue;
       }
+      // 要下雨了：飞着的、停在花上的蜂丢下手里的活往回飞
+      if (recall > 0 && b.out >= 2 && b.act !== 'flyHome' && this.rng.chance(recall)) b.brain.start(this.comeHome(b));
       if (b.wrap > 0) this.stepWrap(b, dt);
       else b.brain.run(b.next, b.exec);
       this.place(b);
@@ -1110,6 +1115,7 @@ export class Bees {
   /** 采集蜂：带着东西先放下；跟舞读出地方的去那儿找，认得开着的花丛就去采，其余去舞场看舞或者去侦察 */
   private *forage(b: Bee): Routine {
     if (b.load > 0) return yield* this.unload(b);
+    if (!this.env.flyable()) return yield* this.wait(b);
     if (b.aim && this.now() - b.aim.at > D.aimLife) b.aim = null;
     if (b.aim) return yield* this.goOut(b, null);
     const p = this.pickPatch(b);
@@ -1159,8 +1165,8 @@ export class Bees {
   private *goOut(b: Bee, p: FlowerPatch | null, scout = false): Routine {
     if (b.crop < F.depart) return yield* this.eat(b);
     b.act = 'leave';
-    // 挤到巢门花了太久，花已经合上了就不出去
-    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || (p && !this.isOpen(p))) return yield* this.idle(b);
+    // 挤到巢门花了太久，花已经合上了、天变了就不出去
+    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || (p && !this.isOpen(p)) || !this.env.flyable()) return yield* this.idle(b);
     if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 10 }) as boolean)) return yield* this.idle(b);
     b.act = scout ? 'scout' : p ? 'flyOut' : 'flyAim';
     yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };
@@ -1323,7 +1329,7 @@ export class Bees {
       return;
     }
     const p = b.patch >= 0 ? this.env.flowers.get(b.patch) : undefined;
-    if (!p || !this.isOpen(p)) return;
+    if (!p || !this.isOpen(p) || !this.env.flyable()) return;
     const q = haul * (pollen ? this.pollenNeed : clamp((D.slow - waited) / (D.slow - D.quick), 0, 1) * 2 * this.honeyNeed);
     const n = Math.round(D.circuits * q * this.rng.range(0.7, 1.3));
     if (n < 1) return;

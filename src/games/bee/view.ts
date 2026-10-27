@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Environment } from '../../core/render/environment';
+import { RainView } from '../../core/render/rain';
 import { clamp } from '../../core/util/math';
 import { Rng } from '../../core/util/random';
 import { BeesView } from './beeView';
@@ -20,6 +21,8 @@ const HIVE_CENTER = new THREE.Vector3(0, H.baseY + COMB_H / 2, 0);
 const _dir = new THREE.Vector3();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _focus = new THREE.Vector3();
+/** 观察箱（含架子和顶棚）的范围：相机贴近它时按离它多远定快慢；贴着玻璃看时不画雨 */
+export const HIVE_BOX = new THREE.Box3(new THREE.Vector3(-30, 0, -13), new THREE.Vector3(30, H.baseY + COMB_H + 20, 13));
 
 /** 花园和观察箱的画面 */
 export class BeeView {
@@ -29,6 +32,7 @@ export class BeeView {
   readonly flowers: FlowerView;
   readonly bees: BeesView;
   readonly dance: DanceView;
+  private rain = new RainView();
   /** 点选用：观察箱的各个部件，userData.ref 指向它们；花丛的圆柱在 flowers.pickables */
   private hiveParts: THREE.Object3D[] = [];
   glass = true;
@@ -65,7 +69,7 @@ export class BeeView {
     this.outline.renderOrder = 20;
     this.outline.visible = false;
     this.group.add(this.outline);
-    scene.add(this.group);
+    scene.add(this.group, this.rain.lines, this.rain.splashes);
   }
 
   /** 点选用：观察箱的部件和花丛的圆柱 */
@@ -236,9 +240,13 @@ export class BeeView {
     return _focus;
   }
 
-  update(camera: THREE.PerspectiveCamera, viewportH: number, focus: THREE.Vector3, following: boolean, sel: BeeRef | null): void {
+  update(dt: number, camera: THREE.PerspectiveCamera, viewportH: number, focus: THREE.Vector3, following: boolean, sel: BeeRef | null): void {
     if (following) this.env.scale.shadow = R.shadowNear;
-    this.env.update(this.w.clock, camera, following ? focus : this.focusFor(camera), false);
+    const f = following ? focus : this.focusFor(camera);
+    this.env.update(this.w.clock, camera, f, false, this.w.weather.cloud);
+    // 雨丝在相机和焦点之间的盒子里落，贴近蜂箱时会落进箱子里
+    const near = clamp((HIVE_BOX.distanceToPoint(camera.position) - 10) / 40, 0, 1);
+    this.rain.sync(dt, camera, f, this.w.weather.rain * near, (x, z) => this.w.groundAt(x, z));
     const k = clamp(this.env.hemi.intensity / R.light.hemiDay, 0, 1);
     for (const f of this.fills) f.intensity = R.fill * k;
     this.outline.visible = sel?.kind === 'hive';

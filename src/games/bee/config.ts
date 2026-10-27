@@ -245,6 +245,27 @@ export const CONFIG = {
    * hiveClear cm、离别的花丛 gap cm、离花园边 flowers.margin。糖水碟最多 maxFeeders 个，在碟子 refillR cm 内再放一次是添满
    */
   tools: { grow: 300, maxPlanted: 12, maxFeeders: 3, hiveClear: 250, gap: 40, refillR: 40 },
+  /**
+   * 天气（T-020）。平均每天 rainPerDay 场阵雨，第 firstRainDay 天以前不下；showers 点之间下雨的机会是平时的 showerPeak 倍，
+   * 其余时候 showerOff 倍（一天平均是 1）。转阴 overcast 秒后下雨，雨下 hours 小时，雨势 strength。
+   * 转阴时在外面的蜂每秒有 recall[0] 的机会往回飞，下雨时 recall[1]；雨把花里的花蜜、花粉冲掉，大雨 wash 秒冲掉约六成。
+   * 气温（°C）在 air 之间，最热在 warmest 点、最凉在它前后 12 小时；阴雨按云量最多降 rainCool
+   */
+  weather: {
+    rainPerDay: 0.5,
+    firstRainDay: 1,
+    showers: [11, 19] as [number, number],
+    showerPeak: 2,
+    showerOff: 0.5,
+    overcast: 25,
+    hours: [1.5, 4] as [number, number],
+    strength: [0.4, 1] as [number, number],
+    recall: [0.1, 1] as [number, number],
+    wash: 90,
+    air: [23, 33] as [number, number],
+    warmest: 14,
+    rainCool: 5,
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { L, t } from '../../core/i18n';
+import { L, t, tr } from '../../core/i18n';
 import type { CameraPose, GameContext, GameModule, GameSession, GameUi, ViewToggle } from '../../core/app/game';
 import { svgIcon } from '../../core/app/shell';
 import { HeightfieldSpace } from '../../core/space/heightfield';
 import { ToolController, type ToolDef } from '../../core/ui/tools';
 import { wrapAngle } from '../../core/util/math';
 import { CONFIG } from './config';
-import { BeeView } from './view';
+import { BeeView, HIVE_BOX } from './view';
 import { MAP_COLORS, MAP_KEYS, ROLE_COLORS } from './palette';
 import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim/bees';
 import { MOUTH } from './sim/flight';
@@ -25,8 +25,6 @@ function openingPose(aspect: number): CameraPose {
   return [dist * 0.25, cy + 10, dist, 0, cy, 0];
 }
 
-/** 观察箱（含架子和顶棚）的范围，相机贴近它时按离它多远定快慢 */
-const HIVE_BOX = new THREE.Box3(new THREE.Vector3(-30, 0, -13), new THREE.Vector3(30, H.baseY + COMB_H + 20, 13));
 
 export const beeGame: GameModule<BeeWorld, BeeRef, BeeSaveData, BeeSaveMeta> = {
   title: () => t('app.title'),
@@ -89,13 +87,14 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     views,
     tools,
     pick: (x, y, tol) => pick(view, camera, dom, x, y, tol),
-    // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）
+    // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）；?rain=1 马上下雨
     applyParams: (params) => {
+      if (params.get('rain')) w.weather.startRain(true);
       const secs = Math.min(600, Number(params.get('run')) || 0);
       for (let s = 0; s < secs; s += 1) w.advance(1, Infinity, Infinity);
     },
     syncViews: () => view.syncViews(),
-    update: (_dt, f) => view.update(camera, dom.clientHeight, f.focus, f.following, f.selection),
+    update: (dt, f) => view.update(dt, camera, dom.clientHeight, f.focus, f.following, f.selection),
     ui: beeUi(w, view, ctx.following),
   };
 }
@@ -242,7 +241,13 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
   const sub = (label: string, value: number) => `<div class="row sub">${label}<b>${value}</b></div>`;
   const stat = (key: Parameters<typeof t>[0], value: number | string) => `<span>${t(key)}</span><b>${value}</b>`;
   return {
-    status: () => ({ icon: w.clock.isNight ? '🌙' : '☀️', text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status') }),
+    status: () => {
+      const ph = w.weather.phase;
+      return {
+        icon: ph === 'rain' ? '🌧️' : ph === 'overcast' ? '☁️' : w.clock.isNight ? '🌙' : '☀️',
+        text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status', { weather: tr(w.weather.label), t: Math.round(w.weather.air(w.clock.hour)) }),
+      };
+    },
     perfExtra: () => '',
     panel: {
       icon: ICON,

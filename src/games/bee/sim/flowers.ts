@@ -144,15 +144,20 @@ export class Flowers {
     return this.patches.find((p) => p.id === id);
   }
 
-  update(dt: number, hour: number): void {
+  /** rain 是雨势 0..1：雨把花里的花蜜、花粉冲掉，下雨时也不长（糖水碟不受影响） */
+  update(dt: number, hour: number, rain = 0): void {
+    const wash = Math.exp((-rain * dt) / CONFIG.weather.wash);
     for (const p of this.patches) {
       if (p.grown < 1) {
         p.grown = Math.min(1, p.grown + dt / T.grow);
         continue;
       }
       const sp = F.species[p.species];
-      const k = openness(sp, hour);
-      if (k <= 0 || sp.refill <= 0) continue;
+      if (sp.refill <= 0) continue;
+      p.nectar *= wash;
+      p.pollen *= wash;
+      const k = openness(sp, hour) * (1 - rain);
+      if (k <= 0) continue;
       p.nectar = Math.min(nectarCap(p), p.nectar + (nectarCap(p) * k * dt) / sp.refill);
       p.pollen = Math.min(pollenCap(p), p.pollen + (pollenCap(p) * k * dt) / sp.refill);
     }

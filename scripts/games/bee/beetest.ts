@@ -1,6 +1,6 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、按需要调整分工、储蜜的反馈、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -265,6 +265,53 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   beeSave.read(y, JSON.parse(saved) as BeeSaveData);
   check('读档后种的花、糖水一样', JSON.stringify(y.flowers.patches) === JSON.stringify(fl.patches) && JSON.stringify(beeSave.write(y, 1)) === saved);
 }
+{
+  // 天气：中午下一场雨。另开一个世界
+  const x = new BeeWorld(7);
+  const Wx = x.weather;
+  check('气温：午后比清早热、在夏天的范围里', Wx.air(14) - Wx.air(2) > 8 && Wx.air(2) > 15 && Wx.air(14) < 38, `${Wx.air(2).toFixed(1)} ~ ${Wx.air(14).toFixed(1)} °C`);
+  run(x, ((12 - x.clock.hour) / 24) * CONFIG.clock.dayLength);
+  const outside = () => x.bees.list.filter((b) => b.out >= 2).length;
+  const wild = x.flowers.patches.filter((p) => p.species !== SUGAR && nectarCap(p) > 0);
+  const nectar = () => wild.reduce((s, p) => s + p.nectar / nectarCap(p), 0) / wild.length;
+  const out0 = outside();
+  Wx.startRain();
+  run(x, CONFIG.weather.overcast + 5);
+  const cool = Wx.air(x.clock.hour);
+  const cloud = Wx.cloud;
+  Wx.cloud = 0;
+  const sunny = Wx.air(x.clock.hour);
+  Wx.cloud = cloud;
+  const trips0 = x.bees.trips;
+  const nectar0 = nectar();
+  let leaving = 0;
+  const wasIn = new Set(x.bees.list.filter((b) => !b.out).map((b) => b.id));
+  for (let s = 0; s < 60; s += 5) {
+    run(x, 5);
+    for (const b of x.bees.list) if (b.out >= 2 && wasIn.has(b.id)) leaving++;
+  }
+  check('下雨：在外面的蜂都飞回来、巢里的不出去', Wx.phase === 'rain' && outside() <= 2 && leaving === 0, `${out0} → ${outside()} 只在外面，雨里出去 ${leaving} 次，回来 ${x.bees.trips - trips0} 趟`);
+  check('下雨：凉下来、花蜜被冲淡', cool < sunny - 2 && nectar() < nectar0 * 0.85, `${sunny.toFixed(1)} → ${cool.toFixed(1)} °C，花蜜 ${(nectar0 * 100).toFixed(0)}% → ${(nectar() * 100).toFixed(0)}%`);
+  check('下雨：事件里有转阴和下雨', x.events.entries.length >= 2);
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const y = new BeeWorld(7);
+    beeSave.read(y, JSON.parse(saved) as BeeSaveData);
+    return y;
+  };
+  const [y1, y2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(y1, 1)) === saved && y1.weather.phase === 'rain';
+  run(y1, 30);
+  run(y2, 30);
+  check('下雨时存档往返一致、读两次走得一样', same && fingerprint(y1) === fingerprint(y2));
+  let t = 0;
+  while (Wx.phase !== 'clear' && t < 400) {
+    run(x, 5);
+    t += 5;
+  }
+  run(x, 60);
+  check('雨停了，采集蜂又出去', Wx.phase === 'clear' && outside() > 20, `下了 ${t + 90} 秒，雨停 60 秒后 ${outside()} 只在外面（${tr(x.clock.stamp())}）`);
+}
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -304,7 +351,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x' }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x' }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

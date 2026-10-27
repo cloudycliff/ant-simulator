@@ -9,6 +9,7 @@ import { CELLS, COMB_H, Comb, cellFace, cellPos, type CombSave } from './sim/com
 import { Bees, type Bee, type BeesSave } from './sim/bees';
 import type { ToolResult } from '../../core/ui/tools';
 import { Flowers, SUGAR, type FlowerSave } from './sim/flowers';
+import { Weather, type WeatherSave } from './sim/weather';
 
 /** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
 export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number };
@@ -18,6 +19,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   readonly comb = new Comb();
   readonly flowers = new Flowers();
   readonly bees: Bees;
+  readonly weather: Weather;
   private noise: Noise2D;
   private followPos: Point3 = { x: 0, y: 0, z: 0 };
   private broodClock = 0;
@@ -28,11 +30,14 @@ export class BeeWorld extends Simulation<BeeRef> {
     const H = CONFIG.hive;
     this.comb.generate(this.rng, seed);
     this.flowers.generate(this.rng, () => this.ids.next('flower'));
+    this.weather = new Weather(this.rng, CONFIG.clock.dayLength, this.clock, (msg) => this.events.push(msg));
     this.bees = new Bees(this.comb, this.rng, this.ids, () => this.clock.seconds, {
       flowers: this.flowers,
       hour: () => this.clock.hour,
       sun: () => this.clock.sunAzimuth,
       ground: (x, z) => this.groundAt(x, z),
+      flyable: () => this.weather.flyable,
+      recall: () => (this.weather.phase === 'rain' ? CONFIG.weather.recall[1] : this.weather.phase === 'overcast' ? CONFIG.weather.recall[0] : 0),
     });
     this.bees.generate();
     this.addSystem('brood', (dt) => {
@@ -45,8 +50,9 @@ export class BeeWorld extends Simulation<BeeRef> {
       );
       this.broodClock = 0;
     });
+    this.addSystem('weather', (dt) => this.weather.update(dt));
     this.addSystem('bees', (dt) => this.bees.update(dt));
-    this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour));
+    this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour, this.weather.rain));
     this.saves.add(
       'comb',
       () => ({ ...this.comb.toSave(), clock: this.broodClock }),
@@ -64,6 +70,11 @@ export class BeeWorld extends Simulation<BeeRef> {
       'flowers',
       () => this.flowers.toSave(),
       (d: FlowerSave) => this.flowers.restore(d),
+    );
+    this.saves.add(
+      'weather',
+      () => this.weather.toSave(),
+      (d: WeatherSave) => this.weather.restore(d),
     );
     this.entities.define('hive', {
       pos: () => ({ x: 0, y: H.baseY + COMB_H / 2, z: 0 }),
@@ -158,7 +169,7 @@ export class BeeWorld extends Simulation<BeeRef> {
 const COMPASS = ['dir.e', 'dir.se', 'dir.s', 'dir.sw', 'dir.w', 'dir.nw', 'dir.n', 'dir.ne'] as const;
 const fail = (key: Parameters<typeof L>[0]): ToolResult => ({ ok: false, msg: L(key) });
 
-const SAVE_VERSION = 8;
+const SAVE_VERSION = 9;
 
 export interface BeeSaveData {
   version: number;

@@ -3,8 +3,16 @@ export const zh = {
   'app.subtitle': '中华蜜蜂 Apis cerana · 开发中',
   'app.loading': '正在布置花园和观察箱…',
 
-  'ui.status': '夏天',
-  'ui.statusNight': '夏夜',
+  'ui.status': '夏天 · {weather} {t}°C',
+  'ui.statusNight': '夏夜 · {weather} {t}°C',
+  'weather.clear': '晴',
+  'weather.overcast': '转阴',
+  'weather.lightRain': '小雨',
+  'weather.heavyRain': '大雨',
+  'ev.overcast': '天色转阴，要下雨了，蜂不再出巢',
+  'ev.rainLight': '下起了小雨',
+  'ev.rainHeavy': '下起了大雨，花里的花蜜被冲淡了',
+  'ev.rainStop': '雨停了',
   'ui.glass': '玻璃',
   'dock.colony': '蜂群',
 

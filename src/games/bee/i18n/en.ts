@@ -6,8 +6,16 @@ export const en: Record<keyof typeof zh, Entry> = {
   'app.subtitle': 'Asian honey bee Apis cerana · in development',
   'app.loading': 'Laying out the garden and the observation hive…',
 
-  'ui.status': 'Summer',
-  'ui.statusNight': 'Summer night',
+  'ui.status': 'Summer · {weather} {t}°C',
+  'ui.statusNight': 'Summer night · {weather} {t}°C',
+  'weather.clear': 'clear',
+  'weather.overcast': 'clouding over',
+  'weather.lightRain': 'light rain',
+  'weather.heavyRain': 'heavy rain',
+  'ev.overcast': 'Clouds are coming in; no more bees fly out before the rain',
+  'ev.rainLight': 'Light rain has started',
+  'ev.rainHeavy': 'Heavy rain is washing nectar out of the flowers',
+  'ev.rainStop': 'The rain has stopped',
   'ui.glass': 'Glass',
   'dock.colony': 'Colony',
 
