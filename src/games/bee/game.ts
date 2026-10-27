@@ -6,7 +6,7 @@ import { HeightfieldSpace } from '../../core/space/heightfield';
 import { wrapAngle } from '../../core/util/math';
 import { CONFIG } from './config';
 import { BeeView } from './view';
-import { CASTE, CASTE_KEYS, ROLE_KEYS, roleOf, type Bee } from './sim/bees';
+import { CASTE, CASTE_KEYS, ROLE_KEYS, ageRoleOf, roleOf, type Bee } from './sim/bees';
 import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, cellFace, cellSite, siteFrame } from './sim/comb';
 import { nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
@@ -159,6 +159,11 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
   const title = t(`caste.${CASTE_KEYS[b.caste]}`) + (role ? ` · ${t(`role.${role}`)}` : '');
   let body = kv(t('info.beeAge'), span(b.age));
   if (b.caste !== CASTE.queen) body += kv(t('info.lifeLeft'), span(b.life - b.age));
+  const byAge = ageRoleOf(b);
+  if (role && byAge && byAge !== role) {
+    const early = ROLE_KEYS.indexOf(role) > ROLE_KEYS.indexOf(byAge);
+    body += kv(t('info.byAge'), t(early ? 'info.byAgeEarly' : 'info.byAgeLate', { role: t(`role.${byAge}`) }));
+  }
   body += kv(t('info.doing'), t(`act.${b.act}`));
   if (b.caste !== CASTE.queen) body += kv(t('info.crop'), t('info.percent', { p: Math.round(b.crop * 100) }));
   if (role === 'nurse') body += kv(t('info.jelly'), t('info.jellyValue', { n: Math.max(0, Math.floor(b.jelly)) }));
@@ -218,17 +223,24 @@ function beeUi(w: BeeWorld, following: () => boolean): GameUi<BeeRef> {
         const roles = Object.fromEntries(ROLE_KEYS.map((k) => [k, 0])) as Record<(typeof ROLE_KEYS)[number], number>;
         let drones = 0;
         let out = 0;
+        let early = 0;
+        let late = 0;
         for (const b of B.list) {
           if (b.out) out++;
           const r = roleOf(b);
-          if (r) roles[r]++;
-          else if (b.caste === CASTE.drone) drones++;
+          if (r) {
+            roles[r]++;
+            const d = ROLE_KEYS.indexOf(r) - ROLE_KEYS.indexOf(ageRoleOf(b)!);
+            if (d > 0) early++;
+            else if (d < 0) late++;
+          } else if (b.caste === CASTE.drone) drones++;
         }
         return `
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
       ${row(t('colony.season'), t('colony.summer'))}
       ${row(t('colony.bees'), t('colony.beesValue', { n: B.list.length, d: drones }))}
       ${ROLE_KEYS.map((k) => `<div class="row sub">${t(`role.${k}`)}<b>${roles[k]}</b></div>`).join('')}
+      ${row(t('colony.shift'), t('colony.shiftValue', { a: early, b: late, r: B.reverted }))}
       ${row(t('colony.cells'), t('colony.cellsValue', { n: c.built * 2, b: c.building * 2 }))}
       ${row(t('colony.brood'), t('colony.broodValue', { e: n.egg, l: n.larva, c: n.capped }))}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}

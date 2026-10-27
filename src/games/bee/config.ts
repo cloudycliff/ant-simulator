@@ -110,7 +110,9 @@ export const CONFIG = {
    * 等不到 quick 秒照常跳，过了 slow 秒不跳摇摆舞，改跳颤抖舞 tremble 秒，每支让内勤蜂去接蜜的机会多 trembleGain，
    * 按 trembleDecay 秒衰减；等过 slow 的蜂有 quit 的机会不再去那片花。
    * 内勤蜂白天有 receive 的机会去巢门附近（离巢门 receiveAt 步）等着接蜜，一次等 receiveWait 秒。
-   * 储粉到 pollenTarget 满房就不缺粉，一半以下最缺；缺粉程度低于 sated 时采粉的蜂回来有 switch 的机会改采蜜
+   * 储粉到 pollenTarget 满房就不缺粉，一半以下最缺；缺粉程度低于 sated 时采粉的蜂回来有 switch 的机会改采蜜。
+   * 缺蜜程度：储蜜在 honeyTarget 满房时 0.5，少 honeySpan / 2 是 1、多 honeySpan / 2 是 0。采蜜的舞跳的圈数乘 2 × 缺蜜程度，
+   * 内勤蜂去接蜜的机会在缺蜜程度不到 0.5 时按比例少（巢里放蜜的地方紧了，接了也没处放），蜜越多交接等得越久、越不跳舞
    */
   dance: {
     round: 600,
@@ -137,19 +139,38 @@ export const CONFIG = {
     tremble: [10, 20] as [number, number],
     trembleGain: 0.05,
     trembleDecay: 120,
-    quit: 0.3,
+    quit: 0.5,
     receive: 0.3,
     receiveAt: [4, 16] as [number, number],
     receiveWait: [15, 30] as [number, number],
     pollenTarget: 800,
+    honeyTarget: 3000,
+    honeySpan: 800,
     sated: 0.2,
     switch: 0.5,
+  },
+  /**
+   * 按需要调整分工（T-015）。每 every 秒看一次：每只哺育蜂照顾 perNurse 只幼虫正好；多了（倍数 load > 1）清理蜂的
+   * 分工日龄长得快 nurseGain × (load - 1)、哺育蜂慢同样多，少了哺育蜂快；load 过了 revertAt，每回每只内勤蜂、守卫有
+   * revert × (load - revertAt) 的机会退回哺育（分工日龄退到哺育的最后 backTo 秒里）。采集蜂占工蜂的比例比 foragers 少时
+   * 内勤蜂、守卫长得快 foragerGain × 少的比例，多了慢。快慢都限在 pace 以内
+   */
+  shift: {
+    every: 10,
+    perNurse: 1.5,
+    nurseGain: 1,
+    revertAt: 1.5,
+    revert: 0.02,
+    backTo: 300,
+    foragers: 0.35,
+    foragerGain: 1,
+    pace: [0.2, 3] as [number, number],
   },
   /**
    * 出巢采集（T-013）。飞行用转向：最快 speed、在花间 hop（cm/s），加速度不过 accel，离目标 d 时想要的速度是
    * d × brake（不低于 slow）；离目标水平 descend 以外按 cruise 的高度（离地）飞，左右摆 wobble 成、wobbleHz 次每秒。
    * 飞着的蜂蜜囊 flyBurn 秒用空；出巢前蜜囊低于 depart 先去吃。
-   * 不认得花丛的采集蜂每回想出巢时 scout 的机会去侦察（不然去舞场看舞，T-014）；花开到 minOpen 才去；
+   * 不认得花丛的采集蜂每回想出巢时 scout × max(2 × 缺蜜程度, 缺粉程度) 的机会去侦察（不然去舞场看舞，T-014、T-015）；花开到 minOpen 才去；
    * 侦察蜂采花粉的机会是缺粉程度 × pollenShare。开局 known 的采集蜂已经认得一片花丛。
    * 一趟最多落 visits 朵花，每朵停 visit 秒，带满 1 份回巢；不到 keep 份就不再去这片花丛。
    * 一份花蜜放进巢房是 nectarLoad 房、花粉 pollenLoad 房；放的时候停 unload 秒。巢门管里跑得快，tubeWalk cm/s。

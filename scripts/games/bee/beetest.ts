@@ -1,6 +1,6 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -8,7 +8,7 @@ import { setLang, t, tr } from '../../../src/core/i18n';
 import { CombView } from '../../../src/games/bee/combView';
 import { CONFIG } from '../../../src/games/bee/config';
 import { CELL, CELLS, CONTENT_KEYS, SITES, cellPos, siteAt, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
-import { ACTS, CASTE, type Act } from '../../../src/games/bee/sim/bees';
+import { ACTS, CASTE, ageRoleOf, roleOf, type Act } from '../../../src/games/bee/sim/bees';
 import { Flowers, nectarCap, openness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
 import { nodeAt } from '../../../src/games/bee/sim/walk';
 import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
@@ -133,8 +133,10 @@ let outAtNight = 0;
 let badFlight = 0;
 const garden = CONFIG.garden.size / 2;
 const stepT0 = performance.now();
+let hand300 = 0;
 for (let s = 0; s < CONFIG.clock.dayLength; s += 10) {
   run(w, 10);
+  if (s === 290) hand300 = bees.handoffs;
   let out = 0;
   for (const b of bees.list) {
     seen.add(b.act);
@@ -187,6 +189,43 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   [DC.angleNoise, DC.distNoise] = noise;
   check('没有误差时舞里说的就是那片花（两面）', worst < 1, `差 ${worst.toFixed(3)} cm`);
 }
+{
+  // 按需要调整分工、储蜜的反馈：开局拿掉八成哺育蜂、八成采集蜂，或者多放 500 房蜜，跑 300 秒
+  const variant = (setup: (x: BeeWorld) => void) => {
+    const x = new BeeWorld(7);
+    setup(x);
+    run(x, 300);
+    return x;
+  };
+  const kill = (x: BeeWorld, role: string) => {
+    let n = 0;
+    for (const b of x.bees.list) if (roleOf(b) === role && x.rng.chance(0.8)) b.life = b.age;
+    for (const b of x.bees.list) if (roleOf(b) === role && b.life > b.age) n++;
+    return n;
+  };
+  const count = (x: BeeWorld, role: string) => x.bees.list.filter((b) => roleOf(b) === role).length;
+  let nurses0 = 0;
+  const a = variant((x) => (nurses0 = kill(x, 'nurse')));
+  check('缺哺育蜂时内勤蜂退回去喂、清理蜂提前', count(a, 'nurse') > nurses0 * 1.5 && a.bees.reverted > 20 && a.bees.starved === 0, `剩 ${nurses0} 只 → ${count(a, 'nurse')} 只，退回 ${a.bees.reverted} 只，饿死幼虫 ${a.bees.starved}`);
+  let foragers0 = 0;
+  const f = variant((x) => (foragers0 = kill(x, 'forager')));
+  const early = f.bees.list.filter((b) => roleOf(b) === 'forager' && ageRoleOf(b) !== 'forager').length;
+  check('缺采集蜂时提前去采集', early > 50, `剩 ${foragers0} 只 → ${count(f, 'forager')} 只，其中提前的 ${early} 只`);
+  let honeyUp = 0;
+  const h = variant((x) => {
+    const cb = x.comb;
+    let want = 500;
+    for (let c = 0; c < CELLS && want > 0; c++)
+      if (cb.build[c % SITES] >= 1 && cb.content[c] === CELL.empty && cb.amount[c] <= 0 && c % 3 === 0) {
+        cb.content[c] = CELL.cappedHoney;
+        cb.amount[c] = 1;
+        want--;
+      }
+    honeyUp = cb.census().honeyCells;
+  });
+  const honeyEnd = h.comb.census().honeyCells;
+  check('蜜多了少接蜜、储蜜往回落', h.bees.handoffs < hand300 * 0.2 && honeyEnd < honeyUp, `交接 ${h.bees.handoffs}（平常 ${hand300}），自己放 ${h.bees.selfStored}，储蜜 ${honeyUp.toFixed(0)} → ${honeyEnd.toFixed(0)}`);
+}
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);
 check('一天后子的阶段和日龄还对得上', stageMismatch(comb) === 0, `卵 ${c0.egg}→${c1.egg} 幼虫 ${c0.larva}→${c1.larva} 封盖 ${c0.capped}→${c1.capped}`);
@@ -206,7 +245,7 @@ check(
   a.bees.list.length === bees.list.length &&
     a.bees.list.every((x, i) => {
       const y = bees.list[i];
-      return x.id === y.id && x.face === y.face && x.out === y.out && Math.abs(x.u - y.u) < 1e-3 && Math.abs(x.pos.x - y.pos.x) < 1e-3 && Math.abs(x.pos.y - y.pos.y) < 1e-3 && Math.abs(x.load - y.load) < 1e-3 && x.partner === y.partner && !x.aim === !y.aim && (!x.aim || Math.abs(x.aim.x - y.aim!.x) < 1e-3);
+      return x.id === y.id && x.face === y.face && x.out === y.out && Math.abs(x.u - y.u) < 1e-3 && Math.abs(x.pos.x - y.pos.x) < 1e-3 && Math.abs(x.pos.y - y.pos.y) < 1e-3 && Math.abs(x.load - y.load) < 1e-3 && x.partner === y.partner && Math.abs(x.dev - y.dev) < 1e-3 && !x.aim === !y.aim && (!x.aim || Math.abs(x.aim.x - y.aim!.x) < 1e-3);
     }),
   `${bees.list.filter((x) => x.out).length} 只在外面`,
 );
@@ -226,7 +265,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6 }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x' }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

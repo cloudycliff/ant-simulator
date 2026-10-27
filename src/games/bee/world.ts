@@ -113,7 +113,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   }
 }
 
-const SAVE_VERSION = 6;
+const SAVE_VERSION = 7;
 
 export interface BeeSaveData {
   version: number;

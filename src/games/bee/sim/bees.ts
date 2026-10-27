@@ -16,6 +16,7 @@ const H = CONFIG.hive;
 const P = CONFIG.cell.pitch;
 const F = CONFIG.forage;
 const D = CONFIG.dance;
+const S = CONFIG.shift;
 const SPECIES = CONFIG.flowers.species;
 
 /** 每个位置在育儿区（0）、外面放花粉的一圈（1）还是再往外放花蜜（2）；按开局育儿区的椭圆，不随蜂群变 */
@@ -143,6 +144,8 @@ export const ROUND_R = 0.5;
 /** 找跳舞的地方：先试脚下，再往巢脾里面挪（cm） */
 const SPOTS = [[0, 0]];
 for (let r = 0.5; r <= 3; r += 0.5) for (let k = 0; k < 8; k++) SPOTS.push([Math.cos((k * Math.PI) / 4) * r, Math.sin((k * Math.PI) / 4) * r]);
+/** 查舞场站不站得下时看的一圈方向 */
+const RING = Array.from({ length: 12 }, (_, k) => [Math.cos((k * Math.PI) / 6), Math.sin((k * Math.PI) / 6)]);
 
 export class Bee {
   readonly pos = { x: 0, y: 0, z: 0 };
@@ -157,6 +160,8 @@ export class Bee {
   fast = 0;
   /** 哺育蜂肚里的花粉还够喂几次 */
   jelly = 0;
+  /** 分工看的日龄：平时和日龄一起长，蜂群缺哪种蜂时长得快慢不同，缺哺育蜂时内勤蜂会退回去（T-015） */
+  dev = 0;
   /** 绕边的进度（0 是没在绕）和往外的方向 */
   wrap = 0;
   wn = 0;
@@ -193,11 +198,20 @@ export class Bee {
   ) {}
 }
 
-/** 工蜂按日龄的分工；雄蜂、蜂王没有 */
-export function roleOf(b: Bee): RoleKey | null {
-  if (b.caste !== CASTE.worker) return null;
+/** 分工看的日龄 t 对应第几种工作（ROLE_KEYS 的编号） */
+function roleIndex(t: number): number {
   const R = B.roles;
-  return b.age < R.nurse ? 'cleaner' : b.age < R.house ? 'nurse' : b.age < R.guard ? 'house' : b.age < R.forager ? 'guard' : 'forager';
+  return t < R.nurse ? 0 : t < R.house ? 1 : t < R.guard ? 2 : t < R.forager ? 3 : 4;
+}
+
+/** 工蜂现在的分工；雄蜂、蜂王没有 */
+export function roleOf(b: Bee): RoleKey | null {
+  return b.caste === CASTE.worker ? ROLE_KEYS[roleIndex(b.dev)] : null;
+}
+
+/** 工蜂按日龄本该做的；和 roleOf 不一样就是按蜂群的需要提前或推后了 */
+export function ageRoleOf(b: Bee): RoleKey | null {
+  return b.caste === CASTE.worker ? ROLE_KEYS[roleIndex(b.age)] : null;
 }
 
 const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
@@ -206,7 +220,7 @@ type BeeSave = [
   ...[id: number, caste: number, age: number, life: number, face: number, u: number, v: number, h: number, crop: number, jelly: number, wrap: number, wn: number, fast: number],
   ...[act: Act, cmd: Cmd | null, started: number],
   ...[out: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, patch: number, goods: number, load: number],
-  ...[partner: number, waited: number, haul: number, aim: number[] | null],
+  ...[partner: number, waited: number, haul: number, aim: number[] | null, dev: number],
 ];
 export interface BeesSave {
   bees: BeeSave[];
@@ -223,6 +237,9 @@ export interface BeesSave {
   trembles: number;
   tremble: number;
   pollenNeed: number;
+  honeyNeed: number;
+  pace: number[];
+  reverted: number;
   needAt: number;
   births: number;
   deaths: number;
@@ -271,6 +288,12 @@ export class Bees {
   tremble = 0;
   /** 缺粉程度 0..1，每 10 秒按储粉算一次 */
   pollenNeed = 0.5;
+  /** 缺蜜程度 0..1，储蜜在 honeyTarget 时是 0.5；也是每 10 秒算一次 */
+  honeyNeed = 0.5;
+  /** 每种分工的蜂分工日龄长得多快（按 ROLE_KEYS），和缺蜜、缺粉一起算 */
+  pace = ROLE_KEYS.map(() => 1);
+  /** 缺哺育蜂时退回去哺育的内勤蜂、守卫 */
+  reverted = 0;
   private needAt = 0;
   /** 这一步开头在跳舞的蜂、等着接蜜的内勤蜂 */
   private dancers: Bee[] = [];
@@ -343,6 +366,7 @@ export class Bees {
 
   private add(caste: number, age: number, life: number, id = this.ids.next('bee')): Bee {
     const b = new Bee(id, caste, age, life);
+    b.dev = age;
     b.next = () => this.task(b);
     b.exec = (c) => this.exec(b, c);
     this.list.push(b);
@@ -396,8 +420,8 @@ export class Bees {
     }
     this.tremble *= Math.exp(-dt / D.trembleDecay);
     if (this.now() >= this.needAt) {
-      this.needAt = this.now() + 10;
-      this.pollenNeed = clamp((D.pollenTarget - this.comb.census().pollenCells) / (D.pollenTarget / 2), 0, 1);
+      this.needAt = this.now() + S.every;
+      this.assess();
     }
     let dead = 0;
     for (const b of this.list) {
@@ -406,6 +430,7 @@ export class Bees {
       b.prev.y = b.pos.y;
       b.prev.z = b.pos.z;
       b.age += dt;
+      if (b.caste === CASTE.worker) b.dev += dt * this.pace[roleIndex(b.dev)];
       if (b.caste !== CASTE.queen) {
         b.crop = Math.max(0, b.crop - dt / (b.out === 2 ? F.flyBurn : b.caste === CASTE.drone ? B.droneBurn : B.burn));
         b.fast = b.crop > 0 ? 0 : b.fast + dt;
@@ -429,6 +454,34 @@ export class Bees {
       if (b.alive) continue;
       this.list.splice(i, 1);
       this.byId.delete(b.id);
+    }
+  }
+
+  /**
+   * 看看蜂群缺什么：缺粉、缺蜜的程度；每只哺育蜂要照顾的幼虫多了，清理蜂提前去哺育、哺育蜂推后换工作，
+   * 再多就有内勤蜂、守卫退回去哺育；采集蜂少了，内勤蜂、守卫提前去采集，多了推后
+   */
+  private assess(): void {
+    const c = this.comb.census();
+    this.pollenNeed = clamp((D.pollenTarget - c.pollenCells) / (D.pollenTarget / 2), 0, 1);
+    this.honeyNeed = clamp((D.honeyTarget - c.honeyCells) / D.honeySpan + 0.5, 0, 1);
+    const n = ROLE_KEYS.map(() => 0);
+    for (const b of this.list) if (b.caste === CASTE.worker) n[roleIndex(b.dev)]++;
+    const workers = n.reduce((a, x) => a + x, 0);
+    const load = c.counts.larva / Math.max(1, n[1] * S.perNurse);
+    const share = n[4] / Math.max(1, workers);
+    const pf = clamp(1 + (S.foragerGain * (S.foragers - share)) / S.foragers, S.pace[0], S.pace[1]);
+    this.pace[0] = clamp(1 + S.nurseGain * Math.max(0, load - 1), S.pace[0], S.pace[1]);
+    this.pace[1] = clamp(1 - S.nurseGain * (load - 1), S.pace[0], S.pace[1]);
+    this.pace[2] = this.pace[3] = pf;
+    this.pace[4] = 1;
+    if (load <= S.revertAt) return;
+    const k = Math.min(1, S.revert * (load - S.revertAt));
+    for (const b of this.list) {
+      const r = b.caste === CASTE.worker && !b.out && b.load <= 0 ? roleIndex(b.dev) : -1;
+      if ((r !== 2 && r !== 3) || !this.rng.chance(k)) continue;
+      b.dev = B.roles.house - this.rng.range(0, S.backTo);
+      this.reverted++;
     }
   }
 
@@ -1083,7 +1136,8 @@ export class Bees {
   private *lookForWork(b: Bee): Routine {
     const open = this.env.flowers.patches.filter(this.isOpen);
     if (!open.length) return yield* this.wait(b);
-    if (b.patch < 0 && this.rng.chance(F.scout)) {
+    // 缺蜜、缺粉时闲着的采集蜂更愿意出去找
+    if (b.patch < 0 && this.rng.chance(F.scout * Math.max(2 * this.honeyNeed, this.pollenNeed))) {
       const p = open[this.rng.int(0, open.length - 1)];
       this.adopt(b, p, this.rng.chance(this.pollenNeed * F.pollenShare));
       return yield* this.goOut(b, p, true);
@@ -1266,7 +1320,7 @@ export class Bees {
     }
     const p = b.patch >= 0 ? this.env.flowers.get(b.patch) : undefined;
     if (!p || !this.isOpen(p)) return;
-    const q = haul * (pollen ? this.pollenNeed : clamp((D.slow - waited) / (D.slow - D.quick), 0, 1));
+    const q = haul * (pollen ? this.pollenNeed : clamp((D.slow - waited) / (D.slow - D.quick), 0, 1) * 2 * this.honeyNeed);
     const n = Math.round(D.circuits * q * this.rng.range(0.7, 1.3));
     if (n < 1) return;
     b.act = 'seek';
@@ -1293,15 +1347,14 @@ export class Bees {
     return this.outside > 0 || this.env.flowers.patches.some(this.isOpen);
   }
 
-  /** 舞场中心：(cu, cv) 附近、周围 r 以内都能站的地方 */
+  /** 舞场中心：(cu, cv) 附近、周围 r 以内都能站的地方（每圈按太阳转方向，整个圈都要站得下） */
   private danceSpot(cu: number, cv: number, r: number): [number, number] | null {
-    const R = r + 0.3;
     const m = this.map;
-    for (const [du, dv] of SPOTS) {
-      const u = cu + du;
-      const v = cv + dv;
-      if (m.ok(u, v) && m.ok(u - R, v) && m.ok(u + R, v) && m.ok(u, v - R) && m.ok(u, v + R)) return [u, v];
-    }
+    const fits = (u: number, v: number) => {
+      for (let R = 0.25; R < r + 0.55; R += 0.25) if (!RING.every(([x, y]) => m.ok(u + x * R, v + y * R))) return false;
+      return m.ok(u, v);
+    };
+    for (const [du, dv] of SPOTS) if (fits(cu + du, cv + dv)) return [cu + du, cv + dv];
     return null;
   }
 
@@ -1414,7 +1467,7 @@ export class Bees {
   /** 内勤蜂：带着接来的花蜜先放下；有花开着时一部分去巢门附近等着接蜜（颤抖舞之后更多） */
   private *house(b: Bee): Routine {
     if (b.load > 0) return yield* this.store(b);
-    if (this.rng.chance(Math.min(0.8, D.receive + this.tremble)) && this.foraging()) {
+    if (this.rng.chance(Math.min(0.8, D.receive + this.tremble) * Math.min(1, 2 * this.honeyNeed)) && this.foraging()) {
       b.act = 'goReceive';
       if ((yield { k: 'go', f: 'entrance', near: this.rng.int(D.receiveAt[0], D.receiveAt[1]), t: 60 }) as boolean) {
         b.act = 'receive';
@@ -1456,7 +1509,7 @@ export class Bees {
           ...[b.act, c ? (c.k === 'dance' ? { ...c, ph: r4(c.ph) } : { ...c, t: r4(c.t) }) : null, c && b.brain.started ? 1 : 0],
           // 巢脾上的蜂位置由 u、v 算出来，不存
           ...[b.out, ...(b.out ? [r4(p.x), r4(p.y), r4(p.z), r4(v.x), r4(v.y), r4(v.z)] : [0, 0, 0, 0, 0, 0]), b.patch, b.goods, r4(b.load)],
-          ...[b.partner, r4(b.waited), r4(b.haul), b.aim ? [r4(b.aim.at), r4(b.aim.x), r4(b.aim.z), b.aim.r, b.aim.sp, b.aim.goods, b.aim.patch] : null],
+          ...[b.partner, r4(b.waited), r4(b.haul), b.aim ? [r4(b.aim.at), r4(b.aim.x), r4(b.aim.z), b.aim.r, b.aim.sp, b.aim.goods, b.aim.patch] : null, r4(b.dev)],
         ] as BeeSave;
       }),
       trips: this.trips,
@@ -1472,6 +1525,9 @@ export class Bees {
       trembles: this.trembles,
       tremble: r4(this.tremble),
       pollenNeed: r4(this.pollenNeed),
+      honeyNeed: r4(this.honeyNeed),
+      pace: this.pace.map(r4),
+      reverted: this.reverted,
       needAt: r4(this.needAt),
       births: this.births,
       deaths: this.deaths,
@@ -1485,9 +1541,9 @@ export class Bees {
     this.list.length = 0;
     this.byId.clear();
     this.occ.fill(0);
-    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load, partner, waited, haul, aim] of d.bees) {
+    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load, partner, waited, haul, aim, dev] of d.bees) {
       const b = this.add(caste, age, life, id);
-      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load, partner, waited, haul });
+      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load, partner, waited, haul, dev });
       b.aim = aim ? { at: aim[0], x: aim[1], z: aim[2], r: aim[3], sp: aim[4], goods: aim[5], patch: aim[6] } : null;
       Object.assign(b.pos, { x, y, z });
       Object.assign(b.vel, { x: vx, y: vy, z: vz });
@@ -1508,6 +1564,9 @@ export class Bees {
     this.trembles = d.trembles;
     this.tremble = d.tremble;
     this.pollenNeed = d.pollenNeed;
+    this.honeyNeed = d.honeyNeed;
+    this.pace = [...d.pace];
+    this.reverted = d.reverted;
     this.needAt = d.needAt;
     this.births = d.births;
     this.deaths = d.deaths;
