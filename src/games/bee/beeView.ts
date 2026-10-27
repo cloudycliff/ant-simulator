@@ -173,9 +173,18 @@ const SHAKE = [0, 0.12, 0.05, 0.015];
 
 /**
  * 蜂身的朝向：巢面上背朝外；绕边时背从这一面的法线转到边的外侧再转到另一面。
- * 不在巢脾上时背朝上，飞着的按速度抬头低头
+ * 不在巢脾上时背朝上，飞着的按速度抬头低头；围成热球的背朝外
  */
 function orient(b: Bee, fwd: THREE.Vector3, up: THREE.Vector3): void {
+  if (b.out === 3 && b.act === 'ball') {
+    // 围在胡蜂身上：背朝外（停着时 vel 记着往外的方向），头绕着球
+    const v = b.vel;
+    up.set(v.x, v.y, v.z).normalize();
+    fwd.set(0, 1, 0).cross(up);
+    if (fwd.lengthSq() < 0.01) fwd.set(1, 0, 0).cross(up);
+    fwd.normalize().applyAxisAngle(up, b.id);
+    return;
+  }
   if (b.out) {
     const v = b.vel;
     const pitch = b.out === 2 ? Math.max(-0.6, Math.min(0.6, Math.atan2(v.y, Math.hypot(v.x, v.z)))) : 0;

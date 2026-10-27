@@ -297,6 +297,55 @@ export const CONFIG = {
     hold: [20, 40] as [number, number],
     refresh: 5,
   },
+  /**
+   * 胡蜂（P-012、T-022）：黄腿胡蜂 Vespa velutina。第 firstDay 天起，每天有 days 的机会是“胡蜂天”，那天 hours 点之间
+   * 每个游戏小时有 perHour 的机会来一只，同时最多 max 只；阴雨天不来、在的也走。一只来了在巢门外待 stay 秒，
+   * 悬停在管口外 spot.out cm、上下 spot.up、左右 spot.side 以内的一点，每 drift 秒换一个点，飞 speed、悬停时 hover cm/s。
+   * 离它 reach cm 内飞着的蜂，过了 strike 秒的间隔扑一次（扑的时候 dart cm/s），扑中了有 catch 的机会抓走，
+   * 巢门边抖翅的蜂（shimmer）到 shimmerFull 只时抓中的机会少 shimmerCut，装了防护片再乘 plateCatch。
+   * 抓到了带着飞走，有 back 的机会过 backIn 秒回来接着抓。悬停时每秒有 land 的机会扑到管口上抓守卫（装了防护片不会），
+   * 一扑上去就被围住：巢门附近 ball 只蜂出来围成热球，球里到 ballFull 只时温度升到 ballMax（°C），按 ballRise 秒接近；
+   * 热过 lethal 累计 dose 秒胡蜂死。离管口 threatR cm 内有胡蜂时守卫抖翅、守卫日龄的蜂 threatGuards 的机会去巢门；
+   * 每有一只胡蜂悬停，采集蜂走到巢门时有 paralysis 的机会不出去（最多 paralysisMax）。
+   * 防护片让管口最后 plateLen cm 走得慢（乘 plateSlow）。死胡蜂掉在地上 deadTime 秒；胡蜂身长 length
+   */
+  hornets: {
+    firstDay: 1,
+    days: 0.75,
+    hours: [13, 18] as [number, number],
+    perHour: 0.5,
+    max: 3,
+    stay: [80, 160] as [number, number],
+    spot: { out: [15, 40] as [number, number], up: [-3, 18] as [number, number], side: 25 },
+    drift: [3, 8] as [number, number],
+    speed: 350,
+    hover: 25,
+    reach: 14,
+    strike: [5, 12] as [number, number],
+    dart: 220,
+    catch: 0.3,
+    shimmerCut: 0.6,
+    shimmerFull: 25,
+    plateCatch: 0.4,
+    back: 0.5,
+    backIn: [30, 80] as [number, number],
+    land: 0.012,
+    ball: [120, 180] as [number, number],
+    ballFull: 100,
+    ballMax: 46.5,
+    ballRise: 8,
+    lethal: 45,
+    dose: 30,
+    ballLoss: 0.03,
+    threatR: 70,
+    threatGuards: 0.8,
+    paralysis: 0.3,
+    paralysisMax: 0.9,
+    plateSlow: 0.4,
+    plateLen: 1.5,
+    deadTime: 300,
+    length: 2.8,
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

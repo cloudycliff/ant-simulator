@@ -54,7 +54,7 @@ export const beeGame: GameModule<BeeWorld, BeeRef, BeeSaveData, BeeSaveMeta> = {
   mount,
 };
 
-type ToolKind = 'plant' | 'sugar';
+type ToolKind = 'plant' | 'sugar' | 'swatter' | 'plate';
 /** 种花的选项：开局会长的几种花 */
 const PLANTABLE = CONFIG.flowers.species.map((_, i) => i).filter((i) => CONFIG.flowers.species[i].wild);
 const TOOLS: ToolDef<ToolKind>[] = [
@@ -66,6 +66,8 @@ const TOOLS: ToolDef<ToolKind>[] = [
     options: PLANTABLE.map((i) => ({ label: L(`flower.${CONFIG.flowers.species[i].key}`), radius: CONFIG.flowers.species[i].plantR })),
   },
   { kind: 'sugar', name: L('tool.sugar'), key: '7', hint: L('tool.sugarHint'), options: [{ label: L('tool.dish'), radius: CONFIG.flowers.species[SUGAR].plantR + 4 }] },
+  { kind: 'swatter', name: L('tool.swatter'), key: '8', hint: L('tool.swatterHint'), options: [{ label: L('tool.swatter'), radius: 6 }] },
+  { kind: 'plate', name: L('tool.plate'), key: '9', hint: L('tool.plateHint'), options: [{ label: L('tool.plate'), radius: 6 }] },
 ];
 
 const ICON = svgIcon('<path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5z"/><path d="M10 7.5l2.2 1.25v2.5L10 12.5l-2.2-1.25v-2.5z"/>');
@@ -74,7 +76,14 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
   const { world: w, scene, camera, dom } = ctx;
   const view = new BeeView(w, scene);
   const tools = new ToolController<ToolKind>(TOOLS, {
-    run: (def, option, p, _yaw, dry) => (def.kind === 'plant' ? w.plant(PLANTABLE[option], p.x, p.z, dry) : w.feed(p.x, p.z, dry)),
+    run: (def, option, p, _yaw, dry) => {
+      if (def.kind === 'plant') return w.plant(PLANTABLE[option], p.x, p.z, dry);
+      if (def.kind === 'sugar') return w.feed(p.x, p.z, dry);
+      if (def.kind === 'plate') return dry ? { ok: true } : w.togglePlate();
+      const h = hornetOnRay(w, camera.position, p);
+      if (h < 0) return { ok: false, msg: L('tool.noHornet') };
+      return w.hornets.swat(h, dry) ? { ok: true } : { ok: false, msg: L('tool.noHornet') };
+    },
   });
   const views: ViewToggle[] = [
     { id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) },
@@ -89,9 +98,18 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     views,
     tools,
     pick: (x, y, tol) => pick(view, camera, dom, x, y, tol),
+    action: (a, v) => {
+      if (a === 'swat') w.hornets.swat(v ?? -1);
+      else if (a === 'plate') ctx.toast(tr(w.togglePlate().msg!));
+      else return false;
+      return true;
+    },
     // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）；?rain=1 马上下雨
     applyParams: (params) => {
       if (params.get('rain')) w.weather.startRain(true);
+      // ?hornet=只数：马上来几只胡蜂；?plate=1 装上防护片
+      if (params.get('plate')) w.hornets.plate = true;
+      w.hornets.spawn(Math.min(5, Number(params.get('hornet')) || 0));
       const secs = Math.min(600, Number(params.get('run')) || 0);
       for (let s = 0; s < secs; s += 1) w.advance(1, Infinity, Infinity);
     },
@@ -102,6 +120,25 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
 }
 
 const ray = new THREE.Raycaster();
+const _hp = new THREE.Vector3();
+const _seg = new THREE.Ray();
+
+/** 从相机到地面上那一点的视线最近的胡蜂（离视线不到 3 cm 或相机距离的 2.5%）；没有是 -1 */
+function hornetOnRay(w: BeeWorld, cam: THREE.Vector3, p: THREE.Vector3): number {
+  _seg.origin.copy(cam);
+  _seg.direction.copy(p).sub(cam).normalize();
+  let best = -1;
+  let bestD = Infinity;
+  for (const h of w.hornets.list) {
+    if (h.state === 'away' || h.state === 'dead' || !w.hornetPos(h.id, _hp)) continue;
+    const d = Math.sqrt(_seg.distanceSqToPoint(_hp));
+    if (d < Math.max(3, cam.distanceTo(_hp) * 0.025) && d < bestD) {
+      bestD = d;
+      best = h.id;
+    }
+  }
+  return best;
+}
 
 /** 蜂按屏幕距离优先；淡化蜂时巢房优先，点不到巢房才选蜂（P-009） */
 function pick(view: BeeView, camera: THREE.PerspectiveCamera, dom: HTMLElement, x: number, y: number, tol = 16): BeeRef | null {
@@ -110,6 +147,8 @@ function pick(view: BeeView, camera: THREE.PerspectiveCamera, dom: HTMLElement, 
   const hit = ray.intersectObjects(view.pickables, false)[0];
   const cell = view.comb.pick(ray.ray);
   const bee = view.bees.pick(camera, rect.width, rect.height, x - rect.left, y - rect.top, tol);
+  const hornet = view.hornets.pick(camera, rect.width, rect.height, x - rect.left, y - rect.top, tol * 1.5);
+  if (hornet && (!bee || hornet.dist < bee.dist + 5)) return { kind: 'hornet', id: hornet.id };
   const front = cell && (!hit || cell.dist < hit.distance) ? cell.dist : (hit?.distance ?? Infinity);
   if (bee && !(view.bees.fade && cell) && bee.dist < front + 2) return { kind: 'bee', id: bee.id };
   if (cell && (!hit || cell.dist < hit.distance)) return { kind: 'cell', id: cell.cell };
@@ -213,6 +252,20 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
     </div>`;
 }
 
+function hornetInfo(w: BeeWorld, id: number, following: boolean): string {
+  const h = w.hornets.get(id);
+  if (!h || h.state === 'away') return `<h2>${t('info.hornetGone')}</h2>`;
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  let body = kv(t('info.hornetState'), t(`hornet.${h.state}`));
+  if (h.state === 'ball') body += kv(t('info.ballHeat'), t('info.ballHeatValue', { t: h.heat.toFixed(1), n: w.bees.ball(h.id).length }));
+  const alive = h.state !== 'dead';
+  return `<h2>${t('info.hornet')}</h2>${body}<p class="desc">${t('info.hornetDesc')}</p>
+    <div class="actions">
+      ${alive ? `<button data-a="swat" data-v="${h.id}">${t('info.swat')}</button>` : ''}
+      <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
+    </div>`;
+}
+
 /** 和太阳方向差 th（从上往下看顺时针为正，也就是面朝太阳时的右边）写成文字 */
 function sunSide(th: number): string {
   const d = Math.round((wrapAngle(th) * 180) / Math.PI);
@@ -275,6 +328,8 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
           } else if (b.caste === CASTE.drone) drones++;
         }
         const flowers = w.flowers.patches.filter((p) => p.species !== SUGAR);
+        const hn = w.hornets.list.filter((h) => h.state !== 'away' && h.state !== 'dead' && h.state !== 'leave').length;
+        const HN = w.hornets;
         const dishes = w.flowers.patches.filter((p) => p.species === SUGAR);
         return `
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
@@ -295,6 +350,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       <h3>${t('colony.forage')}</h3>
       ${row(t('colony.out'), String(out))}
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
+      ${row(t('colony.hornets'), hn ? t('colony.hornetsValue', { n: hn }) : t('colony.hornetsNone'))}
       ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
       <h3>${t('colony.since')}</h3>
       <div class="grid">
@@ -305,6 +361,8 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.recruits', B.recruits)}${stat('total.hits', `${B.arrived ? Math.round((B.hits / B.arrived) * 100) : 0}%`)}
         ${stat('total.handoffs', B.handoffs)}${stat('total.selfStored', B.selfStored)}
         ${stat('total.trembles', B.trembles)}${stat('total.reverted', B.reverted)}
+        ${stat('total.hornets', HN.visits)}${stat('total.caught', HN.caught)}
+        ${stat('total.balls', HN.balls)}${stat('total.hornetKills', `${HN.killed} / ${HN.swatted}`)}
       </div>`;
       },
     },
@@ -312,10 +370,13 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
     info: {
       hive: () => `<h2>${t('info.hive')}</h2>
       <div class="kv"><span>${t('info.size')}</span><b>${t('info.sizeValue', { w: H.combW, h: H.frameH })}</b></div>
-      <p class="desc">${t('info.hiveDesc')}</p>`,
+      <div class="kv"><span>${t('info.plate')}</span><b>${t(w.hornets.plate ? 'info.plateOn' : 'info.plateOff')}</b></div>
+      <p class="desc">${t('info.hiveDesc')}</p>
+      <div class="actions"><button data-a="plate">${t(w.hornets.plate ? 'info.plateRemove' : 'info.plateAdd')}</button></div>`,
       cell: (r) => cellInfo(w, r.id),
       flower: (r) => flowerInfo(w, r.id),
       bee: (r) => beeInfo(w, r.id, following()),
+      hornet: (r) => hornetInfo(w, r.id, following()),
     },
     legend: {
       html: () => {

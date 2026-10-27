@@ -11,9 +11,10 @@ import type { ToolResult } from '../../core/ui/tools';
 import { Flowers, SUGAR, type FlowerSave } from './sim/flowers';
 import { Weather, type WeatherSave } from './sim/weather';
 import { Heat, SITE_HEAT, broodRate, broodRisk, type HeatSave } from './sim/heat';
+import { Hornets, type HornetsSave } from './sim/hornets';
 
 /** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
-export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number };
+export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number } | { kind: 'hornet'; id: number };
 
 /** 花园和观察箱。地形由编号生成，不进存档 */
 export class BeeWorld extends Simulation<BeeRef> {
@@ -22,6 +23,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   readonly bees: Bees;
   readonly weather: Weather;
   readonly heat = new Heat();
+  readonly hornets: Hornets;
   private noise: Noise2D;
   private followPos: Point3 = { x: 0, y: 0, z: 0 };
   private broodClock = 0;
@@ -41,6 +43,20 @@ export class BeeWorld extends Simulation<BeeRef> {
       flyable: () => this.weather.flyable,
       heat: this.heat,
       recall: () => (this.weather.phase === 'rain' ? CONFIG.weather.recall[1] : this.weather.phase === 'overcast' ? CONFIG.weather.recall[0] : 0),
+      hornets: {
+        threat: () => this.hornets.threat(),
+        danger: () => this.hornets.danger(),
+        plate: () => this.hornets.plate,
+        ballAt: (id) => this.hornets.ballAt(id),
+      },
+    });
+    this.hornets = new Hornets(this.rng, () => this.ids.next('hornet'), CONFIG.clock.dayLength, {
+      bees: this.bees,
+      air: () => this.weather.air(this.clock.hour),
+      flyable: () => this.weather.flyable,
+      ground: (x, z) => this.groundAt(x, z),
+      clock: this.clock,
+      log: (msg, id) => this.events.push(msg, id === undefined ? undefined : { kind: 'hornet', id }),
     });
     this.bees.generate();
     this.heat.update(0, this.weather.air(this.clock.hour), this.bees.list, this.comb);
@@ -66,6 +82,7 @@ export class BeeWorld extends Simulation<BeeRef> {
     this.addSystem('weather', (dt) => this.weather.update(dt));
     this.addSystem('heat', (dt) => this.heat.update(dt, this.weather.air(this.clock.hour), this.bees.list, this.comb));
     this.addSystem('bees', (dt) => this.bees.update(dt));
+    this.addSystem('hornets', (dt) => this.hornets.update(dt));
     this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour, this.weather.rain));
     this.saves.add(
       'comb',
@@ -91,6 +108,11 @@ export class BeeWorld extends Simulation<BeeRef> {
       (d: HeatSave) => this.heat.restore(d),
     );
     this.saves.add(
+      'hornets',
+      () => this.hornets.toSave(),
+      (d: HornetsSave) => this.hornets.restore(d),
+    );
+    this.saves.add(
       'weather',
       () => this.weather.toSave(),
       (d: WeatherSave) => this.weather.restore(d),
@@ -111,6 +133,15 @@ export class BeeWorld extends Simulation<BeeRef> {
         return p ? { x: p.x, y: this.groundAt(p.x, p.z) + (p.species === SUGAR ? 45 : 30), z: p.z } : null;
       },
       viewDistance: (r) => (this.flowers.get(r.id)?.species === SUGAR ? 110 : 450),
+    });
+    this.entities.define('hornet', {
+      pos: (r) => {
+        const h = this.hornets.get(r.id);
+        return h && h.state !== 'away' ? this.hornetPos(r.id, this.followPos) : null;
+      },
+      viewDistance: 12,
+      follow: true,
+      viewDir: () => ({ x: -0.8, y: 0.4, z: 0.4 }),
     });
     this.entities.define('bee', {
       pos: (r) => {
@@ -135,6 +166,25 @@ export class BeeWorld extends Simulation<BeeRef> {
     out.y = b.prev.y + (b.pos.y - b.prev.y) * k;
     out.z = b.prev.z + (b.pos.z - b.prev.z) * k;
     return out;
+  }
+
+  /** 画面上这只胡蜂在哪（和 beePos 一样插值） */
+  hornetPos(id: number, out: Point3): Point3 | null {
+    const h = this.hornets.get(id);
+    if (!h) return null;
+    const k = this.alpha;
+    out.x = h.prev.x + (h.pos.x - h.prev.x) * k;
+    out.y = h.prev.y + (h.pos.y - h.prev.y) * k;
+    out.z = h.prev.z + (h.pos.z - h.prev.z) * k;
+    return out;
+  }
+
+  /** 装上、取下巢门防护片 */
+  togglePlate(): ToolResult {
+    const on = (this.hornets.plate = !this.hornets.plate);
+    const msg = L(on ? 'tool.plateOn' : 'tool.plateOff');
+    this.events.push(msg, { kind: 'hive', id: 0 });
+    return { ok: true, msg };
   }
 
   /** 种一片花（species 不能是糖水）；dry 为真时只看能不能种 */
@@ -188,7 +238,7 @@ export class BeeWorld extends Simulation<BeeRef> {
 const COMPASS = ['dir.e', 'dir.se', 'dir.s', 'dir.sw', 'dir.w', 'dir.nw', 'dir.n', 'dir.ne'] as const;
 const fail = (key: Parameters<typeof L>[0]): ToolResult => ({ ok: false, msg: L(key) });
 
-const SAVE_VERSION = 10;
+const SAVE_VERSION = 11;
 
 export interface BeeSaveData {
   version: number;

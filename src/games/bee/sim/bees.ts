@@ -20,6 +20,7 @@ const D = CONFIG.dance;
 const S = CONFIG.shift;
 const SPECIES = CONFIG.flowers.species;
 const HT = CONFIG.heat;
+const HN = CONFIG.hornets;
 /** 每个走路格在哪个温度格 */
 const NODE_HEAT = (() => {
   const a = new Int16Array(NODES);
@@ -91,6 +92,9 @@ export const ACTS = [
   'heat',
   'goFan',
   'fan',
+  'shimmer',
+  'goBall',
+  'ball',
 ] as const;
 export type Act = (typeof ACTS)[number];
 
@@ -130,7 +134,9 @@ export type Cmd =
   | { k: 'receive'; t: number }
   /** 停在子脾上振翅产热；停在巢门边背着巢门扇风 */
   | { k: 'heat'; t: number }
-  | { k: 'fan'; t: number };
+  | { k: 'fan'; t: number }
+  /** 飞到胡蜂 id 的热球上第 i 个位置，围着它振翅产热，胡蜂死了就散 */
+  | { k: 'ball'; id: number; i: number; t: number };
 /** 跳舞：中心 (cu, cv)，摆动的方向 a（巢面里的角度），摆动段 w 秒、长 len cm（w 为 0 是圆舞）；还剩 n 圈，这一圈过了 ph 秒 */
 export type DanceCmd = { k: 'dance'; cu: number; cv: number; a: number; w: number; len: number; n: number; ph: number };
 type Routine = CoreRoutine<Cmd>;
@@ -198,7 +204,7 @@ export class Bee {
   haul = 0;
   /** 跟舞读出来、还没去的地方 */
   aim: Aim | null = null;
-  /** 只给画面：这一步在摆动（1）、颤抖（2）还是振翅产热（3） */
+  /** 只给画面：这一步在摆动（1）、颤抖或抖翅（2）还是振翅产热（3） */
   waggle = 0;
   act: Act = 'rest';
   readonly brain = new Behavior<Cmd>();
@@ -274,6 +280,8 @@ export interface BeeEnv {
   flyable: () => boolean;
   recall: () => number;
   heat: Heat;
+  /** 胡蜂（T-022）：巢门外有没有、采集蜂不敢出去的机会、管口装没装防护片、热球的中心 */
+  hornets: { threat(): boolean; danger(): number; plate(): boolean; ballAt(id: number): Point3 | null };
 }
 
 /**
@@ -317,6 +325,9 @@ export class Bees {
   pace = ROLE_KEYS.map(() => 1);
   /** 缺哺育蜂时退回去哺育的内勤蜂、守卫 */
   reverted = 0;
+  /** 这一步开头在巢门抖翅的蜂；巢门外有胡蜂 */
+  shimmering = 0;
+  private threat = false;
   private needAt = 0;
   /** 这一步开头在跳舞的蜂、等着接蜜的内勤蜂 */
   private dancers: Bee[] = [];
@@ -435,8 +446,11 @@ export class Bees {
     this.dancers.length = 0;
     this.receivers.length = 0;
     this.outside = 0;
+    this.shimmering = 0;
+    this.threat = this.env.hornets.threat();
     for (const b of this.list) {
       if (b.out) this.outside++;
+      if (b.act === 'shimmer') this.shimmering++;
       const k = b.brain.cmd?.k;
       if (k === 'dance') this.dancers.push(b);
       else if (k === 'receive' && b.partner < 0) this.receivers.push(b);
@@ -468,7 +482,7 @@ export class Bees {
         continue;
       }
       // 要下雨了：飞着的、停在花上的蜂丢下手里的活往回飞
-      if (recall > 0 && b.out >= 2 && b.act !== 'flyHome' && this.rng.chance(recall)) b.brain.start(this.comeHome(b));
+      if (recall > 0 && b.out >= 2 && b.act !== 'flyHome' && b.act !== 'ball' && this.rng.chance(recall)) b.brain.start(this.comeHome(b));
       if (b.wrap > 0) this.stepWrap(b, dt);
       else b.brain.run(b.next, b.exec);
       this.place(b);
@@ -634,6 +648,11 @@ export class Bees {
     switch (c.k) {
       case 'rest':
         this.settle(b);
+        // 守卫在巢门边：外面有胡蜂就一齐抖翅
+        if (b.act === 'guard' || b.act === 'shimmer') {
+          b.act = this.threat ? 'shimmer' : 'guard';
+          if (this.threat) b.waggle = 2;
+        }
         if ((c.t -= dt) > 0) return false;
         this.unpark(b);
         return true;
@@ -723,6 +742,8 @@ export class Bees {
         this.unpark(b);
         return true;
       }
+      case 'ball':
+        return this.stepBall(b, c);
       case 'sip':
         b.out = 3;
         b.vel.x = b.vel.y = b.vel.z = 0;
@@ -974,7 +995,9 @@ export class Bees {
       c.s = 0;
     }
     b.out = 1;
-    c.s += c.dir * F.tubeWalk * this.dt;
+    // 防护片的缝窄，过管口慢
+    const slow = this.env.hornets.plate() && c.s > TUBE_LEN - HN.plateLen;
+    c.s += c.dir * F.tubeWalk * (slow ? HN.plateSlow : 1) * this.dt;
     if (c.dir > 0 && c.s >= TUBE_LEN) {
       b.out = 2;
       Object.assign(b.pos, MOUTH);
@@ -1162,7 +1185,7 @@ export class Bees {
       case 'house':
         return yield* this.house(b);
       case 'guard':
-        if (this.rng.chance(C.guards)) {
+        if (this.rng.chance(this.threat ? HN.threatGuards : C.guards)) {
           b.act = 'guard';
           if ((yield { k: 'go', f: 'entrance', near: this.rng.int(2, 14), t: 90 }) as boolean) yield { k: 'rest', t: this.rng.range(10, 20) };
           else yield* this.idle(b);
@@ -1229,6 +1252,8 @@ export class Bees {
     b.act = 'leave';
     // 挤到巢门花了太久，花已经合上了、天变了就不出去
     if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || (p && !this.isOpen(p)) || !this.env.flyable()) return yield* this.idle(b);
+    // 巢门外有胡蜂悬停，不敢出去（采集停滞）
+    if (this.rng.chance(this.env.hornets.danger())) return yield* this.wait(b);
     if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 10 }) as boolean)) return yield* this.idle(b);
     b.act = scout ? 'scout' : p ? 'flyOut' : 'flyAim';
     yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };
@@ -1550,6 +1575,75 @@ export class Bees {
     if (!((yield { k: 'go', f: 'entrance', near: this.rng.int(1, 8), t: 60 }) as boolean)) return yield* this.idle(b);
     b.act = 'fan';
     yield { k: 'fan', t: this.rng.range(HT.hold[0], HT.hold[1]) };
+  }
+
+  /** 去围胡蜂：走到巢门、出管口，飞到热球上自己的位置 */
+  private *mob(b: Bee, id: number, i: number): Routine {
+    b.act = 'goBall';
+    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 60 }) as boolean) || !this.env.hornets.ballAt(id)) return yield* this.idle(b);
+    if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+    b.act = 'ball';
+    yield { k: 'ball', id, i, t: 300 };
+  }
+
+  /** 叫巢门附近 n 只没带东西的工蜂（守卫、内勤蜂、采集蜂）去围胡蜂 id，离巢门近的先去；返回叫了几只 */
+  recruitBall(id: number, n: number): number {
+    const f = this.field('entrance');
+    const pick: [number, Bee][] = [];
+    for (const b of this.list) {
+      const r = roleOf(b);
+      if (b.out || b.wrap > 0 || b.load > 0 || (r !== 'house' && r !== 'guard' && r !== 'forager')) continue;
+      const node = this.nodeOf(b);
+      if (node >= 0 && f.reachable(node)) pick.push([f.dist[node], b]);
+    }
+    pick.sort((a, c) => a[0] - c[0] || a[1].id - c[1].id);
+    const k = Math.min(n, pick.length);
+    for (let i = 0; i < k; i++) {
+      const b = pick[i][1];
+      this.unpark(b);
+      this.release(b);
+      b.brain.start(this.mob(b, id, i));
+    }
+    return k;
+  }
+
+  /** 已经围在胡蜂 id 身上的蜂 */
+  ball(id: number): Bee[] {
+    return this.list.filter((b) => b.out === 3 && b.act === 'ball' && b.brain.cmd?.k === 'ball' && b.brain.cmd.id === id);
+  }
+
+  /** 热球：第 i 只围在离中心 ballR(i) 的一层上，方向按黄金角错开；先飞过去，到了就贴着不动、身子颤 */
+  private stepBall(b: Bee, c: Extract<Cmd, { k: 'ball' }>): boolean {
+    const o = this.env.hornets.ballAt(c.id);
+    if (!o || (c.t -= this.dt) <= 0) {
+      b.out = 2;
+      b.vel.x = b.vel.y = b.vel.z = 0;
+      return true;
+    }
+    const y = 1 - 2 * ((c.i * 0.7548777 + 0.5) % 1);
+    const s = Math.sqrt(1 - y * y);
+    const a = c.i * 2.3999632;
+    const dx = s * Math.cos(a);
+    const dz = s * Math.sin(a);
+    // 胡蜂身子约 1.2 cm 粗，每只蜂约占 0.35 cm³
+    const r = Math.cbrt(1.2 ** 3 + ((c.i + 1) * 0.35) / ((4 / 3) * Math.PI));
+    const T = this.target;
+    T.x = o.x + dx * r;
+    T.y = o.y + y * r;
+    T.z = o.z + dz * r;
+    if (b.out !== 3) {
+      b.out = 2;
+      if (steer(b, T, F.hop, true, this.dt, this.env.ground(b.pos.x, b.pos.z), this.now()) > 0.4) return false;
+      b.out = 3;
+    }
+    Object.assign(b.pos, T);
+    // 停着时 vel 记着背朝哪（往外），画面按它摆蜂身
+    b.vel.x = dx;
+    b.vel.y = y;
+    b.vel.z = dz;
+    b.h = Math.atan2(-dz, -dx);
+    b.waggle = 3;
+    return false;
   }
 
   /** 内勤蜂：带着接来的花蜜先放下；有花开着时一部分去巢门附近等着接蜜（颤抖舞之后更多） */

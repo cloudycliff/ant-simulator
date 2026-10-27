@@ -63,6 +63,20 @@ const SCENES = {
   heat: { q: '&hour=4&run=30&cam=0,103,58,0,103,0&view=heat' },
   heatback: { q: '&hour=15&run=30&cam=0,103,-58,0,103,0&view=heat,fade' },
   heatcell: { q: '&hour=4&run=60&select=cell:3900', check: INFO },
+  hornet: { q: '&hour=14&hornet=2&run=20&cam=-75,100,55,-45,88,0' },
+  hornetnear: { q: '&hour=14&hornet=1&run=20&select=hornet:1&follow=1', check: INFO },
+  // 电蚊拍：暂停，选工具，点胡蜂在画面上的位置
+  swat: {
+    q: '&hour=14&hornet=1&run=20&cam=-75,100,55,-45,88,0',
+    js: `world.clock.paused = true; const h = world.hornets.list[0]; h.left = 1e9; const v = new camera.position.constructor(h.pos.x, h.pos.y, h.pos.z).project(camera); window.__swat = [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]`,
+    keys: ['Digit8'],
+    clickAt: '__swat',
+    check: `world.hornets.list.map((h) => h.state).join(' ') + ' 拍死 ' + world.hornets.swatted`,
+  },
+  ball: { q: '&hour=14&hornet=1&run=15&cam=-40,89,12,-31.5,82.4,0', js: `world.hornets.list[0].left = 1e9; world.hornets.list[0].state = 'land'; ${RUN(20)}` },
+  ballinfo: { q: '&hour=14&hornet=1&run=15&select=hornet:1', js: `world.hornets.list[0].left = 1e9; world.hornets.list[0].state = 'land'; ${RUN(20)}`, check: INFO },
+  plate: { q: '&hour=14&hornet=1&plate=1&run=20&cam=-42,88,10,-30,82,0' },
+  hiveplate: { q: '&hour=11&plate=1&select=hive:0', check: INFO },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },
@@ -91,6 +105,10 @@ try {
       for (const code of s.keys ?? []) {
         await p.send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: code.slice(-1) });
         await p.send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: code.slice(-1) });
+      }
+      if (s.clickAt) {
+        const [x, y] = await p.ev(`window.${s.clickAt}`);
+        for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await p.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
       }
       if (s.mouse) await p.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: s.mouse[0], y: s.mouse[1] });
       await sleep(1200);

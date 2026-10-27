@@ -1,6 +1,6 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
@@ -13,6 +13,7 @@ import { Flowers, SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenC
 import { nodeAt } from '../../../src/games/bee/sim/walk';
 import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
 import { MOUTH } from '../../../src/games/bee/sim/flight';
+import type { HornetState } from '../../../src/games/bee/sim/hornets';
 import { en } from '../../../src/games/bee/i18n/en';
 
 setLang('en');
@@ -285,10 +286,13 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   const wild = x.flowers.patches.filter((p) => p.species !== SUGAR && nectarCap(p) > 0);
   const nectar = () => wild.reduce((s, p) => s + p.nectar / nectarCap(p), 0) / wild.length;
   const out0 = outside();
+  // 雨势定成大雨、下满 4 小时，冲淡花蜜的多少、测的时候还在不在下才不随随机数变
+  const hours = CONFIG.weather.hours;
+  CONFIG.weather.hours = [4, 4];
   Wx.startRain();
-  // 雨势定成大雨，冲淡花蜜的多少才不随随机数变
   Wx.strength = 0.9;
   run(x, CONFIG.weather.overcast + 5);
+  CONFIG.weather.hours = hours;
   const cool = Wx.air(x.clock.hour);
   const cloud = Wx.cloud;
   Wx.cloud = 0;
@@ -323,6 +327,81 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   }
   run(x, 60);
   check('雨停了，采集蜂又出去', Wx.phase === 'clear' && outside() > 20, `下了 ${t + 90} 秒，雨停 60 秒后 ${outside()} 只在外面（${tr(x.clock.stamp())}）`);
+}
+{
+  // 胡蜂：下午两点来两只。另开世界
+  const fresh = () => {
+    const x = new BeeWorld(7);
+    run(x, ((14 - x.clock.hour) / 24) * CONFIG.clock.dayLength);
+    return x;
+  };
+  const x = fresh();
+  const H = x.hornets;
+  H.spawn(2);
+  const land = CONFIG.hornets.land;
+  CONFIG.hornets.land = 0;
+  run(x, 20);
+  for (const b of x.bees.list) seen.add(b.act);
+  check('胡蜂：飞到巢门外悬停，守卫抖翅、采集蜂不敢出去', H.list.every((h) => h.state === 'hawk' || h.state === 'strike') && x.bees.shimmering > 10 && H.danger() > 0.5, `${H.list.map((h) => h.state).join(' ')}，抖翅 ${x.bees.shimmering} 只，不出巢的机会 ${H.danger().toFixed(2)}`);
+  for (const h of H.list) h.left = 1e9;
+  run(x, 120);
+  const caught = H.caught;
+  check('胡蜂：两分钟里抓走几只蜂，不是几十只', caught >= 1 && caught <= 12, `${caught} 只`);
+  const y = fresh();
+  y.hornets.plate = true;
+  y.hornets.spawn(2);
+  run(y, 20);
+  for (const h of y.hornets.list) h.left = 1e9;
+  y.hornets.list[0].state = 'land';
+  run(y, 120);
+  check('防护片：胡蜂扑不了巢门、抓得少', y.hornets.balls === 0 && y.hornets.caught < caught, `抓走 ${y.hornets.caught} 只（没装 ${caught} 只）`);
+  CONFIG.hornets.land = land;
+
+  const z = fresh();
+  z.hornets.spawn(1);
+  run(z, 20);
+  const h = z.hornets.list[0];
+  h.left = 1e9;
+  h.state = 'land' as HornetState;
+  run(z, 5);
+  for (const b of z.bees.list) seen.add(b.act);
+  run(z, 20);
+  for (const b of z.bees.list) seen.add(b.act);
+  const ball = z.bees.ball(h.id).length;
+  const saved = JSON.stringify(beeSave.write(z, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved && r1.hornets.get(h.id)?.state === 'ball';
+  run(r1, 20);
+  run(r2, 20);
+  check('热球时存档往返一致、读两次走得一样', same && fingerprint(r1) === fingerprint(r2) && JSON.stringify(r1.hornets.toSave()) === JSON.stringify(r2.hornets.toSave()));
+  let tBall = 25;
+  let hot = 0;
+  while (h.state === 'ball' && tBall < 150) {
+    run(z, 5);
+    tBall += 5;
+    hot = Math.max(hot, h.heat);
+  }
+  check('热球：上百只蜂围住胡蜂，升到 45 °C 以上把它闷死', ball >= 80 && hot > CONFIG.hornets.lethal && h.state === 'dead', `${ball} 只，最热 ${hot.toFixed(1)} °C，${tBall} 秒`);
+  run(z, 60);
+  const stuck = z.bees.list.filter((b) => b.act === 'ball' || b.act === 'goBall').length;
+  check('热球散了，蜂都回巢、死胡蜂掉在地上', stuck === 0 && h.pos.y < z.groundAt(h.pos.x, h.pos.z) + 1, `还在球里 ${stuck} 只，胡蜂离地 ${(h.pos.y - z.groundAt(h.pos.x, h.pos.z)).toFixed(1)} cm`);
+
+  z.hornets.spawn(1);
+  run(z, 20);
+  const g = z.hornets.list.find((o) => o.state !== 'dead')!;
+  const ok = z.hornets.swat(g.id);
+  run(z, 2);
+  check('电蚊拍：打死的胡蜂掉下来、记进事件', ok && g.state === 'dead' && z.hornets.swatted === 1 && !z.hornets.swat(g.id) && z.events.entries.some((e) => e.ref?.kind === 'hornet' && e.ref.id === g.id));
+  z.hornets.spawn(1);
+  run(z, 20);
+  z.weather.startRain(true);
+  run(z, 5);
+  check('下雨了，胡蜂飞走', z.hornets.list.every((o) => o.state === 'dead' || o.state === 'leave') || z.hornets.list.filter((o) => o.state !== 'dead').length === 0);
 }
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);

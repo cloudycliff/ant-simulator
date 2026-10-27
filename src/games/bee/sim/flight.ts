@@ -62,14 +62,17 @@ export const DEPART = { x: -110, y: 165, z: 0 };
 export const APPROACH = { x: -110, y: 160, z: 0 };
 export const DOCK = { x: MOUTH.x - 12, y: tubeY + 2, z: 0 };
 
+/** 会飞的：蜂和胡蜂 */
+export type Flyer = Pick<Bee, 'id' | 'pos' | 'vel' | 'h'>;
+
 /** 这只蜂远处巡航的离地高度（cm），按编号定、不存档 */
-export const cruiseOf = (b: Bee) => F.cruise[0] + ((b.id * 0.618034) % 1) * (F.cruise[1] - F.cruise[0]);
+export const cruiseOf = (b: Flyer) => F.cruise[0] + ((b.id * 0.618034) % 1) * (F.cruise[1] - F.cruise[0]);
 
 /**
  * 转向（T-009）：朝目标飞，远处爬到巡航高度、近了下降，离得越近越慢，加速度有上限，
  * 远处左右摆一点；路过的点（stop 为假）不减速。返回离目标多远
  */
-export function steer(b: Bee, to: Point3, vmax: number, stop: boolean, dt: number, ground: number, now: number): number {
+export function steer(b: Flyer, to: Point3, vmax: number, stop: boolean, dt: number, ground: number, now: number): number {
   const p = b.pos;
   const v = b.vel;
   const dx = to.x - p.x;

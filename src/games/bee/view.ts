@@ -9,6 +9,7 @@ import { CombView } from './combView';
 import { CONFIG } from './config';
 import { DanceView } from './danceView';
 import { HeatView } from './heatView';
+import { HornetView } from './hornetView';
 import { FlowerView } from './flowerView';
 import { COMB_H } from './sim/comb';
 import type { BeeRef, BeeWorld } from './world';
@@ -34,6 +35,8 @@ export class BeeView {
   readonly bees: BeesView;
   readonly dance: DanceView;
   readonly heat: HeatView;
+  readonly hornets: HornetView;
+  private plate!: THREE.Group;
   private rain = new RainView();
   /** 点选用：观察箱的各个部件，userData.ref 指向它们；花丛的圆柱在 flowers.pickables */
   private hiveParts: THREE.Object3D[] = [];
@@ -65,7 +68,8 @@ export class BeeView {
     this.bees = new BeesView(w);
     this.dance = new DanceView(w);
     this.heat = new HeatView(w);
-    this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group, this.heat.group);
+    this.hornets = new HornetView(w);
+    this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group, this.heat.group, this.hornets.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.8, depthTest: false }));
     this.outline.position.set(0, H.baseY + COMB_H / 2 + 6, 0);
@@ -222,6 +226,21 @@ export class BeeView {
     );
     tube.position.set(-half - 6.25, y0 + 3, 0);
     this.group.add(tube);
+    // 巢门防护片：管口外一块铁片，中间一排竖缝，蜂钻得过、胡蜂钻不过
+    this.plate = new THREE.Group();
+    const metal = new THREE.MeshStandardMaterial({ color: 0x9aa4aa, metalness: 0.6, roughness: 0.4 });
+    const bar = (h: number, w: number, y: number, z: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.12, h, w), metal);
+      m.position.set(0, y, z);
+      m.castShadow = true;
+      this.plate.add(m);
+    };
+    bar(0.9, 4.4, 1.75, 0);
+    bar(0.9, 4.4, -1.75, 0);
+    for (let k = -2; k <= 2; k++) bar(2.6, k === -2 || k === 2 ? 0.7 : 0.18, 0, k * 0.85 + (k === -2 ? -0.5 : k === 2 ? 0.5 : 0));
+    this.plate.position.set(-half - 10.05, y0 + 3, 0);
+    this.plate.visible = false;
+    this.group.add(this.plate);
   }
 
   /**
@@ -259,5 +278,7 @@ export class BeeView {
     this.bees.update(camera, viewportH, sel?.kind === 'bee' ? sel.id : null);
     this.dance.update(camera);
     this.heat.update();
+    this.plate.visible = this.w.hornets.plate;
+    this.hornets.update(camera, viewportH, sel?.kind === 'hornet' ? sel.id : null, performance.now() / 1000);
   }
 }
