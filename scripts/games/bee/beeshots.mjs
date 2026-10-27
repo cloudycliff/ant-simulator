@@ -11,6 +11,11 @@ const PERF = `document.getElementById('perf')?.textContent ?? ''`;
 const INFO = `document.querySelector('#info')?.innerText.replace(/\\s+/g, ' ') ?? ''`;
 const PLANT = `world.plant(3, 400, 0); world.feed(0, 400)`;
 const RUN = (s) => `for (let i = 0; i < ${s}; i++) world.advance(1, Infinity, Infinity)`;
+const WEAK = `{ const keep = world.bees.list.filter((b, i) => b.caste !== 0 || i % 10 >= 7); world.bees.list.length = 0; world.bees.list.push(...keep) }`;
+/** 相机对着这个巢房，从它那一面 d cm 外看 */
+const LOOK = (cell, d = 7) =>
+  `{ const id = ${cell}; const p = id >= 0 ? world.entities.pos({ kind: 'cell', id }) : null; if (p) { const V = camera.position.constructor; const z = id >= world.comb.content.length / 2 ? -1 : 1; controller.setPose(new V(p.x + 0.5, p.y + 1, p.z + z * ${d}), new V(p.x, p.y, p.z)) } }`;
+const PESTS = `'巢虫 ' + world.pests.worms.length + '/' + world.pests.hatched + ' 白头蛹 ' + world.pests.bald + ' 死囊 ' + world.pests.sacs`;
 const SCENES = {
   home: { q: '&hour=11' },
   night: { q: '&hour=22.5' },
@@ -84,6 +89,10 @@ const SCENES = {
   swapask: { q: '&hour=11&select=hive:0', click: ['#info [data-a="swapAsk"][data-v="1"]'], check: INFO },
   swapped: { q: '&hour=11&cam=0,103,58,0,103,0', js: `world.swapFrame(1); ${RUN(5)}`, check: `world.keeper.swaps + ' 次，拿走子 ' + world.keeper.lostBrood` },
   swapgrow: { q: '&hour=11&cam=0,103,58,0,103,0', js: `world.swapFrame(1); ${RUN(600)}` },
+  // 巢虫、中囊病（T-024）：拿掉七成工蜂让巢虫活得久，跑一阵后相机贴到一条巢虫或一个死囊跟前（淡化蜂）
+  moth: { q: '&hour=11&view=fade', js: `${WEAK}; world.pests.lay(8); ${RUN(1200)}; ${LOOK('world.pests.worms[0]?.cell')}`, check: PESTS },
+  mothmap: { q: '&hour=11&view=cells,fade', js: `${WEAK}; world.pests.lay(8); ${RUN(1200)}; ${LOOK('world.pests.worms[0]?.cell', 16)}`, check: PESTS },
+  sac: { q: '&hour=11&view=fade', js: `world.pests.outbreak(); let sac = -1; for (let k = 0; k < 200 && sac < 0; k++) { ${RUN(10)}; sac = world.comb.content.indexOf(8) } ${LOOK('sac')}`, check: `${PESTS} + ' ' + world.comb.content.indexOf(8) + ' ' + camera.position.toArray().map((x) => x.toFixed(1))` },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

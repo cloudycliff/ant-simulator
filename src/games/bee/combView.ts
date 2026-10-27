@@ -23,10 +23,17 @@ const f = (x: number) => x.toFixed(6);
 const MAP_WALL = 0.5;
 const ci = (k: MapKey) => `${MAP_KEYS.indexOf(k)}.0`;
 
+/** 状态纹理 r 通道：低 4 位是内容，往上是白头蛹、巢虫的丝、巢虫在这里（T-024） */
+const BALD = 16;
+const SILK = 32;
+const WORM = 64;
+
 /** 巢房在内容着色里是哪一类（和着色器里的分类一样） */
-function contentOf(comb: Comb, cell: number): MapKey {
+function contentOf(comb: Comb, cell: number, worm: boolean): MapKey {
   const site = cell % SITES;
   if (comb.build[site] < 1) return 'building';
+  if (comb.bald[cell]) return 'bald';
+  if (worm || comb.silk[cell] > 0) return 'silk';
   switch (comb.content[cell]) {
     case CELL.egg:
       return 'egg';
@@ -42,6 +49,8 @@ function contentOf(comb: Comb, cell: number): MapKey {
       return 'cappedHoney';
     case CELL.pollen:
       return 'pollen';
+    case CELL.sac:
+      return 'sac';
     default:
       return comb.amount[cell] > 0 ? 'dirty' : 'empty';
   }
@@ -74,6 +83,7 @@ uniform vec3 uCam;
 uniform float uNear;
 uniform float uNearFace;
 uniform vec3 uWax, uNewWax, uBottom, uEgg, uLarva, uCapped, uDroneCap, uNectar, uHoney, uCappedHoney;
+uniform vec3 uSac, uSacHead, uPupa, uPupaEye, uSilk, uWorm, uWormHead;
 uniform vec3 uPollen[${PALETTE.pollen.length}];
 uniform float uMap;
 uniform vec3 uMapCol[${MAP_KEYS.length}];
@@ -110,7 +120,11 @@ float combRough = 0.85;
     if (distance(wc, uCam) < uNear) discard;
   }
   vec4 st = texture2D(uState, vec2((rc.y + 0.5) / COLS, (uFace * 2.0 * ROWS + frame * ROWS + rc.x + 0.5) / (4.0 * ROWS))) * 255.0;
-  float content = floor(st.r + 0.5);
+  float rbits = floor(st.r + 0.5);
+  float content = mod(rbits, 16.0);
+  float bald = mod(floor(rbits / ${BALD}.0), 2.0);
+  float silk = mod(floor(rbits / ${SILK}.0), 2.0);
+  float worm = floor(rbits / ${WORM}.0);
   float amount = st.g / 255.0;
   float build = st.b / 255.0;
   if (build <= 0.0) discard;
@@ -152,6 +166,21 @@ float combRough = 0.85;
       inner = uLarva * (1.0 - 0.18 * k * k) * (0.95 + 0.05 * cos(atan(best.y, best.x) * 9.0));
       tilt = dir * sign(len - ring) * k * 0.8;
     }
+  } else if (content == ${CELL.capped}.0 && bald > 0.5) {
+    // 白头蛹：房盖被咬开，露出白色的蛹头和两只眼
+    vec2 eye = vec2(abs(best.x) - edge * 0.28, best.y - edge * 0.12);
+    if (len < edge * 0.62) {
+      inner = uPupa * (1.05 - 0.15 * len / (edge * 0.62));
+      tilt = dir * len / edge * 0.6;
+      if (dot(eye, eye) < edge * edge * 0.018) inner = uPupaEye;
+    } else inner *= 0.55;
+  } else if (content == ${CELL.sac}.0) {
+    // 中囊病死的幼虫：顺着房伸长的囊，头尖朝房口翘起、发褐
+    vec2 e = best / vec2(edge * 0.4, edge * 0.82);
+    if (dot(e, e) < 1.0) {
+      inner = mix(uSac, uSacHead, smoothstep(0.35, 0.85, e.y));
+      tilt = e * 0.5;
+    }
   } else if (content == ${CELL.capped}.0) {
     // 封盖子：盖子差不多齐房口，略鼓；雄蜂房的盖更鼓，顶上有小孔
     inner = (drone > 0.5 ? uDroneCap : uCapped) * (1.08 - 0.2 * t);
@@ -170,10 +199,26 @@ float combRough = 0.85;
     inner = mix(inner, uPollen[int(pk)] * (0.88 + 0.2 * grain), 0.4 + 0.6 * amount);
     tilt = dir * t * 0.2;
   }
+  // 巢虫的丝和虫粪（封盖的房看不见里面）；空着、没封盖的房里看得见巢虫
+  bool seen = content != ${CELL.capped}.0 && content != ${CELL.cappedHoney}.0;
+  if (build >= 1.0 && silk > 0.5 && seen) {
+    float speck = fract(sin(dot(floor(best * 70.0), vec2(39.3468, 11.1353))) * 43758.5453);
+    inner = mix(inner, uSilk, 0.5) * (speck > 0.9 ? 0.45 : 1.0);
+  }
+  if (build >= 1.0 && worm > 0.5 && seen) {
+    vec2 g = best / vec2(edge * 0.32, edge * 0.75);
+    if (dot(g, g) < 1.0) {
+      inner = g.y > 0.7 ? uWormHead : uWorm * (0.92 + 0.08 * cos(g.y * 20.0));
+      tilt = g * 0.5;
+    }
+  }
   // 内容着色：每类一种平的颜色，房壁压暗（分类和 contentOf 一样）
   if (uMap > 0.5) {
     float mi = ${ci('empty')};
     if (build < 1.0) mi = ${ci('building')};
+    else if (bald > 0.5) mi = ${ci('bald')};
+    else if (worm > 0.5 || silk > 0.5) mi = ${ci('silk')};
+    else if (content == ${CELL.sac}.0) mi = ${ci('sac')};
     else if (content == ${CELL.empty}.0 && amount > 0.0) mi = ${ci('dirty')};
     else if (content == ${CELL.egg}.0) mi = ${ci('egg')};
     else if (content == ${CELL.larva}.0) mi = ${ci('larva')};
@@ -291,7 +336,11 @@ export class CombView {
   private nearVersion = -1;
   private mark: THREE.LineLoop;
 
-  constructor(private readonly comb: Comb) {
+  /** worms：巢虫在哪些巢房下面（T-024） */
+  constructor(
+    private readonly comb: Comb,
+    private readonly worms: () => Iterable<number> = () => [],
+  ) {
     this.tex.magFilter = this.tex.minFilter = THREE.NearestFilter;
     this.uniforms = {
       uState: { value: this.tex },
@@ -308,6 +357,13 @@ export class CombView {
       uNectar: { value: col(PALETTE.nectar) },
       uHoney: { value: col(PALETTE.honey) },
       uCappedHoney: { value: col(PALETTE.cappedHoney) },
+      uSac: { value: col(PALETTE.sac) },
+      uSacHead: { value: col(PALETTE.sacHead) },
+      uPupa: { value: col(PALETTE.pupa) },
+      uPupaEye: { value: col(PALETTE.pupaEye) },
+      uSilk: { value: col(PALETTE.silk) },
+      uWorm: { value: col(PALETTE.worm) },
+      uWormHead: { value: col(PALETTE.wormHead) },
       uPollen: { value: PALETTE.pollen.map(col) },
       uMap: { value: 0 },
       uMapCol: { value: MAP_KEYS.map((k) => col(MAP_COLORS[k])) },
@@ -338,8 +394,8 @@ export class CombView {
       plane.receiveShadow = true;
       this.group.add(plane);
     }
-    const inst = (g: THREE.BufferGeometry, roughness: number) => {
-      const m = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness }), SITES);
+    const inst = (g: THREE.BufferGeometry, roughness: number, n = SITES) => {
+      const m = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness }), n);
       m.count = 0;
       m.frustumCulled = false;
       m.receiveShadow = true;
@@ -349,7 +405,8 @@ export class CombView {
     this.walls = inst(wallGeometry(), 0.75);
     this.layer = inst(domeGeometry(), 0.85);
     this.liquid = inst(domeGeometry(), 0.15);
-    this.blobs = inst(new THREE.IcosahedronGeometry(1, 1), 0.6);
+    // 卵一个、死囊两个、白头蛹三个、巢虫两个
+    this.blobs = inst(new THREE.IcosahedronGeometry(1, 1), 0.6, 2 * SITES);
     this.larvae = inst(larvaGeometry(), 0.45);
     for (const m of this.nearMeshes()) m.setColorAt(0, _c.set(0xffffff));
 
@@ -419,11 +476,12 @@ export class CombView {
       const a = cb.age[cell];
       const prog = c === CELL.egg ? a / T.egg : c === CELL.larva ? (a - T.egg) / T.larva : 0;
       const o = cell * 4;
-      this.data[o] = c;
+      this.data[o] = c | (cb.bald[cell] ? BALD : 0) | (cb.silk[cell] > 0 ? SILK : 0);
       this.data[o + 1] = Math.round(clamp(cb.amount[cell], 0, 1) * 255);
       this.data[o + 2] = Math.round(cb.build[site] * 255);
       this.data[o + 3] = (cb.drone[site] << 7) | (cb.pollen[cell] << 4) | Math.round(Math.min(1, Math.max(0, prog)) * 15);
     }
+    for (const cell of this.worms()) this.data[cell * 4] |= WORM;
     this.tex.needsUpdate = true;
     this.version = cb.version;
   }
@@ -473,8 +531,10 @@ export class CombView {
     const cp = this.nearCam;
     const map = this.contentMap;
     let mapColor = 0;
-    const put = (mesh: THREE.InstancedMesh, i: number, z: number, sx: number, sz: number, color: number, k = 1, rot: THREE.Quaternion = q) => {
-      _p.set(_cell.x, _cell.y, out * z);
+    const worms = new Set(this.worms());
+    // dy：沿巢面往上挪（白头蛹的眼睛、囊翘起来的头）
+    const put = (mesh: THREE.InstancedMesh, i: number, z: number, sx: number, sz: number, color: number, k = 1, rot: THREE.Quaternion = q, dx = 0, dy = 0) => {
+      _p.set(_cell.x + dx, _cell.y + dy, out * z);
       mesh.setMatrixAt(i, _m.compose(_p, rot, _s.set(sx, sx, sz)));
       if (map) mesh.setColorAt(i, _c.set(mapColor).multiplyScalar(mesh === this.walls ? MAP_WALL : mesh === this.blobs && color === PALETTE.bottom ? 0.4 : 1));
       else mesh.setColorAt(i, _c.set(color).multiplyScalar(k));
@@ -485,7 +545,8 @@ export class CombView {
       const cell = face * SITES + site;
       cellPos(cell, _cell);
       if ((_cell.x - cp.x) ** 2 + (_cell.y - cp.y) ** 2 + (_cell.z - cp.z) ** 2 >= near2) continue;
-      if (map) mapColor = MAP_COLORS[contentOf(cb, cell)];
+      const worm = worms.has(cell);
+      if (map) mapColor = MAP_COLORS[contentOf(cb, cell, worm)];
       put(this.walls, nw++, MIDRIB + C.depth * b, 1, C.depth * b, b < 1 ? PALETTE.newWax : PALETTE.wax);
       if (b < 1) {
         put(this.layer, nl++, MIDRIB, 1, 0.01, PALETTE.newWax, 0.85);
@@ -495,12 +556,25 @@ export class CombView {
       const amount = cb.amount[cell];
       const drone = cb.drone[site] === 1;
       if (glossy(c)) put(this.liquid, nq++, MIDRIB + amount * C.depth * 0.9, 1, 0.01, c === CELL.nectar ? PALETTE.nectar : PALETTE.honey);
-      else if (c === CELL.capped) {
+      else if (c === CELL.capped && cb.bald[cell]) {
+        put(this.layer, nl++, MIDRIB, 1, 0.02, PALETTE.bottom, 0.6);
+        put(this.blobs, nb++, H.combHalf - 0.2, 0.14, 0.14, PALETTE.pupa);
+        for (const dx of [-0.06, 0.06]) put(this.blobs, nb++, H.combHalf - 0.08, 0.025, 0.02, PALETTE.pupaEye, 1, q, dx, 0.03);
+      } else if (c === CELL.sac) {
+        put(this.layer, nl++, MIDRIB, 1, 0.02, PALETTE.bottom);
+        put(this.blobs, nb++, MIDRIB + 0.1, 0.12, 0.08, PALETTE.sac, 1, q, 0, -0.07);
+        put(this.blobs, nb++, MIDRIB + 0.14, 0.1, 0.08, PALETTE.sac, 0.9, q, 0, 0.04);
+        put(this.blobs, nb++, MIDRIB + 0.22, 0.05, 0.06, PALETTE.sacHead, 1, q, 0, 0.13);
+      } else if (c === CELL.capped) {
         put(this.layer, nl++, H.combHalf - 0.04, 1, drone ? 0.14 : 0.05, drone ? PALETTE.droneCap : PALETTE.capped);
         if (drone) put(this.blobs, nb++, H.combHalf + 0.1, 0.02, 0.01, PALETTE.bottom, 0.4);
       } else if (c === CELL.cappedHoney) put(this.layer, nl++, H.combHalf - 0.02, 1, 0.01, PALETTE.cappedHoney);
       else if (c === CELL.pollen) put(this.layer, nl++, MIDRIB + amount * C.depth * 0.75, 1, 0.06, PALETTE.pollen[cb.pollen[cell]]);
-      else put(this.layer, nl++, MIDRIB, 1, 0.02, PALETTE.bottom, c === CELL.empty && amount > 0 ? DIRTY : 1);
+      else put(this.layer, nl++, MIDRIB, 1, 0.02, cb.silk[cell] > 0 ? PALETTE.silk : PALETTE.bottom, c === CELL.empty && amount > 0 ? DIRTY : 1);
+      if (worm && c !== CELL.capped && c !== CELL.cappedHoney) {
+        put(this.blobs, nb++, MIDRIB + 0.05, 0.08, 0.05, PALETTE.worm, 1, q, 0, -0.02);
+        put(this.blobs, nb++, MIDRIB + 0.06, 0.04, 0.04, PALETTE.wormHead, 1, q, 0, 0.13);
+      }
       if (c === CELL.egg) put(this.blobs, nb++, MIDRIB + 0.06, 0.028, 0.06, PALETTE.egg);
       else if (c === CELL.larva) {
         const T = drone ? D : W;

@@ -39,6 +39,8 @@ export class Keeper {
     private readonly comb: Comb,
     private readonly bees: Bees,
     private readonly dayLength: number,
+    /** 割掉、换掉了这些位置（巢虫跟着拿走） */
+    private readonly onRemove: (sites: readonly number[]) => void = () => {},
   ) {}
 
   /** 点这个巢房割蜜会割下的位置：从它往外 cutR 以内、连成一片能割的；点的不能割是空的 */
@@ -64,6 +66,7 @@ export class Keeper {
     const area = this.cutArea(cell);
     if (!area.length) return null;
     const { honey } = this.comb.remove(area, CONFIG.care.start);
+    this.onRemove(area);
     this.bees.dislodge(-1, siteU(cell % SITES), siteV(cell % SITES));
     this.harvests++;
     this.harvested += honey;
@@ -92,6 +95,7 @@ export class Keeper {
     const per = GRID.rows * GRID.cols;
     const sites = Array.from({ length: per }, (_, i) => frame * per + i);
     const got = this.comb.remove(sites, CONFIG.care.start);
+    this.onRemove(sites);
     this.comb.seedTop(frame, CONFIG.care.start);
     this.bees.dislodge(frame);
     this.swaps++;

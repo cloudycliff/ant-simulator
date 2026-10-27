@@ -13,6 +13,14 @@ export const PALETTE = {
   nectar: 0xf2e08e,
   honey: 0xc98a1e,
   cappedHoney: 0xf2e5bf,
+  /** 病虫（T-024）：中囊病死的囊和翘起来的头、白头蛹和它的眼睛、巢虫的丝、巢虫和它的头 */
+  sac: 0xd9cf9c,
+  sacHead: 0x5e3f22,
+  pupa: 0xf6f0e2,
+  pupaEye: 0x5a2f4a,
+  silk: 0xc4beb2,
+  worm: 0xe9e3d3,
+  wormHead: 0x7a4a24,
   /** 几种花粉（Comb.pollen 的编号） */
   pollen: [0xf0be2c, 0xe5822a, 0xb4582e, 0xa8a656, 0xece2c4],
 };
@@ -28,7 +36,7 @@ export const ROLE_COLORS = {
   queen: 0xffffff,
 };
 
-/** 巢房内容着色的视图：子脾由浅到深的红、蜜由浅到深的蓝、花粉橙、空房暗。顺序就是着色器里的编号 */
+/** 巢房内容着色的视图：子脾由浅到深的红、蜜由浅到深的蓝、花粉橙、空房暗；死囊黄绿、白头蛹紫、巢虫的丝灰蓝。顺序就是着色器里的编号 */
 export const MAP_COLORS = {
   building: 0x9c9c9c,
   empty: 0x34302c,
@@ -41,6 +49,9 @@ export const MAP_COLORS = {
   honey: 0x3f8ae8,
   cappedHoney: 0x1c4aa2,
   pollen: 0xf49a1a,
+  sac: 0xd8e040,
+  bald: 0x9a5cf0,
+  silk: 0x5c6c78,
 };
 export type MapKey = keyof typeof MAP_COLORS;
 export const MAP_KEYS = Object.keys(MAP_COLORS) as MapKey[];

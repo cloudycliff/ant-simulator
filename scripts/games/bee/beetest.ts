@@ -1,10 +1,10 @@
 /**
  * 蜜蜂的无界面检查：巢脾网格和开局布局、子的发育、点选巢房、花丛的位置和开合流蜜、巢里的蜂（爬行、分工、产卵、哺育、筑巢、吃）、
- * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、割蜜和换框、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
+ * 摇摆舞和交接、按需要调整分工、储蜜的反馈、天气、巢脾上的温度、胡蜂和热球、割蜜和换框、巢虫和中囊病、存档往返、同编号可重现、坏存档拒读、英文文字没漏翻。
  * npx tsx scripts/games/bee/beetest.ts
  */
 import * as THREE from 'three';
-import { setLang, t, tr } from '../../../src/core/i18n';
+import { L, setLang, t, tr } from '../../../src/core/i18n';
 import { CombView } from '../../../src/games/bee/combView';
 import { CONFIG } from '../../../src/games/bee/config';
 import { CELL, CELLS, CONTENT_KEYS, GRID, SITES, cellPos, siteAt, siteFrame, siteU, siteV, type Comb } from '../../../src/games/bee/sim/comb';
@@ -44,7 +44,8 @@ check('网格：巢房中心和房里的点都换算回同一个位置', badSite
 const census0 = comb.census();
 const c0 = census0.counts;
 check('开局只造了一部分', census0.built > SITES * 0.4 && census0.built < SITES * 0.9 && census0.building > 0, `${census0.built} / ${SITES}，在造 ${census0.building}`);
-check('开局每种内容都有', CONTENT_KEYS.every((k) => c0[k] > 0), CONTENT_KEYS.map((k) => `${k} ${c0[k]}`).join(' '));
+const OPENING = CONTENT_KEYS.filter((k) => k !== 'sac');
+check('开局每种内容都有（死囊除外）', OPENING.every((k) => c0[k] > 0) && c0.sac === 0, OPENING.map((k) => `${k} ${c0[k]}`).join(' '));
 const meanV = (want: (c: number) => boolean) => {
   let sum = 0;
   let n = 0;
@@ -347,6 +348,10 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   run(x, 120);
   const caught = H.caught;
   check('胡蜂：两分钟里抓走几只蜂，不是几十只', caught >= 1 && caught <= 12, `${caught} 只`);
+  const chance = H.catchChance();
+  H.plate = true;
+  const plated = H.catchChance();
+  H.plate = false;
   const y = fresh();
   y.hornets.plate = true;
   y.hornets.spawn(2);
@@ -354,7 +359,12 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   for (const h of y.hornets.list) h.left = 1e9;
   y.hornets.list[0].state = 'land';
   run(y, 120);
-  check('防护片：胡蜂扑不了巢门、抓得少', y.hornets.balls === 0 && y.hornets.caught < caught, `抓走 ${y.hornets.caught} 只（没装 ${caught} 只）`);
+  // 抓中一只胡蜂就飞走，两分钟只抓一两只，比只数看不出差别；比同样抖翅时抓中的机会
+  check(
+    '防护片：胡蜂扑不了巢门、抓得少',
+    y.hornets.balls === 0 && plated < chance * 0.6,
+    `抓中的机会 ${chance.toFixed(2)} → ${plated.toFixed(2)}，两分钟抓走 ${y.hornets.caught} 只（没装 ${caught} 只）`,
+  );
   CONFIG.hornets.land = land;
 
   const z = fresh();
@@ -455,6 +465,69 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   );
   run(x, 300);
   check('空巢框从框梁中间往下造', upper() > 4 * n0, `${n0} → ${upper()} 个位置`);
+}
+{
+  // 巢虫和中囊病（T-024）。另开世界，按 1 秒一步跑得快些
+  const fast = (z: BeeWorld, secs: number) => {
+    for (let i = 0; i < secs; i++) z.advance(1, Infinity, Infinity);
+  };
+  const x = new BeeWorld(7);
+  const P = x.pests;
+  const strong = P.mothChance();
+  P.lay(6);
+  const start = P.worms[0].site;
+  fast(x, 600);
+  let silk = 0;
+  for (let c = 0; c < CELLS; c++) if (x.comb.silk[c] > 0) silk++;
+  const moved = P.worms.some((m) => m.site !== start);
+  check('巢虫：从巢脾边钻进去，在房底下打隧道留下丝', moved && silk > 5, `${P.worms.length} 条还在，${silk} 房有丝，白头蛹 ${P.bald}`);
+  // 只看这一次发病：不让它每天自己再发
+  const SB = CONFIG.pests.sacbrood as { days: number };
+  const days = SB.days;
+  SB.days = 0;
+  P.outbreak();
+  const infected = P.infected;
+  fast(x, 30);
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved;
+  run(r1, 20);
+  run(r2, 20);
+  check('有巢虫、有染病的幼虫时存档往返一致、读两次走得一样', same && P.worms.length > 0 && fingerprint(r1) === fingerprint(r2));
+  let told = false;
+  for (let i = 0; i < 140; i++) {
+    fast(x, 10);
+    told ||= x.events.entries.some((e) => e.ref?.kind === 'cell' && tr(e.msg) === tr(L('ev.sac')));
+  }
+  const ds = P.disease();
+  check(
+    '中囊病：染病的幼虫到封盖时死成囊，记进事件，清理蜂拖走',
+    infected >= CONFIG.pests.sacbrood.seed[0] && P.sacs > 0 && told && ds.sacs < P.sacs,
+    `染上 ${P.infected} 只，死成囊 ${P.sacs}，还没拖走 ${ds.sacs}`,
+  );
+  check('巢虫：蜂多的群里大多被拖出去', P.removed + P.matured >= P.hatched / 2, `孵出 ${P.hatched}，拖出 ${P.removed}，化蛹 ${P.matured}，还在 ${P.worms.length}，白头蛹 ${P.bald}`);
+  fast(x, 1800);
+  check('中囊病：强群里几天后自己好了', P.disease().sick === 0, `一共染上 ${P.infected} 只、死成囊 ${P.sacs}`);
+  SB.days = days;
+  // 弱群：拿掉七成工蜂，蜡螟来得多，白头蛹多、有被丝缠死的
+  const y = new BeeWorld(7);
+  const keep = y.bees.list.filter((b, i) => b.caste !== CASTE.worker || i % 10 >= 7);
+  y.bees.list.length = 0;
+  y.bees.list.push(...keep);
+  const weak = y.pests.mothChance();
+  for (let i = 0; i < 3; i++) y.pests.lay(5);
+  fast(y, 1800);
+  const Y = y.pests;
+  check('巢虫：弱群里蜡螟来得多，白头蛹成片，有的蛹被丝缠死', weak > 3 * strong && Y.bald > 30 && Y.entangled > 0, `来的机会 ${strong.toFixed(3)} → ${weak.toFixed(3)}，白头蛹 ${Y.bald}，缠死 ${Y.entangled}`);
+  const wf = Y.worms.length ? siteFrame(Y.worms[0].site) : 0;
+  const onFrame = Y.worms.filter((m) => siteFrame(m.site) === wf).length;
+  y.swapFrame(wf);
+  check('换框连巢虫一起拿走', onFrame > 0 && Y.culled === onFrame && Y.worms.every((m) => siteFrame(m.site) !== wf), `拿走 ${Y.culled} 条`);
 }
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);

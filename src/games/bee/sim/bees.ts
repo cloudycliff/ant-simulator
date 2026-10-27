@@ -21,6 +21,7 @@ const S = CONFIG.shift;
 const SPECIES = CONFIG.flowers.species;
 const HT = CONFIG.heat;
 const HN = CONFIG.hornets;
+const SB = CONFIG.pests.sacbrood;
 /** 每个走路格在哪个温度格 */
 const NODE_HEAT = (() => {
   const a = new Int16Array(NODES);
@@ -214,6 +215,8 @@ export class Bee {
   haul = 0;
   /** 跟舞读出来、还没去的地方 */
   aim: Aim | null = null;
+  /** 带着中囊病的病毒到什么时候（模拟秒，T-024） */
+  virus = 0;
   /** 只给画面：这一步在摆动（1）、颤抖或抖翅（2）还是振翅产热（3） */
   waggle = 0;
   act: Act = 'rest';
@@ -251,7 +254,7 @@ type BeeSave = [
   ...[id: number, caste: number, age: number, life: number, face: number, u: number, v: number, h: number, crop: number, jelly: number, wrap: number, wn: number, fast: number],
   ...[act: Act, cmd: Cmd | null, started: number],
   ...[out: number, x: number, y: number, z: number, vx: number, vy: number, vz: number, patch: number, goods: number, load: number],
-  ...[partner: number, waited: number, haul: number, aim: number[] | null, dev: number],
+  ...[partner: number, waited: number, haul: number, aim: number[] | null, dev: number, virus: number],
 ];
 export interface BeesSave {
   bees: BeeSave[];
@@ -294,6 +297,8 @@ export interface BeeEnv {
   hornets: { threat(): boolean; danger(): number; plate(): boolean; ballAt(id: number): Point3 | null };
   /** 开箱后蜂躁动的程度（0..1，T-023） */
   alarm(): number;
+  /** 一只幼虫染上中囊病（T-024） */
+  infect(cell: number): void;
 }
 
 /**
@@ -1060,7 +1065,7 @@ export class Bees {
   // ---- 要找的巢房 ----
 
   private isHungryLarva = (c: number) => this.comb.content[c] === CELL.larva && this.comb.amount[c] < C.hungry;
-  private isDirty = (c: number) => this.comb.content[c] === CELL.empty && this.comb.amount[c] > 0 && this.comb.build[cellSite(c)] >= 1;
+  private isDirty = (c: number) => (this.comb.content[c] === CELL.sac || (this.comb.content[c] === CELL.empty && this.comb.amount[c] > 0)) && this.comb.build[cellSite(c)] >= 1;
   private isLayable = (c: number) => this.comb.layable(c) && (this.droneOk || !this.comb.drone[cellSite(c)]);
   private isOpenFood = (c: number) => {
     const k = this.comb.content[c];
@@ -1596,8 +1601,11 @@ export class Bees {
   private *clean(b: Bee): Routine {
     const cell = yield* this.seek(b, 'dirty', this.isDirty, 'goClean');
     if (cell < 0) return yield* this.idle(b);
-    yield* this.work(b, cell, 'clean', C.work.clean);
-    if (this.isDirty(cell)) this.comb.clean(cell);
+    const sac = this.comb.content[cell] === CELL.sac;
+    yield* this.work(b, cell, 'clean', C.work.clean * (sac ? SB.cleanWork : 1));
+    if (!this.isDirty(cell)) return;
+    if (this.comb.content[cell] === CELL.sac && this.rng.chance(SB.cleanPick)) b.virus = this.now() + SB.carry;
+    this.comb.clean(cell);
     yield* this.maybeRest(b);
   }
 
@@ -1613,6 +1621,10 @@ export class Bees {
     if (cell < 0) return yield* this.idle(b);
     yield* this.work(b, cell, 'feed', C.work.feed);
     if (!this.isHungryLarva(cell)) return;
+    // 中囊病（T-024）：喂染病的幼虫可能带上病毒，带着的喂健康的可能传过去
+    if (this.comb.sick[cell]) {
+      if (this.rng.chance(SB.pick)) b.virus = this.now() + SB.carry;
+    } else if (b.virus > this.now() && this.rng.chance(SB.pass)) this.env.infect(cell);
     this.comb.feed(cell);
     b.jelly -= 1;
     yield* this.maybeRest(b);
@@ -1756,7 +1768,7 @@ export class Bees {
           ...[b.act, c ? (c.k === 'dance' ? { ...c, ph: r4(c.ph) } : { ...c, t: r4(c.t) }) : null, c && b.brain.started ? 1 : 0],
           // 巢脾上的蜂位置由 u、v 算出来，不存
           ...[b.out, ...(b.out ? [r4(p.x), r4(p.y), r4(p.z), r4(v.x), r4(v.y), r4(v.z)] : [0, 0, 0, 0, 0, 0]), b.patch, b.goods, r4(b.load)],
-          ...[b.partner, r4(b.waited), r4(b.haul), b.aim ? [r4(b.aim.at), r4(b.aim.x), r4(b.aim.z), b.aim.r, b.aim.sp, b.aim.goods, b.aim.patch] : null, r4(b.dev)],
+          ...[b.partner, r4(b.waited), r4(b.haul), b.aim ? [r4(b.aim.at), r4(b.aim.x), r4(b.aim.z), b.aim.r, b.aim.sp, b.aim.goods, b.aim.patch] : null, r4(b.dev), r4(b.virus)],
         ] as BeeSave;
       }),
       trips: this.trips,
@@ -1790,9 +1802,9 @@ export class Bees {
     this.list.length = 0;
     this.byId.clear();
     this.occ.fill(0);
-    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load, partner, waited, haul, aim, dev] of d.bees) {
+    for (const [id, caste, age, life, face, u, v, h, crop, jelly, wrap, wn, fast, act, cmd, started, out, x, y, z, vx, vy, vz, patch, goods, load, partner, waited, haul, aim, dev, virus] of d.bees) {
       const b = this.add(caste, age, life, id);
-      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load, partner, waited, haul, dev });
+      Object.assign(b, { face, u, v, h, crop, jelly, wrap, wn, fast, act, out, patch, goods, load, partner, waited, haul, dev, virus });
       b.aim = aim ? { at: aim[0], x: aim[1], z: aim[2], r: aim[3], sp: aim[4], goods: aim[5], patch: aim[6] } : null;
       Object.assign(b.pos, { x, y, z });
       Object.assign(b.vel, { x: vx, y: vy, z: vz });

@@ -368,6 +368,49 @@ export const CONFIG = {
     stress: { harvest: 0.15, swap: 0.3 },
     stressDays: 1.5,
   },
+  /**
+   * 巢虫和中囊病（T-024）。
+   * 巢虫：第 firstDay 天起，夜里 hours 点之间每个游戏小时有一次机会飞进来一只蜡螟产卵，孵出 clutch 条巢虫：
+   * 机会在 perHour 之间按蜂群弱的程度插值（巢里的蜂数 / 造好的位置，到 cover 算强、0 最弱）。巢虫从离一处封盖子最近的巢脾边上钻进去、朝那里爬，
+   * 在一面的房底下沿中肋打隧道，每 crawl 秒爬一格，每格有 turn 的机会拐弯，挑下一格时封盖子底下加 brood 分（方向的余弦是 -1..1），不进蜜房；爬过的巢房留丝 silk 秒，
+   * 空房变脏，封盖子有 bald 的机会成白头蛹，白头蛹羽化时有 entangle 的机会被丝缠死。
+   * 巢虫离 seeR cm 内的蜂越多越容易被拖出去：每秒 remove × min(1, 蜂数 / crowd)，躲在封盖子下面再乘 hidden。
+   * 活过 life 秒的爬出去化蛹（没了）。
+   * 中囊病：第 firstDay 天起每天有 days 的机会发一次病，那时巢里一只幼虫和它 seedR cm 内最多 seed 只幼虫染上。
+   * 哺育蜂喂染病的幼虫有 pick 的机会带上病毒，带着的 carry 秒里每喂一只健康的幼虫有 pass 的机会传过去；
+   * 清理蜂拖死囊（多花 cleanWork 倍的时间）有 cleanPick 的机会带上
+   */
+  pests: {
+    moth: {
+      firstDay: 1,
+      hours: [20, 4] as [number, number],
+      perHour: [0.02, 0.5] as [number, number],
+      cover: 0.5,
+      clutch: [2, 5] as [number, number],
+      crawl: [30, 60] as [number, number],
+      turn: 0.2,
+      brood: 0.6,
+      silk: 900,
+      bald: 0.7,
+      entangle: 0.3,
+      seeR: 2,
+      crowd: 6,
+      remove: 0.004,
+      hidden: 0.1,
+      life: [1800, 3000] as [number, number],
+    },
+    sacbrood: {
+      firstDay: 2,
+      days: 0.3,
+      seed: [3, 6] as [number, number],
+      seedR: 3,
+      pick: 0.4,
+      carry: 200,
+      pass: 0.05,
+      cleanPick: 0.3,
+      cleanWork: 2,
+    },
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

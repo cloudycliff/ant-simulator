@@ -9,10 +9,10 @@ const P = CONFIG.cell.pitch;
 /** 巢脾整体的高度：两框加中间的木条 */
 export const COMB_H = H.frameH * 2 + H.bar;
 
-/** 巢房里装的东西；有没有巢房看 build */
-export const CELL = { empty: 0, egg: 1, larva: 2, capped: 3, nectar: 4, honey: 5, cappedHoney: 6, pollen: 7 } as const;
+/** 巢房里装的东西；有没有巢房看 build。sac 是得中囊病死在房里的幼虫（T-024），要清理蜂拖出去 */
+export const CELL = { empty: 0, egg: 1, larva: 2, capped: 3, nectar: 4, honey: 5, cappedHoney: 6, pollen: 7, sac: 8 } as const;
 export type CellContent = (typeof CELL)[keyof typeof CELL];
-export const CONTENT_KEYS = ['empty', 'egg', 'larva', 'capped', 'nectar', 'honey', 'cappedHoney', 'pollen'] as const;
+export const CONTENT_KEYS = ['empty', 'egg', 'larva', 'capped', 'nectar', 'honey', 'cappedHoney', 'pollen', 'sac'] as const;
 /** 花粉的几种颜色（不同的花），画面按这个编号取色 */
 export const POLLEN_KINDS = 5;
 
@@ -134,6 +134,9 @@ export interface CombSave {
   age: string;
   pollen: string;
   repair: string;
+  sick: string;
+  bald: string;
+  silk: string;
 }
 
 export interface CombCensus {
@@ -166,6 +169,12 @@ export class Comb {
   readonly repair = new Uint8Array(SITES);
   /** repair 里还有几个 */
   repairs = 0;
+  /** 染上中囊病的幼虫（看不出来，到封盖的时候死成囊，T-024） */
+  readonly sick = new Uint8Array(CELLS);
+  /** 白头蛹：巢虫在下面打隧道，工蜂把房盖咬开了（T-024） */
+  readonly bald = new Uint8Array(CELLS);
+  /** 巢虫爬过留下的丝和虫粪还要多少秒才被清掉 */
+  readonly silk = new Float32Array(CELLS);
   /** 内容变了加一 */
   version = 0;
   /** 有没有巢房变了（新开始造一个位置）加一，走路的方格按它重建 */
@@ -243,9 +252,21 @@ export class Comb {
     this.amount[cell] = 1;
   }
 
+  /** 清理：空房里的残渣、死在房里的囊状幼虫都拖出去 */
   clean(cell: number): void {
+    if (this.content[cell] === CELL.sac) this.content[cell] = CELL.empty;
     this.amount[cell] = 0;
     this.version++;
+  }
+
+  /** 巢虫爬过这个巢房（T-024）：留下丝，空房变脏；bald 为真时封盖子被工蜂咬开盖子成白头蛹（新成了白头蛹返回真） */
+  bore(cell: number, silk: number, bald: boolean): boolean {
+    this.silk[cell] = silk;
+    this.version++;
+    const c = this.content[cell];
+    if (c === CELL.empty) this.amount[cell] = Math.max(this.amount[cell], 1);
+    else if (c === CELL.capped && bald && !this.bald[cell]) return (this.bald[cell] = 1) === 1;
+    return false;
   }
 
   /** 从蜜房里取走最多 want（房），返回取到的；封盖蜜先咬开 */
@@ -380,6 +401,8 @@ export class Comb {
     this.amount[cell] = 0;
     this.age[cell] = 0;
     this.pollen[cell] = 0;
+    this.sick[cell] = 0;
+    this.bald[cell] = 0;
   }
 
   private store(cell: number, c: CellContent, amount: number, pollen = 0): void {
@@ -392,8 +415,18 @@ export class Comb {
    * 卵、幼虫、封盖子长大 dt 秒，到了时间换下一阶段。幼虫越来越饿，饿过 starve 秒就死了；
    * 羽化和饿死的巢房空出来、要清理，各自回调一次
    */
-  /** rate：这个巢房里的子发育快慢的倍数；dies：这一回冻死、热死没有（T-021），死了和饿死的一样留下要清理的房 */
-  develop(dt: number, onEmerge: (cell: number) => void, onStarve: (cell: number) => void, rate: (cell: number) => number = () => 1, dies: (cell: number) => boolean = () => false): void {
+  /**
+   * rate：这个巢房里的子发育快慢的倍数；dies：这一回冻死、热死没有（T-021），死了和饿死的一样留下要清理的房。
+   * 染了中囊病的幼虫到封盖的时候死成囊（onSac）；白头蛹羽化时 onEmerge 先看 bald 再清掉。巢虫的丝过 dt 秒淡一点
+   */
+  develop(
+    dt: number,
+    onEmerge: (cell: number) => void,
+    onStarve: (cell: number) => void,
+    rate: (cell: number) => number = () => 1,
+    dies: (cell: number) => boolean = () => false,
+    onSac: (cell: number) => void = () => {},
+  ): void {
     let changed = false;
     const W = CONFIG.brood.worker;
     const D = CONFIG.brood.drone;
@@ -401,6 +434,10 @@ export class Comb {
     const hunger = dt / C.feedEvery;
     const dead = -C.starve / C.feedEvery;
     for (let cell = 0; cell < CELLS; cell++) {
+      if (this.silk[cell] > 0 && (this.silk[cell] -= dt) <= 0) {
+        this.silk[cell] = 0;
+        changed = true;
+      }
       const c = this.content[cell];
       if (c < CELL.egg || c > CELL.capped) continue;
       const starved = c === CELL.larva && (this.amount[cell] -= hunger) < dead;
@@ -415,14 +452,21 @@ export class Comb {
       const T = this.drone[cellSite(cell)] ? D : W;
       const next = a < T.egg ? CELL.egg : a < T.egg + T.larva ? CELL.larva : a < T.egg + T.larva + T.capped ? CELL.capped : CELL.empty;
       if (next === c) continue;
-      this.content[cell] = next;
       changed = true;
+      if (next === CELL.capped && this.sick[cell]) {
+        this.empty(cell);
+        this.content[cell] = CELL.sac;
+        onSac(cell);
+        continue;
+      }
+      this.content[cell] = next;
       if (next === CELL.larva) this.amount[cell] = 1;
       else if (next === CELL.capped) this.amount[cell] = 0;
       else if (next === CELL.empty) {
         this.age[cell] = 0;
         this.amount[cell] = 1;
         onEmerge(cell);
+        this.bald[cell] = 0;
       }
     }
     if (changed) this.version++;
@@ -462,6 +506,9 @@ export class Comb {
       age: encode(this.age),
       pollen: encode(this.pollen),
       repair: encode(this.repair),
+      sick: encode(this.sick),
+      bald: encode(this.bald),
+      silk: encode(this.silk),
     };
   }
 
@@ -473,6 +520,9 @@ export class Comb {
     decode(d.age, this.age);
     decode(d.pollen, this.pollen);
     decode(d.repair, this.repair);
+    decode(d.sick, this.sick);
+    decode(d.bald, this.bald);
+    decode(d.silk, this.silk);
     this.repairs = this.repair.reduce((a, x) => a + x, 0);
     this.version++;
     this.shape++;

@@ -116,6 +116,9 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
       // ?hornet=只数：马上来几只胡蜂；?plate=1 装上防护片
       if (params.get('plate')) w.hornets.plate = true;
       w.hornets.spawn(Math.min(5, Number(params.get('hornet')) || 0));
+      // ?moth=条数：飞进一只蜡螟产一窝卵；?sac=1 发一次中囊病（T-024）
+      if (params.get('moth')) w.pests.lay(Math.min(20, Number(params.get('moth')) || 3));
+      if (params.get('sac')) w.pests.outbreak();
       const secs = Math.min(600, Number(params.get('run')) || 0);
       for (let s = 0; s < secs; s += 1) w.advance(1, Infinity, Infinity);
     },
@@ -195,7 +198,10 @@ function cellInfo(w: BeeWorld, cell: number): string {
     if (c === CELL.egg) body += kv(t('info.hatch'), t('info.inTime', { t: span(T.egg - a) }));
     else if (c === CELL.larva) body += kv(t('info.seal'), t('info.inTime', { t: span(T.egg + T.larva - a) }));
     else if (c === CELL.capped) body += kv(t('info.emerge'), t('info.inTime', { t: span(T.egg + T.larva + T.capped - a) }));
-    else if (c !== CELL.empty) body += kv(t('info.amount'), t('info.percent', { p: Math.round(cb.amount[cell] * 100) }));
+    else if (c !== CELL.empty && c !== CELL.sac) body += kv(t('info.amount'), t('info.percent', { p: Math.round(cb.amount[cell] * 100) }));
+    if (cb.bald[cell]) body += kv(t('info.bald'), t('info.baldValue'));
+    if (w.pests.wormAt(cell)) body += kv(t('info.worm'), t('info.wormValue'));
+    else if (cb.silk[cell] > 0) body += kv(t('info.silk'), t('info.silkValue'));
   }
   const area = w.keeper.cutArea(cell);
   let honey = 0;
@@ -373,6 +379,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
       ${row(t('colony.hornets'), hn ? t('colony.hornetsValue', { n: hn }) : t('colony.hornetsNone'))}
       ${row(t('colony.alarm'), t(w.keeper.alarm > 0.05 ? 'colony.alarmOn' : 'colony.alarmOff'))}
+      ${row(t('colony.pests'), w.pests.worms.length || n.sac ? t('colony.pestsValue', { w: w.pests.worms.length, s: n.sac }) : t('colony.hornetsNone'))}
       ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
       <h3>${t('colony.since')}</h3>
       <div class="grid">
@@ -387,6 +394,9 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.balls', HN.balls)}${stat('total.hornetKills', `${HN.killed} / ${HN.swatted}`)}
         ${stat('total.harvests', w.keeper.harvests)}${stat('total.harvested', Math.round(w.keeper.harvested))}
         ${stat('total.swaps', w.keeper.swaps)}${stat('total.lostBrood', w.keeper.lostBrood)}
+        ${stat('total.worms', w.pests.hatched)}${stat('total.wormsRemoved', w.pests.removed)}
+        ${stat('total.bald', w.pests.bald)}${stat('total.entangled', w.pests.entangled)}
+        ${stat('total.sacbrood', w.pests.outbreaks)}${stat('total.sacs', w.pests.sacs)}
       </div>`;
       },
     },

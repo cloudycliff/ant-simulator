@@ -63,7 +63,7 @@ export class BeeView {
     }
     this.buildGarden();
     this.buildHive();
-    this.comb = new CombView(w.comb);
+    this.comb = new CombView(w.comb, () => w.pests.worms.map((x) => x.cell));
     this.flowers = new FlowerView(w);
     this.bees = new BeesView(w);
     this.dance = new DanceView(w);

@@ -103,6 +103,12 @@ export class Hornets {
     return Math.min(N.paralysisMax, n * N.paralysis);
   }
 
+  /** 扑中一只蜂抓走的机会：守卫抖翅的越多越难，装了防护片更难 */
+  catchChance(): number {
+    const shimmer = Math.min(1, this.host.bees.shimmering / N.shimmerFull);
+    return N.catch * (1 - N.shimmerCut * shimmer) * (this.plate ? N.plateCatch : 1);
+  }
+
   /** 热球的中心；这只胡蜂没在热球里是 null */
   ballAt(id: number): Point3 | null {
     const h = this.get(id);
@@ -231,9 +237,7 @@ export class Hornets {
           return true;
         }
         if (this.fly(h, b.pos, N.dart, false, dt) > 1.2) return true;
-        const shimmer = Math.min(1, host.bees.shimmering / N.shimmerFull);
-        const p = N.catch * (1 - N.shimmerCut * shimmer) * (this.plate ? N.plateCatch : 1);
-        if (!this.rng.chance(p)) {
+        if (!this.rng.chance(this.catchChance())) {
           this.miss(h);
           return true;
         }
