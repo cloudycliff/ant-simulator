@@ -35,7 +35,7 @@ export const CONFIG = {
   /** 发育各阶段的秒数（T-002：1 游戏日 600 秒，真实天数压到约 1/3，见 BALANCE） */
   brood: {
     worker: { egg: 600, larva: 1200, capped: 2220 },
-    drone: { egg: 600, larva: 1380, capped: 2580 },
+    drone: { egg: 600, larva: 1200, capped: 2800 },
   },
   /**
    * 蜂（BALANCE“游戏里的取值”）。开局 workers 只工蜂、drones 只雄蜂和一只蜂王，日龄在寿命里均匀分布。
@@ -233,7 +233,7 @@ export const CONFIG = {
         closes: false,
         land: [[4.3, 171.4, 0], [5.5, 174.1, 0], [4.3, 171.4, 3], [3, 168.7, 0], [4.3, 171.4, -3]],
       },
-      { key: 'pumpkin', wild: true, plantR: 110, hours: [5, 10.5], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
+      { key: 'pumpkin', wild: true, plantR: 110, hours: [5, 12], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
       { key: 'lavender', wild: true, plantR: 90, hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false, land: [[15.4, 51, 0], [0, 48, 13.4], [-13.3, 55, -5.5], [6.5, 45, -16.3]] },
       { key: 'corn', wild: true, plantR: 90, hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false, land: [[7, 221.6, 0], [0, 221.6, 7], [-7, 221.6, 0], [0, 221.6, -7]] },
       // 糖水碟：一个木墩上放一碟糖水，只有一“株”；白天蜂才来，喝完了不会自己长回来

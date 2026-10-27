@@ -121,7 +121,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'flower.corn': 'Corn',
   'flowerDesc.clover': 'Small white balls of flowers low in the grass. Each head holds dozens of florets with nectar from morning to evening: the most common forage.',
   'flowerDesc.sunflower': 'The heads face east. Each is hundreds of tiny florets, rich in pollen with some nectar.',
-  'flowerDesc.pumpkin': 'Opens at first light and closes by mid-morning; each flower lasts half a day. Large flowers with plenty of nectar and pollen, so the bees come early.',
+  'flowerDesc.pumpkin': 'Opens at first light and closes around noon; each flower lasts half a day. Large flowers with plenty of nectar and pollen, so the bees come early.',
   'flowerDesc.lavender': 'Purple spikes, most fragrant in the heat. Plenty of nectar, little pollen.',
   'flowerDesc.sugar': "Sugar water, which beekeepers give bees when nectar runs short. It sits in a shallow dish on a stump, with straws floating on it so the bees can land and drink without drowning. A scout that finds it goes home and dances for it. It doesn't refill on its own; place sugar water on the dish again to top it up.",
   'flowerDesc.corn': 'Wind-pollinated: the tassels on top shed pollen in the morning and there is no nectar. Bees collect it when pollen is short in summer.',
