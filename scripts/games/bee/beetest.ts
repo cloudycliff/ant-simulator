@@ -11,7 +11,7 @@ import { CELL, CELLS, CONTENT_KEYS, GRID, SITES, cellPos, siteAt, siteFrame, sit
 import { ACTS, CASTE, ageRoleOf, roleOf, type Act } from '../../../src/games/bee/sim/bees';
 import { Flowers, SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap, SPECIES_KEYS } from '../../../src/games/bee/sim/flowers';
 import { nodeAt } from '../../../src/games/bee/sim/walk';
-import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/world';
+import { BeeWorld, beeSave, type BeeRef, type BeeSaveData } from '../../../src/games/bee/world';
 import { MOUTH } from '../../../src/games/bee/sim/flight';
 import type { HornetState } from '../../../src/games/bee/sim/hornets';
 import { en } from '../../../src/games/bee/i18n/en';
@@ -646,10 +646,10 @@ check('编号不对的存档拒读', bad !== null, bad ?? '');
 check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeSaveData), version: 0 }) !== null);
 
 {
-  const missing = NOTES.flatMap((n) => [n.group, n.title, n.body]).filter((k) => !(k in en));
-  check('笔记的每一条都有中英文字', missing.length === 0 && new Set(NOTES.map((n) => n.id)).size === NOTES.length, missing.join(' ') || `${NOTES.length} 条`);
+  const missing = NOTES.flatMap((n) => [n.group, n.title, n.body, n.hint!]).filter((k) => !(k in en));
+  check('笔记的每一条都有中英文字和没看到时的提示', missing.length === 0 && new Set(NOTES.map((n) => n.id)).size === NOTES.length, missing.join(' ') || `${NOTES.length} 条`);
   const x = new BeeWorld(7);
-  let sel: { kind: 'cell'; id: number } | null = null;
+  let sel: BeeRef | null = null;
   let swapping = false;
   const def = beeNotes(x, { selection: () => sel, tool: () => null, swapping: () => swapping });
   const seen = (known = new Set<string>()) => new Set(def.check(known));
@@ -666,6 +666,20 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
     '第一次的提示：开局讲观察箱，跳舞、胡蜂、选中封盖蜜、问换框时各弹一张',
     first.has('hive') && !first.has('hornet') && later.has('dance') && hornet.has('hornet') && keeping.has('harvest') && keeping.has('swap'),
     [...keeping].join(' '),
+  );
+  const look = (ref: BeeRef) => {
+    sel = ref;
+    return seen();
+  };
+  const queen = look({ kind: 'bee', id: x.bees.queen!.id });
+  const worker = x.bees.list.find((b) => b.caste === CASTE.worker && roleOf(b) === 'nurse')!;
+  const nurse = look({ kind: 'bee', id: worker.id });
+  const brood = look({ kind: 'cell', id: x.comb.content.indexOf(CELL.larva) });
+  const pollen = look({ kind: 'cell', id: x.comb.content.indexOf(CELL.pollen) });
+  check(
+    '笔记：选中蜂王、一只哺育蜂、幼虫房、花粉房时记下对应的条目',
+    queen.has('queen') && nurse.has('nurse') && !nurse.has('queen') && brood.has('comb') && brood.has('brood') && pollen.has('pollen') && !pollen.has('brood'),
+    [...nurse, ...pollen].join(' '),
   );
 }
 

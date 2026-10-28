@@ -18,6 +18,8 @@ const LOOK = (cell, d = 7) =>
   `{ const id = ${cell}; const p = id >= 0 ? world.entities.pos({ kind: 'cell', id }) : null; if (p) { const V = camera.position.constructor; const z = id >= world.comb.content.length / 2 ? -1 : 1; controller.setPose(new V(p.x + 0.5, p.y + 1, p.z + z * ${d}), new V(p.x, p.y, p.z)) } }`;
 const PESTS = `'巢虫 ' + world.pests.worms.length + '/' + world.pests.hatched + ' 白头蛹 ' + world.pests.bald + ' 死囊 ' + world.pests.sacs`;
 const ABS = `world.abscond.swarm.phase + ' 压力 ' + world.abscond.pressure.toFixed(2) + ' 蜂 ' + world.bees.list.length + ' 在外面 ' + world.bees.list.filter((b) => b.out).length`;
+const NOTED = `hud.hideHelp(); for (const id of ['queen', 'nurse', 'forager', 'dance', 'hornet', 'ball', 'harvest']) hud.notes.learn(id); hud.notes.markRead('hive')`;
+const NOTES = `document.querySelector('#notes')?.innerText.replace(/\\s+/g, ' ').slice(0, 160) ?? ''`;
 const SCENES = {
   home: { q: '&hour=11' },
   night: { q: '&hour=22.5' },
@@ -108,6 +110,10 @@ const SCENES = {
   tiphive: { q: '&hour=11', tips: true, js: 'hud.hideHelp()', check: `document.querySelector('#tip')?.innerText.replace(/\\s+/g, ' ') ?? ''` },
   tipswap: { q: '&hour=11&select=hive:0', tips: true, js: `hud.hideHelp(); hud.notes.dismiss()`, click: ['#info [data-a="swapAsk"][data-v="1"]'], check: `hud.notes.tip?.id ?? ''` },
   tipen: { q: '&hour=11&lang=en', tips: true, js: 'hud.hideHelp()' },
+  // 笔记：看到了几条、读过一条；手机上列条目，再点开一条读
+  notes: { q: '&hour=11', fresh: true, js: `${NOTED}; hud.toggleNotes()`, check: NOTES },
+  notesread: { q: '&hour=11', fresh: true, phone: true, js: `${NOTED}; hud.toggleNotes(); hud.openNote(1)`, check: NOTES },
+  notesen: { q: '&hour=11&lang=en', fresh: true, js: `${NOTED}; hud.toggleNotes()`, check: NOTES },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },
@@ -132,9 +138,9 @@ try {
       await p.viewport(w, h, touch);
       await p.open(BASE + Q + (s.tips ? '' : '&tips=0') + s.q);
       // 各场景共用一个浏览器的本地存储：看过的提示不会再弹，先清掉再开一次
-      if (s.tips) {
+      if (s.tips || s.fresh) {
         await p.ev(`localStorage.removeItem('cyber-bee-notes')`);
-        await p.open(BASE + Q + s.q);
+        await p.open(BASE + Q + (s.tips ? '' : '&tips=0') + s.q);
       }
       if (s.js) await p.ev(s.js);
       for (const sel of s.click ?? []) await p.ev(`document.querySelector('${sel}').click()`);

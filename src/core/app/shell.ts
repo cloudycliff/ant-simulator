@@ -23,6 +23,10 @@ export type ShellAction =
   | 'help'
   | 'tipOk'
   | 'tipsOff'
+  | 'tipsToggle'
+  | 'notes'
+  | 'noteOpen'
+  | 'noteBack'
   | 'tool'
   | 'toolopt'
   | 'toolexit'
@@ -44,7 +48,7 @@ export type ShellAction =
   | 'menu';
 
 /** 手机布局里从底栏打开的面板，同一时间只开一个；colony 是游戏的主面板 */
-export const SHEETS = ['colony', 'views', 'tools', 'events', 'stats', 'save', 'help'] as const;
+export const SHEETS = ['colony', 'views', 'tools', 'events', 'stats', 'save', 'help', 'notes'] as const;
 export type Sheet = (typeof SHEETS)[number];
 
 const SPEEDS = [1, 2, 5, 10, 20];
@@ -57,6 +61,7 @@ const ICON = {
   tools: svgIcon('<path d="M13.5 2.8a4 4 0 0 0-4.6 5.3L3 14a1.9 1.9 0 0 0 2.7 2.7l5.9-5.9a4 4 0 0 0 5.3-4.6l-2.3 2.3-2.4-.6-.6-2.4z"/>'),
   events: svgIcon('<path d="M5 13.5V9a5 5 0 0 1 10 0v4.5l1.5 2h-13z"/><path d="M8.3 17.5a1.8 1.8 0 0 0 3.4 0"/>'),
   more: svgIcon('<path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13"/>'),
+  notes: svgIcon('<path d="M4.5 3h10a1 1 0 0 1 1 1v12.5h-9.5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M4.5 15a1.5 1.5 0 0 1 1.5-1.5h9.5"/><path d="M8 6.5h4.5"/>'),
 };
 const GITHUB =
   '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
@@ -99,6 +104,11 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   notes: Notebook | null = null;
   private tipEl: HTMLElement | null = null;
   private tipKey = '';
+  notesOpen = false;
+  private notesEl: HTMLElement | null = null;
+  private notesKey = '';
+  /** 笔记里正在读的条目；手机上为空时列出所有条目 */
+  private noteSel: string | null = null;
   private saveEl = document.getElementById('save')!;
   private viewsEl = document.getElementById('views')!;
   private toolboxEl = document.getElementById('toolbox')!;
@@ -215,6 +225,8 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
       this.state.stats = s === 'stats';
       this.saveOpen = s === 'save';
       this.helpEl.classList.toggle('hidden', s !== 'help');
+      if (s === 'notes' && !this.notesOpen) this.noteSel = null;
+      this.notesOpen = s === 'notes';
     }
     if (s === 'stats' && this.sheet !== 'stats') this.statsDirty = true;
     this.sheet = s;
@@ -275,6 +287,9 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
       (k) =>
         `<label class="slider" id="bright-${k}"><span>${t(`ui.bright.${k}`)}</span><input type="range" min="${B.min}" max="${B.max}" step="${B.step}" value="${this.brightness?.[k] ?? 1}" data-bright="${k}"><output></output></label>`,
     ).join('')}<button data-a="brightReset">${t('ui.brightReset')}</button></div>`;
+    const notes = this.ui.notes;
+    const badge = '<i class="badge hidden"></i>';
+    const notesBtn = notes ? `<button data-a="notes" id="btn-notes" title="${sc('N')}">${t('ui.notes')} <kbd>N</kbd>${badge}</button>` : '';
     const bgBtn = `<button data-a="background" id="btn-background" class="bg${BACKGROUND_LIMITED ? ' limited' : ''}" title="${t(BACKGROUND_LIMITED ? 'ui.backgroundLimitedTitle' : 'ui.backgroundTitle')}">${t('ui.background')}</button>`;
     if (this.compact) {
       this.top.innerHTML = `
@@ -295,7 +310,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
                 <div class="label" title="${t('ui.brightTitle')}">${t('ui.brightness')}</div>
                 ${bright}
                 <button data-a="music" id="btn-music" title="${t('ui.musicTitle')}">${t('ui.music')}</button>
-                <button data-a="help">${t('ui.help')}</button>
+                <button data-a="help">${t('ui.help')}</button>${notesBtn}
                 <button data-a="savePanel" id="btn-save">${t('save.title')}</button>
                 <button data-a="install" id="btn-install" class="hidden" title="${t('ui.installTitle')}">${t('ui.install')}</button>
                 <div class="label">${GLOBE}${t('ui.language')}</div>
@@ -314,7 +329,8 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
           .join('') +
         dockBtn('views', ICON.views, t('ui.groupView')) +
         (tools.length ? dockBtn('tools', ICON.tools, t('ui.groupTools')) : '') +
-        dockBtn('events', ICON.events, t('dock.events'));
+        dockBtn('events', ICON.events, t('dock.events')) +
+        (notes ? dockBtn('notes', ICON.notes + badge, t('ui.notes')) : '');
       this.viewsEl.innerHTML = `<h3>${t('ui.groupView')}</h3><div class="grid">${this.views
         .filter((v) => !v.dock)
         .map((v) => `<button data-a="${v.id}" id="btn-${v.id}">${v.label()}</button>`)
@@ -344,7 +360,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
             <div class="menu hidden" id="bright-menu"><div class="hint">${t('ui.brightTitle')}</div>${bright}</div>
           </div>
           <button data-a="music" id="btn-music" title="${t('ui.musicTitle')}">${t('ui.music')} <kbd>M</kbd></button>
-          <button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
+          ${notesBtn}<button data-a="help" title="${sc('H')}">${t('ui.help')} <kbd>H</kbd></button>
           <button data-a="savePanel" id="btn-save" title="${t('save.buttonTitle')}">${t('save.title')}</button>
           <div class="drop" id="lang">
             <button data-a="langMenu" id="btn-lang" title="${t('ui.langTitle')}" aria-haspopup="menu" aria-expanded="false">${GLOBE}${LANG_NAMES[cur]}<i class="caret"></i></button>
@@ -421,6 +437,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     this.syncDock();
     this.toolKey = '';
     this.tipKey = '';
+    this.notesKey = '';
     this.saveKey = '';
     this.eventsKey = null;
     this.statsDirty = true;
@@ -456,7 +473,26 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
 
   toggleHelp(): void {
     if (this.compact) this.toggleSheet('help');
-    else this.helpEl.classList.toggle('hidden');
+    else if (!this.helpEl.classList.toggle('hidden')) this.notesOpen = false;
+  }
+
+  toggleNotes(): void {
+    if (!this.notes) return;
+    if (this.compact) return this.toggleSheet('notes');
+    this.notesOpen = !this.notesOpen;
+    if (this.notesOpen) this.hideHelp();
+  }
+
+  /** 读一条看到过的；没看到的点不开 */
+  openNote(i: number): void {
+    const e = this.notes?.def.entries[i];
+    if (!e || !this.notes!.known.has(e.id)) return;
+    this.noteSel = e.id;
+    this.notes!.markRead(e.id);
+  }
+
+  noteBack(): void {
+    this.noteSel = null;
   }
 
   hideHelp(): void {
@@ -526,6 +562,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     this.renderTool();
     this.renderSave();
     this.renderTip();
+    this.renderNotes();
 
     this.colonyEl.innerHTML = this.ui.panel.html(this.colonyFolded);
     this.renderInfo(sel);
@@ -547,7 +584,8 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   private renderTip(): void {
     const nb = this.notes;
     if (!nb) return;
-    nb.poll();
+    const fresh = nb.poll().map((id) => nb.get(id)!).filter((e) => !e.tip);
+    if (fresh.length && nb.tipsOn && !nb.quiet) this.toast(t('notes.new', { title: fresh.map((e) => t(e.title)).join(t('notes.sep')) }));
     const tip = nb.tip;
     document.body.classList.toggle('tipping', !!tip);
     const key = tip?.id ?? '';
@@ -570,6 +608,72 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
       <div class="head"><span>${t('tip.label')}</span><b>${t(tip.title)}</b></div>
       <div class="body">${paras(t(tip.body))}</div>
       <div class="opts"><button data-a="tipOk" class="ok">${t('tip.ok')}</button><button data-a="tipsOff" class="off">${t('tip.off')}</button></div>`;
+  }
+
+  /**
+   * 笔记：按组列出所有条目，看到过的能点开读，没看到的写着在哪能看到；桌面左边列条目、右边读，手机上二选一。
+   * 只在看到、读过的条目或开关变化时重写，重写时留住列表滚到的位置
+   */
+  private renderNotes(): void {
+    const nb = this.notes;
+    if (!nb) return;
+    const open = this.notesOpen;
+    document.getElementById('btn-notes')?.classList.toggle('on', open);
+    const n = nb.unread;
+    document.querySelectorAll<HTMLElement>('#topbar .badge, #dock .badge').forEach((b) => {
+      b.textContent = String(n);
+      b.classList.toggle('hidden', !n);
+    });
+    if (!this.notesEl) {
+      const el = (this.notesEl = document.createElement('div'));
+      el.id = 'notes';
+      el.className = 'panel hidden';
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', (e) => {
+        const b = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
+        if (b) this.onAction?.(b.dataset.a!, b.dataset.v ? Number(b.dataset.v) : undefined);
+      });
+      document.body.appendChild(el);
+    }
+    const el = this.notesEl;
+    el.classList.toggle('hidden', !open);
+    if (!open) return;
+    // 桌面上没选的时候先读第一条没读过的，都读过就第一条看到的
+    const entries = nb.def.entries;
+    if (!this.compact && !(this.noteSel && nb.known.has(this.noteSel))) {
+      const first = entries.find((e) => nb.known.has(e.id) && !nb.read.has(e.id)) ?? entries.find((e) => nb.known.has(e.id));
+      this.noteSel = first?.id ?? null;
+      if (first) nb.markRead(first.id);
+    }
+    const key = `${this.compact ? 1 : 0}|${this.noteSel}|${nb.known.size}|${nb.read.size}|${nb.tipsOn ? 1 : 0}`;
+    if (key === this.notesKey) return;
+    this.notesKey = key;
+    const scroll = el.querySelector('.list')?.scrollTop ?? 0;
+    const same = el.dataset.sel === (this.noteSel ?? '');
+    const pageScroll = same ? (el.querySelector('.page')?.scrollTop ?? 0) : 0;
+    el.dataset.sel = this.noteSel ?? '';
+    let rows = '';
+    let group = '';
+    entries.forEach((e, i) => {
+      if (e.group !== group) {
+        group = e.group;
+        rows += `<h4>${t(e.group)}</h4>`;
+      }
+      rows += nb.known.has(e.id)
+        ? `<button data-a="noteOpen" data-v="${i}" class="${e.id === this.noteSel ? 'on' : ''}">${t(e.title)}${nb.read.has(e.id) ? '' : '<i class="dot"></i>'}</button>`
+        : `<div class="locked"><b>${t('notes.lockedTitle')}</b><small>${t(e.hint ?? 'notes.locked')}</small></div>`;
+    });
+    const sel = this.noteSel ? nb.get(this.noteSel) : undefined;
+    const page = sel
+      ? `${this.compact ? `<button data-a="noteBack" class="back">${t('notes.back')}</button>` : ''}<h3>${t(sel.title)}</h3><small>${t(sel.group)}</small>${paras(t(sel.body))}`
+      : `<p class="pick">${t('notes.pick')}</p>`;
+    el.classList.toggle('reading', !!sel);
+    el.innerHTML = `
+      <div class="head"><b>${t(nb.def.title)}</b><span>${t('notes.count', { n: nb.known.size, total: entries.length })}</span><button data-a="notes" class="close" title="${t('notes.close')}">×</button></div>
+      <div class="cols"><div class="list">${rows}</div><div class="page">${page}</div></div>
+      <div class="opts"><button data-a="tipsToggle" class="${nb.tipsOn ? 'on' : ''}">${t(nb.tipsOn ? 'notes.tipsOn' : 'notes.tipsOff')}</button></div>`;
+    el.querySelector('.list')!.scrollTop = scroll;
+    el.querySelector('.page')!.scrollTop = pageScroll;
   }
 
   /** 工具选项面板：只在工具或选项变化时重写 DOM，避免点击时按钮被替换 */

@@ -53,6 +53,7 @@ function mount(ctx: GameContext<Tank, AqRef>): GameSession<AqRef> {
   const tools = new ToolController<ToolKind>(TOOLS, {
     run: (def, option, p, _yaw, dry) => (def.kind === 'feed' ? tank.feed(p.x, p.z, FEED_FLAKES[option], def.options[option].radius, dry) : tank.tap(p, dry)),
   });
+  let selection: AqRef | null = null;
   const views: ViewToggle[] = [
     { id: 'glass', label: () => t('ui.glass'), key: 'G', on: () => view.glass, toggle: () => (view.glass = !view.glass) },
     { id: 'bubbles', label: () => t('ui.bubbles'), key: 'B', on: () => view.bubbles, toggle: () => (view.bubbles = !view.bubbles) },
@@ -65,22 +66,34 @@ function mount(ctx: GameContext<Tank, AqRef>): GameSession<AqRef> {
     pick: (x, y, tol = 14) => pick(tank, view, camera, dom, x, y, tol),
     applyParams: () => tank.settle(),
     syncViews: () => view.syncViews(),
-    update: (dt, f) => view.update(dt, f.time, camera, f.selection),
-    ui: { ...tankUi(tank, view, ctx.following), notes: tankNotes(tank, () => (tools.active >= 0 ? TOOLS[tools.active].kind : null)) },
+    update: (dt, f) => {
+      selection = f.selection;
+      view.update(dt, f.time, camera, f.selection);
+    },
+    ui: { ...tankUi(tank, view, ctx.following), notes: tankNotes(tank, () => (tools.active >= 0 ? TOOLS[tools.active].kind : null), () => selection) },
   };
 }
 
-/** 笔记和第一次的提示（T-077）：开局讲鱼缸，第一次拿起鱼食、鱼饿了时各讲一次 */
-function tankNotes(tank: Tank, tool: () => ToolKind | null): NotesDef {
-  const note = (id: 'tank' | 'feed' | 'hungry', tip = true) => ({ id, group: 'notes.group' as const, title: `note.${id}.title` as const, body: `note.${id}.body` as const, tip });
+/** 笔记和第一次的提示（T-077）：开局讲鱼缸，第一次拿起鱼食、鱼饿了时各讲一次；选中一条鼠鱼只记进笔记，不弹 */
+function tankNotes(tank: Tank, tool: () => ToolKind | null, selection: () => AqRef | null): NotesDef {
+  const note = (id: 'tank' | 'feed' | 'hungry' | 'cory', tip = true) => ({
+    id,
+    group: 'notes.group' as const,
+    title: `note.${id}.title` as const,
+    body: `note.${id}.body` as const,
+    hint: `note.${id}.hint` as const,
+    tip,
+  });
   return {
     key: 'aquarium-notes',
     title: 'notes.title',
-    entries: [note('tank'), note('feed'), note('hungry')],
+    entries: [note('tank'), note('feed'), note('hungry'), note('cory', false)],
     *check() {
       yield 'tank';
       if (tool() === 'feed') yield 'feed';
       if (tank.events.entries.some((e) => e.msg.k === 'ev.hungry')) yield 'hungry';
+      const sel = selection();
+      if (sel?.kind === 'fish' && tank.fishById(sel.id)?.species === 'cory') yield 'cory';
     },
   };
 }

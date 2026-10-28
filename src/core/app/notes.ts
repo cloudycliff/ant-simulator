@@ -44,8 +44,8 @@ export class Notebook {
   constructor(
     readonly def: NotesDef,
     private readonly store: Pick<Storage, 'getItem' | 'setItem'> | null,
-    /** 这一页不弹提示卡（截图用，?tips=0），不记住 */
-    private readonly quiet = false,
+    /** 这一页不弹提示卡、不报新条目（截图用，?tips=0），不记住 */
+    readonly quiet = false,
   ) {
     this.byId = new Map(def.entries.map((e) => [e.id, e]));
     try {
@@ -75,9 +75,11 @@ export class Notebook {
     return true;
   }
 
-  /** 问一次游戏这一刻看得到什么 */
-  poll(): void {
-    for (const id of this.def.check(this.known)) this.learn(id);
+  /** 问一次游戏这一刻看得到什么，返回新看到的 */
+  poll(): string[] {
+    const fresh: string[] = [];
+    for (const id of this.def.check(this.known)) if (this.learn(id)) fresh.push(id);
+    return fresh;
   }
 
   /** 正在弹的提示卡 */

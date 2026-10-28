@@ -1,34 +1,52 @@
 import type { MsgKey } from '../../core/i18n';
 import type { NoteDef, NotesDef } from '../../core/app/notes';
 import { CONFIG } from './config';
-import { CELL } from './sim/comb';
+import { ageRoleOf, CASTE, roleOf, type Act } from './sim/bees';
+import { CELL, cellSite, type CellContent } from './sim/comb';
 import type { BeeRef, BeeWorld } from './world';
 
 /** 笔记的分组，按这个顺序列 */
-type Group = 'hive' | 'forage' | 'climate' | 'threats' | 'keeping';
+type Group = 'hive' | 'workers' | 'forage' | 'climate' | 'threats' | 'keeping';
 
-/** 一条笔记：编号就是词典里 note.<id>.title / note.<id>.body 的 <id> */
+/** 一条笔记：编号就是词典里 note.<id>.title / body / hint 的 <id>；tip 为真的第一次看到弹提示卡 */
 const note = (id: string, group: Group, tip = true): NoteDef => ({
   id,
   group: `notes.group.${group}` as MsgKey,
   title: `note.${id}.title` as MsgKey,
   body: `note.${id}.body` as MsgKey,
+  hint: `note.${id}.hint` as MsgKey,
   tip,
 });
 
-/** 第一次的提示（P-014）；顺序就是笔记里的顺序 */
+/** 第一次的提示和笔记（P-014）；顺序就是笔记里的顺序，同一组的放在一起 */
 export const NOTES: NoteDef[] = [
   note('hive', 'hive'),
+  note('queen', 'hive', false),
+  note('drone', 'hive', false),
+  note('comb', 'hive', false),
+  note('brood', 'hive', false),
+  note('cleaner', 'workers', false),
+  note('nurse', 'workers', false),
+  note('house', 'workers', false),
+  note('guard', 'workers', false),
+  note('forager', 'workers', false),
+  note('shift', 'workers', false),
   note('dance', 'forage'),
+  note('roundDance', 'forage', false),
+  note('handoff', 'forage', false),
+  note('tremble', 'forage', false),
+  note('ripen', 'forage', false),
+  note('pollen', 'forage', false),
   note('plant', 'forage'),
-  note('sugar', 'keeping'),
   note('warm', 'climate'),
   note('fan', 'climate'),
   note('rain', 'climate'),
   note('hornet', 'threats'),
+  note('shimmer', 'threats', false),
   note('ball', 'threats'),
   note('moth', 'threats'),
   note('sac', 'threats'),
+  note('sugar', 'keeping'),
   note('harvest', 'keeping'),
   note('swap', 'keeping'),
   note('lowHoney', 'keeping'),
@@ -36,6 +54,21 @@ export const NOTES: NoteDef[] = [
   note('abscond', 'keeping'),
   note('scouts', 'keeping'),
 ];
+
+/** 有蜂在做这件事就算看到了 */
+const BY_ACT: Partial<Record<Act, string>> = { roundDance: 'roundDance', tremble: 'tremble', shimmer: 'shimmer' };
+/** 选中一只在做这件事的蜂 */
+const HANDOFF: ReadonlySet<Act> = new Set<Act>(['offer', 'giveNectar', 'receive', 'takeNectar']);
+/** 选中装着这些东西的巢房 */
+const BY_CELL: Partial<Record<CellContent, string>> = {
+  [CELL.egg]: 'brood',
+  [CELL.larva]: 'brood',
+  [CELL.capped]: 'brood',
+  [CELL.nectar]: 'ripen',
+  [CELL.honey]: 'ripen',
+  [CELL.cappedHoney]: 'ripen',
+  [CELL.pollen]: 'pollen',
+};
 
 /** 事件第一次出现就算看到了 */
 const BY_EVENT: Record<string, string> = {
@@ -76,7 +109,33 @@ export function beeNotes(w: BeeWorld, look: NotesLook): NotesDef {
       if (look.swapping()) yield 'swap';
       const tool = look.tool();
       if (tool === 'plant' || tool === 'sugar') yield tool;
-      if (!known.has('dance') && w.bees.list.some((b) => b.brain.cmd?.k === 'dance')) yield 'dance';
+      if (sel?.kind === 'cell') {
+        yield 'comb';
+        const id = BY_CELL[w.comb.content[sel.id] as CellContent];
+        if (id && w.comb.build[cellSite(sel.id)] >= 1) yield id;
+      }
+      const bee = sel?.kind === 'bee' ? w.bees.get(sel.id) : undefined;
+      if (bee) {
+        if (bee.caste === CASTE.queen) yield 'queen';
+        else if (bee.caste === CASTE.drone) yield 'drone';
+        else {
+          const role = roleOf(bee)!;
+          yield role;
+          if (role !== ageRoleOf(bee)) yield 'shift';
+          if (HANDOFF.has(bee.act)) yield 'handoff';
+        }
+      }
+      // 跳舞、抖翅这些不用选中，有一只蜂在做就算；都看到过了就不用每次数一遍蜂
+      const want = new Set(Object.entries(BY_ACT).flatMap(([act, id]) => (known.has(id!) ? [] : [act])));
+      const dance = !known.has('dance');
+      if (want.size || dance) {
+        const seen = new Set<string>();
+        for (const b of w.bees.list) {
+          if (dance && b.brain.cmd?.k === 'dance') seen.add('dance');
+          if (want.has(b.act)) seen.add(BY_ACT[b.act]!);
+        }
+        yield* seen;
+      }
       if (w.heat.heating >= 40) yield 'warm';
       if (w.heat.fanning >= 20) yield 'fan';
       if (w.weather.phase === 'rain') yield 'rain';

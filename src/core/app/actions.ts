@@ -44,6 +44,26 @@ export function runAction<R extends EntityRef>(app: App<R>, a: string, v?: numbe
         shell.toast(t('toast.tipsOff'));
         app.refresh();
         break;
+      case 'tipsToggle': {
+        const nb = shell.notes;
+        if (!nb) break;
+        nb.setTips(!nb.tipsOn);
+        shell.toast(t(nb.tipsOn ? 'toast.tipsOn' : 'toast.tipsOff'));
+        app.refresh();
+        break;
+      }
+      case 'notes':
+        shell.toggleNotes();
+        app.refresh();
+        break;
+      case 'noteOpen':
+        shell.openNote(v ?? 0);
+        app.refresh();
+        break;
+      case 'noteBack':
+        shell.noteBack();
+        app.refresh();
+        break;
       case 'tool':
         tools?.select(v ?? 0);
         shell.hideHelp();

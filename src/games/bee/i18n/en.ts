@@ -395,7 +395,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'dir.n': 'north',
   'dir.ne': 'northeast',
   'help.tools': '<kbd>6</kbd> plant flowers · <kbd>7</kbd> sugar water · <kbd>8</kbd> swatter · <kbd>9</kbd> entrance guard (press again for another flower, <kbd>Esc</kbd> leaves the tool)',
-  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>G</kbd> glass · <kbd>M</kbd> music · <kbd>Esc</kbd> deselect · <kbd>Space</kbd> pause/resume',
+  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>G</kbd> glass · <kbd>M</kbd> music · <kbd>N</kbd> notebook · <kbd>Esc</kbd> deselect · <kbd>Space</kbd> pause/resume',
 
   'save.what': '{n} bees',
   'save.incompatible': 'This save is from an incompatible older version',
@@ -407,6 +407,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'notes.group.climate': 'Heat, cold and weather',
   'notes.group.threats': 'Predators, pests and disease',
   'notes.group.keeping': "The beekeeper's work",
+  'notes.group.workers': "A worker's life",
   'note.hive.title': 'This is an observation hive',
   'note.hive.body':
     "A hive with glass on both sides and two frames of comb stacked one above the other. The upper frame is mostly honey: the white band along the top is capped honey, the colony's food store. The middle of the lower frame is the brood nest (eggs, larvae and capped pupae), with pollen stored around it.\nThe clear tube on the left is the entrance. Click a bee, a cell, a flower patch or the hive itself, and the panel on the right tells you what it is and what it's doing.\nReal observation hives are for watching. They hold only one or two frames, so the colony is much smaller than in a working hive.",
@@ -458,4 +459,85 @@ export const en: Record<keyof typeof zh, Entry> = {
   'note.scouts.title': 'Scouts look at a new home',
   'note.scouts.body':
     "A swarm, or a colony that has absconded, first sends scouts to look for a new home: how big the space is, which way the entrance faces, whether it's dry. The scouts go back and dance to “vote”. Once enough of them favour the same place, the whole swarm flies there.\nEmpty boxes and old comb smell of wax, which draws bees in. In spring, real beekeepers set out empty hives rubbed with beeswax to lure in wild Asian honey bees.",
+  'note.queen.title': 'The queen',
+  'note.queen.body':
+    "A colony has one queen, the mother of every worker and drone. She grows from a fertilized egg just like a worker, but in a downward-facing queen cell, and is fed royal jelly for her whole larval life. She emerges after 16 days, sooner than a worker.\nA few days later she flies out to mate, high in the air, with a dozen or more drones from other colonies, and stores their sperm for the rest of her life. In worker cells she lays fertilized eggs, which become workers; in the slightly larger drone cells she lays unfertilized eggs, which become drones.\nHer scent (queen pheromone) tells the workers she is there. It keeps the colony settled and stops the workers' ovaries from developing. An Asian honey bee queen lays a few hundred eggs a day; a Western honey bee queen can lay one or two thousand.\nReal queens live for several years, but their laying falls off after two or three, so beekeepers usually requeen every year or two. In the game the queen never ages, and there are no queen cells or requeening yet (they come with swarming).",
+  'note.drone.title': 'Drones',
+  'note.drone.body':
+    "Drones come from unfertilized eggs. They are stockier than workers, with eyes so big they meet on top of the head, for spotting a queen in flight. A drone has no sting and does no work: no foraging, no building, no feeding larvae. Workers feed him, or he helps himself to stored honey.\nHis one job is mating. On fine afternoons drones fly to places where drones gather and wait for a young queen from another colony to pass. A drone dies right after mating. Asian honey bee drone cells have domed cappings with a small hole in the top, so they are easy to recognize.\nWhen flowers are plentiful a colony raises a few hundred drones; when nectar runs short in autumn, the workers push them out of the hive and stop feeding them. In the game, drones don't fly out to mate yet; that comes with the seasons.",
+  'note.comb.title': 'Comb and cells',
+  'note.comb.body':
+    "Comb is made of wax the workers produce themselves. Workers around two weeks old have four pairs of wax glands under the abdomen. When they are full of honey and hang together in warm chains, the glands give off small wax flakes, which the bees chew soft and add bit by bit. It is often said a colony eats six to eight parts of honey to make one part of wax.\nDown the middle of each comb runs a thin wax sheet (the midrib), with hexagonal cells on both sides, tilted slightly upward so honey doesn't run out. Hexagons enclose the most space with the least wax, and neighboring cells share their walls.\nAsian honey bee worker cells are about 4.7 mm across, smaller than the Western honey bee's 5.2 mm, so beekeepers use foundation made for them. As comb ages, each generation leaves its cocoon behind; the comb darkens and the cells shrink. The queen avoids laying in old dark comb, so beekeepers replace old combs regularly.",
+  'note.brood.title': 'Brood: eggs, larvae and pupae',
+  'note.brood.body':
+    'The queen lays each egg at the bottom of a cell. It stands upright at first, slowly tips over, and hatches after three days. For the first two or three days every larva gets royal jelly; after that worker and drone larvae switch to a mix with honey and pollen, and only larvae in queen cells keep getting royal jelly.\nAn Asian honey bee worker larva is fully grown around day 9. The workers seal the cell with wax, the larva spins a cocoon and pupates inside, and around day 20 the new bee chews through the capping, a little sooner than a Western honey bee (21 days).\nBrood needs about 35 °C. When beekeepers open a hive, they look at the brood first: a large, solid patch of capped brood means a good queen and a healthy colony; scattered, spotty brood can mean a failing queen, chilled brood or disease. Press <kbd>C</kbd> for cell colors to see the brood nest grow ring by ring.',
+  'note.cleaner.title': 'Cleaners',
+  'note.cleaner.body':
+    "A worker that has just chewed its way out of its cell is fluffy and gray, with soft wings, and can't fly yet. For its first two or three days it cleans cells: it clears out the debris left after emergence and licks the walls clean. The queen only lays in cells that have been cleaned.\nThese young bees also often sit on the brood to keep it warm. Real colonies also have bees that carry dead bees out of the hive; the game doesn't have them.\nPress <kbd>T</kbd> for role colors: cleaners are cyan.",
+  'note.nurse.title': 'Nurses',
+  'note.nurse.body':
+    "Workers from about three to twelve days old are nurses. They eat lots of pollen, and the glands in their heads grow large and make royal jelly, which they feed to the larvae and to the queen. A single larva is visited more than a thousand times as it grows.\nA colony can only raise as many eggs as its nurses can feed. Without enough pollen the glands don't develop, the colony raises less brood, and it may even eat young larvae. In early spring, when pollen is scarce, beekeepers feed pollen or a pollen substitute.\nIn role colors, nurses are pink.",
+  'note.house.title': 'House bees',
+  'note.house.body':
+    'Workers from about 12 to 18 days old are house bees, and they do a bit of everything: they make wax and build cells, take nectar from returning foragers at the entrance, put it in cells, fan it until it thickens, cap full cells, pack down pollen, ventilate the hive and carry out rubbish.\nTheir wax glands are at their peak at this age, so most comb building is theirs. How quickly they take nectar at the entrance tells the foragers whether the colony still needs more (see "Passing nectar").\nIn role colors, house bees are green.',
+  'note.guard.title': 'Guards',
+  'note.guard.body':
+    "Before they start foraging, workers spend a while guarding the entrance, checking every incoming bee with their antennae. Bees from the same colony share its smell; a stranger gets stopped, grabbed and sometimes stung to death.\nWhen nectar is scarce, bees from other colonies come to steal honey (robbing). If there are too few guards or the entrance is too wide, the colony can't hold it, and a bad robbing fight can strip a hive of all its honey. Beekeepers narrow the entrance in a dearth and never spill syrup outside the hive. The game doesn't have robbing yet. Asian honey bee guards also have their own way of dealing with hornets (see \"Shimmering at the entrance\").\nIn role colors, guards are red.",
+  'note.forager.title': 'Foragers',
+  'note.forager.body':
+    'A worker spends the last two or three weeks of its life foraging for nectar and pollen, and also water and plant resin (for propolis). Asian honey bees usually forage within one or two kilometers of the hive, closer than Western honey bees, but they are better at working scattered small flowers and will fly in cooler weather.\nA forager makes a dozen or more trips a day; its wings fray, and most die out in the field. A summer worker lives only four to six weeks and is worn out by the work, while the winter bees, born in autumn and doing little, live for months.\nThe garden in the game is only about 40 m across, so distances are scaled down, and foragers only collect nectar and pollen. In role colors, foragers are blue.',
+  'note.shift.title': 'Jobs can change',
+  'note.shift.body':
+    "Workers change jobs roughly by age: cleaner, nurse, house bee, guard, forager. But the schedule isn't fixed. If foragers are lost (to hornets, or caught out by rain), young bees start foraging early. If nurses run short, some older bees regrow their jelly glands and go back to feeding larvae.\nIn real colonies this is steered by chemical signals. Foragers carry a substance (ethyl oleate) that they pass to young bees while sharing food, and it slows the young bees' development. When foragers are few, the signal weakens and young bees start foraging sooner.\nSelect a bee: if the \"By age\" row in the info panel differs from its current job, it has been moved up or held back.",
+  'note.roundDance.title': 'The round dance',
+  'note.roundDance.body':
+    "When flowers are close to the hive, a returning forager doesn't dance a figure eight; it just runs in small circles on the comb. It gives no direction, only \"it's close, go and look.\" Bees following the dance smell the flower scent on it and taste the drops of nectar it offers, so they know what to look for.\nToday the round dance is usually seen as a waggle dance whose waggle run has shrunk to almost nothing, and different honey bee species switch to the waggle dance at different distances. In the game, bees dance the round dance for flowers less than 6 m from the hive (the garden is scaled down).",
+  'note.handoff.title': 'Passing nectar',
+  'note.handoff.body':
+    "Back at the entrance, a forager opens its mouthparts and offers a drop of nectar, and a house bee sucks it up with its tongue. Bees feed each other like this all the time, so the whole colony's food and smell are quickly shared.\nHow fast the handover goes is itself a message. If house bees rush to take the load, the colony needs nectar and has room, so the forager keeps going and dances to recruit others. If it has to wait a long time, the hive is full or the house bees are swamped, so it forages less (see \"The tremble dance\"). Nobody is in charge; this is how the colony matches the number of foragers to what it needs.",
+  'note.tremble.title': 'The tremble dance',
+  'note.tremble.body':
+    'When a forager comes back loaded and waits a long time with no house bee to take its nectar, it walks slowly across the comb, shaking its body from side to side. This calls more bees to receive nectar, and some foragers that see it stay home.\nThe American bee biologist Thomas Seeley worked this out in the 1990s: the waggle dance sends more bees out to collect, the tremble dance calls more bees in to receive, and together they keep collecting and receiving in balance. In the game, this is also how foraging slows down when the hive is full of honey.',
+  'note.ripen.title': 'How nectar becomes honey',
+  'note.ripen.body':
+    "Fresh nectar is thin, often more than half water. House bees spread a drop out on their mouthparts and draw it back in, over and over, then spread it in cells and fan it so the water evaporates. Along the way they add enzymes that split sucrose into glucose and fructose and produce a little hydrogen peroxide, which keeps microbes down.\nOnce the water is down to about 20% or less, the honey is ripe and the bees cap the cell with wax. Capped honey keeps without fermenting; it is the colony's food store.\nAsian honey bee honey is mostly a mix from many wild flowers, and it is usually harvested only once or twice a year. Honey taken before it is ripe holds too much water and easily ferments and turns sour.",
+  'note.pollen.title': 'Pollen and bee bread',
+  'note.pollen.body':
+    "On a flower a forager gets dusted with pollen. It combs the pollen off with its legs, wets it with a little nectar, packs it into the \"pollen baskets\" on its hind legs, flies home and kicks the pellets into cells next to the brood itself. The color of a pellet shows which flower it came from, since a bee usually visits only one kind on a trip.\nThe bees pack the pollen down with a little honey and saliva, and microbes in the cell slowly ferment it into \"bee bread,\" which keeps longer and is easier to digest. Pollen is the bees' only source of protein; nurses need it to make royal jelly.\nWithout pollen in spring, a colony can't raise brood. Beekeepers plant early-flowering crops such as rapeseed and broad beans nearby, or feed a pollen substitute.",
+  'note.shimmer.title': 'Shimmering at the entrance',
+  'note.shimmer.body':
+    'When a hornet hovers outside, the Asian honey bees at the entrance lift their abdomens and shake their wings and bodies together, in waves that ripple from one side to the other.\nStudies have found this makes it hard for the hornet to pick out a single bee and lowers its catch rate. If the hornet comes too close, bees pounce and wrap it in a heat ball (see "The heat ball"). Western honey bees evolved where there are no such hornets, are poor at this trick, and suffer far worse from hornets in Asia.',
+  'note.hive.hint': 'Shown when you start',
+  'note.queen.hint': 'Find a bee with a much longer body on the brood in the lower frame and click it',
+  'note.drone.hint': 'Click a stocky bee with big eyes',
+  'note.comb.hint': 'Click any cell on the comb',
+  'note.brood.hint': 'Click a cell with an egg, a larva or capped brood',
+  'note.cleaner.hint': 'Click a cleaner (press T for role colors and look for cyan)',
+  'note.nurse.hint': 'Click a nurse (pink in role colors)',
+  'note.house.hint': 'Click a house bee (green in role colors)',
+  'note.guard.hint': 'Click a guard (red in role colors, near the entrance)',
+  'note.forager.hint': 'Click a forager (blue in role colors; flying bees count too)',
+  'note.shift.hint': 'Click a worker whose job has been moved up or held back',
+  'note.dance.hint': 'Watch foragers dance near the entrance (press V for dance marks)',
+  'note.roundDance.hint': 'Plant flowers within 6 m of the hive and wait for the bees to find them',
+  'note.handoff.hint': 'Click a bee passing nectar near the entrance',
+  'note.tremble.hint': "When the hive is full of honey and house bees can't keep up",
+  'note.ripen.hint': 'Click a cell with nectar or honey',
+  'note.pollen.hint': 'Click a cell of pollen (orange-yellow, next to the brood)',
+  'note.plant.hint': 'Pick up the planting tool (press 6)',
+  'note.warm.hint': 'When it cools down at night (press K for temperature)',
+  'note.fan.hint': 'On a hot afternoon, watch the entrance',
+  'note.rain.hint': 'Wait for rain',
+  'note.hornet.hint': 'Hornets show up most afternoons',
+  'note.shimmer.hint': 'When a hornet is outside, watch the guards at the entrance',
+  'note.ball.hint': 'When a hornet lands on the entrance',
+  'note.moth.hint': 'Wax moths go where bees are few; wait for a line of bald brood',
+  'note.sac.hint': 'Every few days the colony comes down with a disease',
+  'note.sugar.hint': 'Pick up the syrup tool (press 7)',
+  'note.harvest.hint': 'Click a cell of capped honey you can cut (the white band at the top of the upper frame)',
+  'note.swap.hint': 'Select the hive and click "Swap the lower frame" or "Swap the upper frame"',
+  'note.lowHoney.hint': 'When stored honey falls below about 250 full cells',
+  'note.restless.hint': 'When the colony has had a bad few days',
+  'note.abscond.hint': 'When the colony has had enough and leaves',
+  'note.scouts.hint': 'After a colony leaves and the hive is empty',
 };
