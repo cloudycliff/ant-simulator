@@ -15,6 +15,7 @@ import type { Space } from '../space/space';
 import { CameraController } from '../ui/camera';
 import type { ToolController } from '../ui/tools';
 import { runAction } from './actions';
+import { Notebook } from './notes';
 import { createRenderer, openWorld } from './boot';
 import type { GameModule, GameSave, GameSession } from './game';
 import { bindInput } from './input';
@@ -41,6 +42,9 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
   const opened = openWorld(game, params);
   const app = new App<R>(game, renderer, opened.world, opened.seed, startPose(params, opened.camera));
   bindInput(app);
+  // ?tips=0：这一页不弹提示卡（截图用），不记住
+  const notes = app.session.ui.notes;
+  if (notes) app.shell.notes = new Notebook(notes, localStore(), params.get('tips') === '0');
   applyUrlParams(app, params);
 
   app.session.syncViews();
@@ -51,6 +55,14 @@ export async function runApp<W extends Simulation<R>, R extends EntityRef, D ext
 
   const { world, camera, controller, shell: hud, quality, music, brightness } = app;
   Object.assign(window, { world, camera, controller, hud, quality, music, brightness, renderer });
+}
+
+function localStore(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
 }
 
 /**

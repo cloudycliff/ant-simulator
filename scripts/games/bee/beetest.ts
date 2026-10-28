@@ -15,6 +15,7 @@ import { BeeWorld, beeSave, type BeeSaveData } from '../../../src/games/bee/worl
 import { MOUTH } from '../../../src/games/bee/sim/flight';
 import type { HornetState } from '../../../src/games/bee/sim/hornets';
 import { en } from '../../../src/games/bee/i18n/en';
+import { NOTES, beeNotes } from '../../../src/games/bee/notes';
 
 setLang('en');
 const STEP = 1 / 30;
@@ -629,6 +630,30 @@ try {
 }
 check('编号不对的存档拒读', bad !== null, bad ?? '');
 check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeSaveData), version: 0 }) !== null);
+
+{
+  const missing = NOTES.flatMap((n) => [n.group, n.title, n.body]).filter((k) => !(k in en));
+  check('笔记的每一条都有中英文字', missing.length === 0 && new Set(NOTES.map((n) => n.id)).size === NOTES.length, missing.join(' ') || `${NOTES.length} 条`);
+  const x = new BeeWorld(7);
+  let sel: { kind: 'cell'; id: number } | null = null;
+  let swapping = false;
+  const def = beeNotes(x, { selection: () => sel, tool: () => null, swapping: () => swapping });
+  const seen = (known = new Set<string>()) => new Set(def.check(known));
+  const first = seen();
+  for (let i = 0; i < 120; i++) x.advance(1, Infinity, Infinity);
+  const later = seen();
+  x.hornets.spawn(1);
+  x.advance(1, Infinity, Infinity);
+  const hornet = seen();
+  sel = { kind: 'cell', id: x.comb.content.findIndex((c, k) => c === CELL.cappedHoney && x.keeper.cutArea(k).length > 0) };
+  swapping = true;
+  const keeping = seen();
+  check(
+    '第一次的提示：开局讲观察箱，跳舞、胡蜂、选中封盖蜜、问换框时各弹一张',
+    first.has('hive') && !first.has('hornet') && later.has('dance') && hornet.has('hornet') && keeping.has('harvest') && keeping.has('swap'),
+    [...keeping].join(' '),
+  );
+}
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));

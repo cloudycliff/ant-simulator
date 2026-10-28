@@ -35,6 +35,15 @@ export function runAction<R extends EntityRef>(app: App<R>, a: string, v?: numbe
       case 'help':
         shell.toggleHelp();
         break;
+      case 'tipOk':
+        shell.notes?.dismiss();
+        app.refresh();
+        break;
+      case 'tipsOff':
+        shell.notes?.setTips(false);
+        shell.toast(t('toast.tipsOff'));
+        app.refresh();
+        break;
       case 'tool':
         tools?.select(v ?? 0);
         shell.hideHelp();

@@ -14,6 +14,7 @@ import { CELL, COMB_H, CONTENT_KEYS, GRID, SITES, cellFace, cellSite, siteFrame 
 import { SITE_HEAT } from './sim/heat';
 import { FACTORS } from './sim/abscond';
 import { SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap } from './sim/flowers';
+import { beeNotes } from './notes';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
 const H = CONFIG.hive;
@@ -94,11 +95,19 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     { id: 'cells', label: () => t('ui.cells'), key: 'C', on: () => view.comb.contentMap, toggle: () => (view.comb.contentMap = !view.comb.contentMap) },
     { id: 'heat', label: () => t('ui.heat'), key: 'K', on: () => view.heat.on, toggle: () => (view.heat.on = !view.heat.on) },
   ];
+  let selection: BeeRef | null = null;
+  const ui = beeUi(w, view, ctx.following);
+  ui.notes = beeNotes(w, {
+    selection: () => selection,
+    tool: () => (tools.active >= 0 ? TOOLS[tools.active].kind : null),
+    swapping: () => swapAsk !== null,
+  });
   return {
     shadowLight: view.env.sun,
     views,
     tools,
     pick: (x, y, tol) => pick(view, camera, dom, x, y, tol),
+    onSelect: (sel) => (selection = sel),
     action: (a, v) => {
       if (a === 'swat') w.hornets.swat(v ?? -1);
       else if (a === 'plate') ctx.toast(tr(w.togglePlate().msg!));
@@ -127,7 +136,7 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     },
     syncViews: () => view.syncViews(),
     update: (dt, f) => view.update(dt, camera, dom.clientHeight, f.focus, f.following, f.selection),
-    ui: beeUi(w, view, ctx.following),
+    ui,
   };
 }
 

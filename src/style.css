@@ -693,6 +693,64 @@ body.tooling canvas {
   opacity: 1;
 }
 
+/* 第一次的提示卡：右下角，图例在它上面，信息面板让出它的高度 */
+#tip {
+  right: 10px;
+  bottom: 10px;
+  width: 330px;
+  max-height: calc(100% - var(--top, 66px) - 180px);
+  overflow-y: auto;
+  padding: 10px 14px 12px;
+  z-index: 4;
+  border-color: rgba(242, 201, 138, 0.45);
+  font-size: 12px;
+  line-height: 19px;
+  color: #d8cfbf;
+  user-select: text;
+}
+#tip .head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+#tip .head span {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(201, 130, 47, 0.3);
+  color: #f2c98a;
+  font-size: 11px;
+}
+#tip .head b {
+  color: #f2c98a;
+  font-size: 13px;
+}
+#tip p {
+  margin: 4px 0;
+}
+#tip .opts {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+#tip .opts .ok {
+  background: #c9822f;
+  border-color: #e9a34f;
+  color: #fff;
+  padding: 4px 16px;
+}
+#tip .opts .off {
+  margin-left: auto;
+  color: #b8ae9c;
+}
+body.tipping #legend {
+  bottom: calc(10px + var(--tip));
+}
+body.tipping #info {
+  max-height: max(160px, calc(100% - var(--top, 66px) - var(--legend, 0px) - var(--tip) - 10px));
+}
+
 #loading {
   position: fixed;
   inset: 0;
@@ -996,6 +1054,31 @@ body.compact #legend {
 }
 body.compact #tool .head {
   flex-wrap: wrap;
+}
+/* 手机上提示卡在底栏上方，压住事件和信息面板；开着抽屉、用着工具时让开 */
+body.compact #tip {
+  left: max(6px, env(safe-area-inset-left));
+  right: max(6px, env(safe-area-inset-right));
+  bottom: calc(var(--dock) + 6px);
+  width: auto;
+  max-height: min(55%, calc(100% - var(--top) - var(--dock) - 12px));
+  font-size: 13px;
+  line-height: 20px;
+}
+body.compact.land #tip {
+  left: calc(var(--rail) + 6px);
+  right: auto;
+  bottom: max(6px, env(safe-area-inset-bottom));
+  width: min(380px, calc(100% - var(--rail) - 12px));
+  max-height: calc(100% - var(--top) - 12px);
+}
+body.compact.sheet-open #tip,
+body.compact.tooling #tip {
+  display: none;
+}
+body.compact.tipping:not(.sheet-open):not(.tooling) #info,
+body.compact.tipping:not(.sheet-open):not(.tooling) #events {
+  display: none;
 }
 
 /* 事件：画面空着时在底栏上方浮出最近两条；事件抽屉里显示全部 */

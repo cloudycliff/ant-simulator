@@ -6,6 +6,7 @@ const VIEWPORTS = [
   ['desktop', 1280, 800, false],
   ['phone', 390, 844, true],
 ];
+// 第一次的提示卡只在 tips 场景里弹（其余加 ?tips=0）
 const Q = 'bee.html?new=1&seed=7';
 const PERF = `document.getElementById('perf')?.textContent ?? ''`;
 const INFO = `document.querySelector('#info')?.innerText.replace(/\\s+/g, ' ') ?? ''`;
@@ -100,6 +101,10 @@ const SCENES = {
   swarmin: { q: '&hour=10&cam=120,160,330,-120,120,0', js: `world.abscond.leave(); for (let k = 0; k < 400 && world.abscond.swarm.phase !== 'landing'; k++) ${RUN(10)}; ${RUN(40)}`, check: ABS },
   pressure: { q: '&hour=11&select=hive:0', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: INFO },
   restless: { q: '&hour=11', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: ABS },
+  // 第一次的提示（P-014）：开局讲观察箱；关掉它以后问换框时讲换框；英文
+  tiphive: { q: '&hour=11', tips: true, js: 'hud.hideHelp()', check: `document.querySelector('#tip')?.innerText.replace(/\\s+/g, ' ') ?? ''` },
+  tipswap: { q: '&hour=11&select=hive:0', tips: true, js: `hud.hideHelp(); hud.notes.dismiss()`, click: ['#info [data-a="swapAsk"][data-v="1"]'], check: `hud.notes.tip?.id ?? ''` },
+  tipen: { q: '&hour=11&lang=en', tips: true, js: 'hud.hideHelp()' },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },
@@ -122,7 +127,12 @@ try {
       if (!want(name) || (s.phone && !touch)) continue;
       const p = await b.page();
       await p.viewport(w, h, touch);
-      await p.open(BASE + Q + s.q);
+      await p.open(BASE + Q + (s.tips ? '' : '&tips=0') + s.q);
+      // 各场景共用一个浏览器的本地存储：看过的提示不会再弹，先清掉再开一次
+      if (s.tips) {
+        await p.ev(`localStorage.removeItem('cyber-bee-notes')`);
+        await p.open(BASE + Q + s.q);
+      }
       if (s.js) await p.ev(s.js);
       for (const sel of s.click ?? []) await p.ev(`document.querySelector('${sel}').click()`);
       for (const code of s.keys ?? []) {

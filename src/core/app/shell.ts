@@ -12,6 +12,7 @@ import { ENGINE } from '../config';
 import { agoText, cap, esc, isTouch, when } from '../ui/html';
 import type { ToolController } from '../ui/tools';
 import { renderInfo, type GameUi, type ViewToggle } from './game';
+import type { Notebook } from './notes';
 
 export type ShellAction =
   | 'pause'
@@ -20,6 +21,8 @@ export type ShellAction =
   | 'flyto'
   | 'deselect'
   | 'help'
+  | 'tipOk'
+  | 'tipsOff'
   | 'tool'
   | 'toolopt'
   | 'toolexit'
@@ -45,6 +48,8 @@ export const SHEETS = ['colony', 'views', 'tools', 'events', 'stats', 'save', 'h
 export type Sheet = (typeof SHEETS)[number];
 
 const SPEEDS = [1, 2, 5, 10, 20];
+/** 词典里一行一段 */
+const paras = (s: string) => s.split('\n').map((p) => `<p>${p}</p>`).join('');
 export const svgIcon = (body: string) =>
   `<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
 const ICON = {
@@ -90,6 +95,10 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
   music: Music | null = null;
   brightness: Brightness | null = null;
   installer: Installer | null = null;
+  /** 笔记和第一次的提示；游戏没有笔记时为空 */
+  notes: Notebook | null = null;
+  private tipEl: HTMLElement | null = null;
+  private tipKey = '';
   private saveEl = document.getElementById('save')!;
   private viewsEl = document.getElementById('views')!;
   private toolboxEl = document.getElementById('toolbox')!;
@@ -411,6 +420,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     this.menu = null;
     this.syncDock();
     this.toolKey = '';
+    this.tipKey = '';
     this.saveKey = '';
     this.eventsKey = null;
     this.statsDirty = true;
@@ -515,6 +525,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     }
     this.renderTool();
     this.renderSave();
+    this.renderTip();
 
     this.colonyEl.innerHTML = this.ui.panel.html(this.colonyFolded);
     this.renderInfo(sel);
@@ -530,6 +541,35 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
         (events.map((e, i) => (e.at ? `<div class="go" data-ev="${i}" title="${title}">${texts[i]}</div>` : `<div>${texts[i]}</div>`)).join('') || `<p>${t('events.none')}</p>`);
     }
     this.layout();
+  }
+
+  /** 第一次的提示卡：问一次游戏看到了什么，有要弹的就弹一张；只在换了一张时重写 */
+  private renderTip(): void {
+    const nb = this.notes;
+    if (!nb) return;
+    nb.poll();
+    const tip = nb.tip;
+    document.body.classList.toggle('tipping', !!tip);
+    const key = tip?.id ?? '';
+    if (key === this.tipKey) return;
+    this.tipKey = key;
+    if (!this.tipEl) {
+      const el = (this.tipEl = document.createElement('div'));
+      el.id = 'tip';
+      el.className = 'panel hidden';
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', (e) => {
+        const b = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
+        if (b) this.onAction?.(b.dataset.a!);
+      });
+      document.body.appendChild(el);
+    }
+    this.tipEl.classList.toggle('hidden', !tip);
+    if (!tip) return;
+    this.tipEl.innerHTML = `
+      <div class="head"><span>${t('tip.label')}</span><b>${t(tip.title)}</b></div>
+      <div class="body">${paras(t(tip.body))}</div>
+      <div class="opts"><button data-a="tipOk" class="ok">${t('tip.ok')}</button><button data-a="tipsOff" class="off">${t('tip.off')}</button></div>`;
   }
 
   /** 工具选项面板：只在工具或选项变化时重写 DOM，避免点击时按钮被替换 */
@@ -570,6 +610,7 @@ export class Shell<R extends EntityRef, M extends SaveMeta = SaveMeta> {
     s.setProperty('--rail', `${dock && land ? Math.round(dock.right) : 0}px`);
     s.setProperty('--events', `${this.compact ? 0 : this.eventsEl.offsetHeight}px`);
     s.setProperty('--legend', `${this.ui.legend?.visible() ? this.legendEl.offsetHeight + 10 : 0}px`);
+    s.setProperty('--tip', `${this.tipEl && this.notes?.tip ? this.tipEl.offsetHeight + 10 : 0}px`);
   }
 
   private renderInfo(sel: R | null): void {

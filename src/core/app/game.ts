@@ -5,6 +5,7 @@ import type { EntityRef } from '../sim/entities';
 import type { Simulation } from '../sim/simulation';
 import type { Space } from '../space/space';
 import type { CameraTuning } from '../ui/camera';
+import type { NotesDef } from './notes';
 import type { ToolController } from '../ui/tools';
 
 /** 存档至少有世界种子；camera 由外壳在保存时写入（相机位置 + 注视点） */
@@ -103,6 +104,8 @@ export interface GameUi<R extends EntityRef> {
   legend?: { html(): string; visible(): boolean };
   /** 帮助面板的各行；手机布局里 help.events 换成 help.dockEvents */
   help: { mouse: MsgKey[]; touch: MsgKey[] };
+  /** 笔记和第一次的提示（可选）：条目、看到了什么 */
+  notes?: NotesDef;
 }
 
 export interface FrameInfo<R> {

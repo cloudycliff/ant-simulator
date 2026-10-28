@@ -1,5 +1,5 @@
 /**
- * 框架层的单元测试，不依赖任何游戏：图上行走、地表转向与绕行、行为协程、空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记。
+ * 框架层的单元测试，不依赖任何游戏：图上行走、地表转向与绕行、行为协程、空间求交、存档登记、实体注册表、事件记录、模拟内核、词典登记、笔记和第一次的提示。
  * npx tsx scripts/core/coretest.ts
  */
 import * as THREE from 'three';
@@ -14,6 +14,7 @@ import { Skirt, turnToward } from '../../src/core/move/surface';
 import { Behavior } from '../../src/core/sim/behavior';
 import { Composer } from '../../src/core/audio/composer';
 import { Rng } from '../../src/core/util/random';
+import { Notebook, type NotesDef } from '../../src/core/app/notes';
 
 let failed = 0;
 const check = (name: string, ok: boolean, info?: unknown) => {
@@ -274,6 +275,46 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
     threw = true;
   }
   check('和框架重名的键报错', threw);
+}
+
+// ---------------- 笔记和第一次的提示 ----------------
+{
+  const mem = new Map<string, string>();
+  const store = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
+  const now = new Set<string>();
+  const def: NotesDef = {
+    key: 'test-notes',
+    title: 'help.title',
+    entries: [
+      { id: 'a', group: 'help.title', title: 'help.title', body: 'help.title', tip: true },
+      { id: 'b', group: 'help.title', title: 'help.title', body: 'help.title', tip: true },
+      { id: 'c', group: 'help.title', title: 'help.title', body: 'help.title' },
+    ],
+    check: () => now,
+  };
+  const nb = new Notebook(def, store);
+  nb.poll();
+  check('没看到什么时不弹', nb.tip === null && nb.known.size === 0);
+  now.add('b').add('a').add('c').add('zzz');
+  nb.poll();
+  check('看到的按先后排队，一次弹一张，没有提示卡的只算没读，不认识的编号不管', nb.tip?.id === 'b' && nb.known.size === 3 && nb.unread === 1, { tip: nb.tip?.id, unread: nb.unread });
+  nb.dismiss();
+  nb.poll();
+  check('关掉一张弹下一张，看到过的不再弹', nb.tip?.id === 'a' && nb.read.has('b'));
+  const again = new Notebook(def, store);
+  again.poll();
+  check('记在本地：重开页面后看过的不再弹，没读完的还在', again.tip === null && again.known.size === 3 && again.unread === 2, { unread: again.unread });
+  again.setTips(false);
+  const quiet = new Notebook({ ...def, key: 'other' }, store);
+  quiet.setTips(false);
+  quiet.poll();
+  check('关掉提示后只记下看到了，不弹', quiet.tip === null && quiet.known.size === 3 && new Notebook(def, store).tipsOn === false);
+  const page = new Notebook({ ...def, key: 'page' }, store, true);
+  page.poll();
+  check('?tips=0 这一页不弹，开关不变', page.tip === null && page.tipsOn && page.known.size === 3);
+  const broken = new Notebook(def, { getItem: () => '{bad', setItem: () => { throw new Error('full'); } });
+  broken.poll();
+  check('本地存储坏了或存不下时照样能用', broken.tip?.id === 'b');
 }
 
 // ---------------- 背景音乐作曲 ----------------

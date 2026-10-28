@@ -399,4 +399,62 @@ export const en: Record<keyof typeof zh, Entry> = {
   'save.what': '{n} bees',
   'save.incompatible': 'This save is from an incompatible older version',
   'save.seedMismatch': 'The world number does not match the save',
+
+  'notes.title': 'Beekeeping notebook',
+  'notes.group.hive': 'The hive and the colony',
+  'notes.group.forage': 'Foraging and flowers',
+  'notes.group.climate': 'Heat, cold and weather',
+  'notes.group.threats': 'Predators, pests and disease',
+  'notes.group.keeping': "The beekeeper's work",
+  'note.hive.title': 'This is an observation hive',
+  'note.hive.body':
+    "A hive with glass on both sides and two frames of comb stacked one above the other. The upper frame is mostly honey: the white band along the top is capped honey, the colony's food store. The middle of the lower frame is the brood nest (eggs, larvae and capped pupae), with pollen stored around it.\nThe clear tube on the left is the entrance. Click a bee, a cell, a flower patch or the hive itself, and the panel on the right tells you what it is and what it's doing.\nReal observation hives are for watching. They hold only one or two frames, so the colony is much smaller than in a working hive.",
+  'note.dance.title': 'The waggle dance',
+  'note.dance.body':
+    'A forager that found good flowers comes back and dances a figure eight on the comb near the entrance to tell the others where they are. In the middle run it walks while waggling its abdomen. The angle of that run from straight up is the angle between the flowers and the sun, and the longer the run, the farther away they are. For flowers close by it just circles (a round dance), which only says “nearby”.\nOther foragers follow the dancer to read the dance, then fly out to search. Press <kbd>V</kbd> to see the dance paths on the comb.\nAsian and Western honey bees dance much the same way. The comb hangs vertically, so “up” stands for the sun.',
+  'note.plant.title': 'Planting flowers',
+  'note.plant.body':
+    'New flowers take half a day to grow. Each kind opens at its own hours and gives different amounts of nectar and pollen: sunflowers give lots of pollen, lavender lots of nectar, pumpkins only open in the morning, and corn has no nectar at all, only pollen.\nOn a single trip a forager usually visits just one kind of flower. A new patch only gets busy after a scout finds it and comes back to dance.\nReal beekeepers plan their year around the bloom times of the nectar plants nearby, and feed the bees in the lean season (often late summer).',
+  'note.sugar.title': 'Feeding sugar syrup',
+  'note.sugar.body':
+    'When honey runs short (long rainy spells, few flowers, too much harvested), beekeepers feed sugar syrup. The usual mix is white sugar and water at about 1:1 in spring to encourage brood rearing, or 2:1 in autumn to top up the winter stores.\nReal beekeepers put the syrup inside the hive and feed in the evening. Syrup left outside attracts other colonies and hornets, and can start robbing. In the game the dish stands in the garden, and the bees only come once a scout has found it.',
+  'note.warm.title': 'Keeping the brood warm',
+  'note.warm.body':
+    "Brood develops properly at 33–36 °C, best at about 35 °C. On a cool night, workers press themselves onto the brood comb and warm it by tensing their flight muscles without moving their wings, a bit like shivering.\nBrood that's too cold develops slowly, and dies if it stays cold. Press <kbd>K</kbd> for the temperature view to see the warm and cold spots.\nA big colony keeps warm easily. A small one can't cover everything when it's cold, and the brood shrinks to a small patch in the middle.",
+  'note.fan.title': 'Fanning to cool down',
+  'note.fan.body':
+    'On hot afternoons, house bees and guards line up near the entrance and fan their wings to push the hot air out. The airflow also dries the water out of the nectar. Asian honey bees fan with their heads pointing away from the entrance; Western honey bees face it.\nIn real heat waves the bees also fetch water and spread it near the cells so it cools them as it evaporates (not in the game). Shading the hive in summer saves them a lot of work.',
+  'note.rain.title': 'Rain',
+  'note.rain.body':
+    "Bees don't fly in the rain: wet wings can't carry them, and they chill fast. As soon as it clouds over they stop going out, and the ones outside hurry home. Rain also dilutes the nectar in the flowers.\nAfter several rainy days the bees live on their stores. Real beekeepers check the honey before and after a long wet spell, and feed syrup if it's low.",
+  'note.hornet.title': 'A hornet',
+  'note.hornet.body':
+    'The yellow-legged hornet is one of the worst enemies of the Asian honey bee, and is most common in late summer and early autumn. It hovers outside the entrance and snatches foragers in flight to feed its own larvae.\nThe bees at the entrance shake their wings and bodies together in a ripple, which makes it hard for the hornet to aim. When several hornets come, foragers stop going out.\nYou can kill a hornet with the swatter (<kbd>8</kbd>) or fit an entrance guard (<kbd>9</kbd>), which slows the bees a little too. Real beekeepers use electric swatters, entrance guards and bottle traps; catching the hornet queens in spring is the most effective.',
+  'note.ball.title': 'The heat ball',
+  'note.ball.body':
+    "When a hornet lands on the entrance, a hundred or more bees engulf it in a ball and vibrate their flight muscles until the middle reaches about 46 °C. That's more than the hornet can take, while the bees survive up to about 48 °C, so the hornet cooks and most of the bees are fine.\nCarbon dioxide also builds up inside the ball and makes the hornet even less able to stand the heat. Western honey bees ball hornets too, but not nearly as well. It's the Asian honey bee's signature defence.",
+  'note.moth.title': 'Wax moth',
+  'note.moth.body':
+    "Wax worms are the larvae of the wax moth. The moths sneak into weak colonies at night to lay eggs, and the worms tunnel along the middle wall of the comb under the cells, spinning silk as they go.\nThe workers uncap the brood above a tunnel, leaving rows of exposed white pupal heads called “bald brood”. Some pupae get tangled in the silk and can't get out.\nA strong colony drags the worms out; a weak one can't keep up. Real beekeepers prevent wax moth by keeping colonies strong (enough bees to cover the comb), cleaning wax scraps off the hive floor and replacing old comb. Asian honey bees suffer from wax moth more than Western ones.",
+  'note.sac.title': 'Sacbrood',
+  'note.sac.body':
+    "Sacbrood is a viral disease. Infected larvae die just before their cells are capped, and the skin turns into a fluid-filled sac with the head raised in a point.\nNurses feeding larvae and cleaners removing the dead carry the virus to other larvae. A strong colony clears it quickly, and the disease dies out on its own.\nThere's no cure. Real beekeepers often requeen or cage the queen to break the brood cycle (with no larvae for a while, the virus has nowhere to spread), remove badly infected brood comb and keep resistant strains.",
+  'note.harvest.title': 'Harvesting honey',
+  'note.harvest.body':
+    "Only cut capped honey: the bees cap honey once it's thick enough, so it holds little water and won't ferment. Leave cells with brood or pollen alone.\nThe bees rebuild the gap, but wax is expensive: they're usually said to eat six to eight times its weight in honey to make it. Opening the hive also disturbs the colony.\nReal beekeepers harvest from Asian honey bees once or twice a year, mostly as the main nectar flow ends, and always leave enough honey to last until the next bloom. Take too much and the colony runs short, and may even abscond.",
+  'note.swap.title': 'Swapping a frame',
+  'note.swap.body':
+    "Swapping takes out a whole frame of comb and puts in an empty frame with only a small start of comb under the top bar. The bees rebuild downward from there.\nThe upper frame is mostly honey. Swapping it out takes almost all of the colony's food store. The garden only supplies about as much nectar as the bees eat, so the stores take many days to recover, the colony goes hungry, and in a bad case it absconds. Put out sugar syrup afterwards.\nThe lower frame is mostly brood. Swapping it out costs one batch of new bees, and the bees rebuild that comb in a few days.\nReal beekeepers swap frames to harvest a whole frame of honey, to replace old comb that has turned dark with use, or to remove brood comb badly hit by disease or wax moth.",
+  'note.lowHoney.title': 'Honey is running low',
+  'note.lowHoney.body':
+    "There isn't much honey left in the hive. The bees eat honey every day, and feeding larvae, building comb and keeping warm all use it up. Few flowers, rain and harvesting all bring the stores down.\nRunning out of honey is one of the most common reasons Asian honey bees abscond. For now, don't harvest, put out a dish or two of sugar syrup (<kbd>7</kbd>), and wait for the stores to grow. The colony panel shows how many full cells of honey are left.",
+  'note.restless.title': 'The colony is restless',
+  'note.restless.body':
+    'Fewer foragers go out, the queen lays less, and the bees fill up on honey: these are signs that the colony is getting ready to abscond. Select the hive to see where the pressure comes from (disturbance, low honey, hornets, pests).\nAsian honey bees abscond more readily than Western ones. If the beekeeper opens the hive less, leaves enough honey and keeps hornets and wax moth in check, the colony settles down. Once the pressure drops far enough, the signs go away.',
+  'note.abscond.title': 'Absconding',
+  'note.abscond.body':
+    "The colony has had enough. All the bees pour out of the entrance, circle in a cloud outside, then fly off to find a new home. The eggs, larvae and pupae they leave behind die in their cells.\nThe game isn't over: the empty hive still smells of old comb, and after a day or two wild bees come to look at it and move in.",
+  'note.scouts.title': 'Scouts look at a new home',
+  'note.scouts.body':
+    "A swarm, or a colony that has absconded, first sends scouts to look for a new home: how big the space is, which way the entrance faces, whether it's dry. The scouts go back and dance to “vote”. Once enough of them favour the same place, the whole swarm flies there.\nEmpty boxes and old comb smell of wax, which draws bees in. In spring, real beekeepers set out empty hives rubbed with beeswax to lure in wild Asian honey bees.",
 };

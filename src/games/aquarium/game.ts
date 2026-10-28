@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { L, t, tr } from '../../core/i18n';
 import type { CameraPose, GameContext, GameModule, GameSession, GameUi, ViewToggle } from '../../core/app/game';
+import type { NotesDef } from '../../core/app/notes';
 import { svgIcon } from '../../core/app/shell';
 import { VolumeSpace } from '../../core/space/volume';
 import { drawChart } from '../../core/ui/chart';
@@ -65,7 +66,22 @@ function mount(ctx: GameContext<Tank, AqRef>): GameSession<AqRef> {
     applyParams: () => tank.settle(),
     syncViews: () => view.syncViews(),
     update: (dt, f) => view.update(dt, f.time, camera, f.selection),
-    ui: tankUi(tank, view, ctx.following),
+    ui: { ...tankUi(tank, view, ctx.following), notes: tankNotes(tank, () => (tools.active >= 0 ? TOOLS[tools.active].kind : null)) },
+  };
+}
+
+/** 笔记和第一次的提示（T-077）：开局讲鱼缸，第一次拿起鱼食、鱼饿了时各讲一次 */
+function tankNotes(tank: Tank, tool: () => ToolKind | null): NotesDef {
+  const note = (id: 'tank' | 'feed' | 'hungry', tip = true) => ({ id, group: 'notes.group' as const, title: `note.${id}.title` as const, body: `note.${id}.body` as const, tip });
+  return {
+    key: 'aquarium-notes',
+    title: 'notes.title',
+    entries: [note('tank'), note('feed'), note('hungry')],
+    *check() {
+      yield 'tank';
+      if (tool() === 'feed') yield 'feed';
+      if (tank.events.entries.some((e) => e.msg.k === 'ev.hungry')) yield 'hungry';
+    },
   };
 }
 
