@@ -7,7 +7,7 @@ import { SUGAR } from './sim/flowers';
 import type { BeeRef, BeeWorld } from './world';
 
 /** 笔记的分组，按这个顺序列 */
-type Group = 'hive' | 'workers' | 'forage' | 'year' | 'climate' | 'threats' | 'keeping' | 'real';
+type Group = 'hive' | 'workers' | 'forage' | 'year' | 'life' | 'climate' | 'threats' | 'keeping' | 'real';
 
 /** 一条笔记：编号就是词典里 note.<id>.title / body / hint 的 <id>；tip 为真的第一次看到弹提示卡 */
 const note = (id: string, group: Group, tip = true): NoteDef => ({
@@ -43,6 +43,11 @@ export const NOTES: NoteDef[] = [
   note('autumn', 'year'),
   note('winter', 'year'),
   note('spring', 'year'),
+  note('queenCells', 'life'),
+  note('swarm', 'life'),
+  note('virgin', 'life'),
+  note('mating', 'life'),
+  note('emergency', 'life'),
   note('warm', 'climate'),
   note('fan', 'climate'),
   note('rain', 'climate'),
@@ -93,6 +98,12 @@ const BY_EVENT: Record<string, string> = {
   'ev.restless': 'restless',
   'ev.abscond': 'abscond',
   'ev.scouts': 'scouts',
+  'ev.queenCells': 'queenCells',
+  'ev.swarmIssue': 'swarm',
+  'ev.virgin': 'virgin',
+  'ev.virginTore': 'virgin',
+  'ev.matingFlight': 'mating',
+  'ev.emergencyCells': 'emergency',
 };
 
 /** 玩家这一刻在看什么、在用什么 */
@@ -123,6 +134,7 @@ export function beeNotes(w: BeeWorld, look: NotesLook): NotesDef {
       if (look.swapping()) yield 'swap';
       const tool = look.tool();
       if (tool === 'plant' || tool === 'sugar') yield tool;
+      if (sel?.kind === 'queenCell') yield 'queenCells';
       if (sel?.kind === 'cell') {
         yield 'comb';
         const id = BY_CELL[w.comb.content[sel.id] as CellContent];

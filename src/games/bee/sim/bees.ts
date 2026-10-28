@@ -110,6 +110,7 @@ export const ACTS = [
   'ball',
   'swarm',
   'scoutHive',
+  'mating',
 ] as const;
 export type Act = (typeof ACTS)[number];
 
@@ -221,7 +222,7 @@ export class Bee {
   aim: Aim | null = null;
   /** 带着中囊病的病毒到什么时候（模拟秒，T-024） */
   virus = 0;
-  /** 跟着蜂群走（T-025）：1 飞逃，2 野生蜂群搬进来，3 来看空箱的侦察蜂；0 平时 */
+  /** 跟着蜂群走（T-025）：1 飞逃，2 野生蜂群搬进来，3 来看空箱的侦察蜂，4 跟老蜂王分蜂出去（T-027）；0 平时 */
   swarm = 0;
   /** 只给画面：这一步在摆动（1）、颤抖或抖翅（2）还是振翅产热（3） */
   waggle = 0;
@@ -308,6 +309,10 @@ export interface BeeEnv {
   /** 飞逃、搬进来的蜂群在哪（T-025）；飞逃的征兆有多重（0..1） */
   swarm(): SwarmState;
   unrest(): number;
+  /** 分出去的蜂群在哪（T-027）；这只蜂王该产卵、在巢里等着，还是出去婚飞；婚飞时去的一点 */
+  issue(): SwarmState;
+  duty(b: Bee): 'lay' | 'wait' | 'fly';
+  flightPoint(out: Point3): void;
   /** 这一季蜂王产卵的多少（0..1）、产卵范围乘几、工蜂和雄蜂老得多快（P-015） */
   laying(): number;
   broodZone(): number;
@@ -387,8 +392,9 @@ export class Bees {
     return this.byId.get(id);
   }
 
+  /** 箱里的蜂王（不算跟着分出去的；新蜂王出房后、老蜂王飞走前，先找到的那只） */
   get queen(): Bee | undefined {
-    return this.list.find((b) => b.caste === CASTE.queen);
+    return this.list.find((b) => b.caste === CASTE.queen && b.swarm !== 4);
   }
 
   /** 开局的蜂：日龄在寿命里均匀分布，按分工散在各自干活的地方 */
@@ -1256,6 +1262,7 @@ export class Bees {
     if (b.swarm === 1) return yield* this.flee(b);
     if (b.swarm === 2) return yield* this.landIn(b);
     if (b.swarm === 3) return yield* this.scoutHive(b);
+    if (b.swarm === 4) return yield* this.leaveWithSwarm(b);
     if (b.out) return yield* this.comeHome(b);
     if (b.caste === CASTE.queen) return yield* this.queenTask(b);
     // 要飞逃的蜂群吃得饱饱的（T-025）
@@ -1616,6 +1623,9 @@ export class Bees {
   }
 
   private *queenTask(b: Bee): Routine {
+    const duty = this.env.duty(b);
+    if (duty === 'fly') return yield* this.matingFlight(b);
+    if (duty === 'wait') return yield* this.idle(b, 0.6);
     if (this.rng.chance(this.env.unrest() * U.stopLaying)) return yield* this.idle(b, 0.8);
     const laying = this.env.laying();
     if (laying < 1 && !this.rng.chance(laying)) return yield* this.idle(b, 0.8);
@@ -1759,8 +1769,22 @@ export class Bees {
     }
   }
 
-  /** 蜂群飞远了：剩下的蜂都算走了，返回走了几只 */
-  depart(): number {
+  /** 蜂群飞远了：剩下的蜂都算走了，返回走了几只；给了 mode 只收走跟着那一群的（Bee.swarm 是 mode 的） */
+  depart(mode?: number): number {
+    if (mode !== undefined) {
+      let n = 0;
+      for (let i = this.list.length - 1; i >= 0; i--) {
+        const b = this.list[i];
+        if (b.swarm !== mode) continue;
+        this.unpark(b);
+        this.release(b);
+        b.alive = false;
+        this.list.splice(i, 1);
+        this.byId.delete(b.id);
+        n++;
+      }
+      return n;
+    }
     const n = this.list.length;
     this.list.length = 0;
     this.byId.clear();
@@ -1768,6 +1792,39 @@ export class Bees {
     this.dancers.length = 0;
     this.receivers.length = 0;
     return n;
+  }
+
+  /**
+   * 分蜂（T-027）：老蜂王和巢里每只工蜂 share、每只雄蜂 droneShare 的机会跟着走（在外面的不走），手上的事做完就去巢门；
+   * 返回走了几只
+   */
+  issue(share: number, droneShare: number, queen: Bee | undefined): number {
+    let n = 0;
+    for (const b of this.list) {
+      if (b.swarm || b.out) continue;
+      if (b === queen ? false : b.caste === CASTE.queen || !this.rng.chance(b.caste === CASTE.drone ? droneShare : share)) continue;
+      b.swarm = 4;
+      n++;
+      const k = b.brain.cmd?.k;
+      if (k === 'tube' || k === 'ball' || b.wrap > 0) continue;
+      this.unpark(b);
+      this.release(b);
+      b.brain.abort();
+    }
+    return n;
+  }
+
+  /** 王台里出房的新蜂王（T-027），在巢面 (u, v) 那里 */
+  addQueen(face: number, u: number, v: number): Bee {
+    const b = this.add(CASTE.queen, 0, 1e9);
+    b.face = face;
+    b.u = u;
+    b.v = v;
+    b.h = -Math.PI / 2;
+    this.place(b);
+    Object.assign(b.prev, b.pos);
+    b.brain.start(this.idle(b, 0.8));
+    return b;
   }
 
   /**
@@ -1821,6 +1878,39 @@ export class Bees {
       if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
     }
     yield* this.mill(b, s);
+  }
+
+  /** 跟老蜂王分出去的蜂（T-027）：和飞逃一样吃饱了从巢门出去，跟着分出去的蜂群；没有这一群了就回到平时 */
+  private *leaveWithSwarm(b: Bee): Routine {
+    const s = this.env.issue();
+    if (s.phase === 'home') {
+      b.swarm = 0;
+      return;
+    }
+    if (b.out === 0) {
+      if (b.caste !== CASTE.queen && b.crop < U.gorge) yield* this.eat(b);
+      b.act = 'leave';
+      if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean)) return yield* this.idle(b, 0.8);
+      if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+    }
+    yield* this.mill(b, s);
+  }
+
+  /** 新蜂王出巢婚飞（T-027）：飞到远处一带转几圈，回巢由 task 开头的 comeHome 接着做 */
+  private *matingFlight(b: Bee): Routine {
+    if (b.out === 0) {
+      b.act = 'leave';
+      if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || !this.env.flyable()) return yield* this.idle(b);
+      if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+      yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };
+    }
+    b.act = 'mating';
+    const p = this.target;
+    const end = this.now() + CONFIG.swarming.flightTime;
+    while (this.now() < end) {
+      this.env.flightPoint(p);
+      yield { k: 'fly', x: p.x, y: p.y, z: p.z, r: 60, v: F.speed, stop: false, t: 40 };
+    }
   }
 
   /** 搬进来的野生蜂群：跟着蜂群飞到巢门前盘旋，盘旋时每一趟有 enter 的机会进巢，蜂群住下了就都进去 */

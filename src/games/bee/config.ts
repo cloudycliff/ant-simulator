@@ -495,6 +495,44 @@ export const CONFIG = {
     enter: 0.08,
     landMax: 150,
   },
+  /**
+   * 分蜂（P-016、T-027）。春天每个游戏小时看一次：蜂王在产卵、工蜂不少于 minWorkers、子不少于 minBrood、今年还没分过时有 perHour 的机会
+   * 开始造王台：在巢脾的下缘（离框底至少 minV cm）造 cells 个，彼此隔开 gap cm；每个过 layIn 秒老蜂王在里面产一粒卵。
+   * 王台里的蜂王按 dev 发育（卵、幼虫、封盖，秒）。第一个王台封盖以后，hours 点之间能飞时分蜂：巢里的工蜂每只有 share 的机会、
+   * 雄蜂 droneShare 的机会跟老蜂王走（在外面的采集蜂不走），吃饱蜜从巢门出去，在 cloud 附近 cloudR 内盘旋，都出来了（最多 leaveMax 秒）
+   * 再盘旋 cloudTime 秒，以 speed cm/s 飞走，飞出 farR 没了。老蜂王还在时，王台里的蜂王到了时候也不出房（工蜂把她关在里面）。
+   * 老蜂王走了以后第一个出房的蜂王把别的王台咬开，咬开的 torn 秒后清掉。处女王出房 mateAfter 秒后，flightHours 点之间能飞时出巢婚飞，
+   * 在 flightAt 附近 flightR 内飞 flightTime 秒再回来；回来 layAfter 秒后开始产卵。
+   * 没有蜂王、也没有王台时（王台被割掉、换掉了），有卵或小幼虫就从它们改造 emergency 个急造王台，没有就只能等蜂群慢慢没了
+   */
+  swarming: {
+    seasons: ['spring'] as readonly string[],
+    minWorkers: 2000,
+    minBrood: 500,
+    perHour: 0.15,
+    cells: [4, 7] as [number, number],
+    minV: 3,
+    gap: 3,
+    layIn: [60, 600] as [number, number],
+    dev: { egg: 600, larva: 1000, capped: 1600 },
+    hours: [10, 15] as [number, number],
+    share: 0.55,
+    droneShare: 0.5,
+    cloud: { x: 380, y: 320, z: 120 },
+    cloudR: 160,
+    leaveMax: 150,
+    cloudTime: 60,
+    speed: 120,
+    farR: 3000,
+    torn: 600,
+    mateAfter: 900,
+    flightHours: [12, 16] as [number, number],
+    flightAt: { x: 2400, y: 1400, z: -1800 },
+    flightR: 600,
+    flightTime: 60,
+    layAfter: 480,
+    emergency: 3,
+  },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },
   render: {

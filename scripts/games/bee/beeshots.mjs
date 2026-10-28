@@ -20,6 +20,9 @@ const PESTS = `'巢虫 ' + world.pests.worms.length + '/' + world.pests.hatched 
 const ABS = `world.abscond.swarm.phase + ' 压力 ' + world.abscond.pressure.toFixed(2) + ' 蜂 ' + world.bees.list.length + ' 在外面 ' + world.bees.list.filter((b) => b.out).length`;
 const NOTED = `hud.hideHelp(); for (const id of ['queen', 'nurse', 'forager', 'dance', 'hornet', 'ball', 'harvest']) hud.notes.learn(id); hud.notes.markRead('hive')`;
 const NOTES = `document.querySelector('#notes')?.innerText.replace(/\\s+/g, ' ').slice(0, 160) ?? ''`;
+/** 相机从斜下方看王台 id */
+const QCAM = (id, d) =>
+  `{ const p = world.entities.pos({ kind: 'queenCell', id: ${id} }); const V = camera.position.constructor; const z = p.z < 0 ? -1 : 1; controller.setPose(new V(p.x + ${d} * 0.3, p.y - ${d} * 0.25, p.z + z * ${d}), new V(p.x, p.y + 1, p.z)) }`;
 const SCENES = {
   home: { q: '&hour=11' },
   night: { q: '&hour=22.5' },
@@ -104,6 +107,15 @@ const SCENES = {
   // 空箱换上两框空巢框；野蜂搬进来一天后从框梁往下造
   emptyhive: { q: '&hour=10&cam=0,103,58,0,103,0', js: `world.abscond.leave(); for (let k = 0; k < 60 && world.abscond.swarm.phase !== 'empty'; k++) ${RUN(10)}`, check: ABS },
   newcomb: { q: '&hour=10&cam=0,103,58,0,103,0', js: `world.abscond.leave(); for (let k = 0; k < 400 && world.abscond.swarm.phase !== 'home'; k++) ${RUN(10)}; ${RUN(600)}`, check: ABS },
+  queencells: { q: '&hour=11&swarm=cells&run=2&view=fade', js: QCAM(1, 14) },
+  queencell: { q: '&hour=11&swarm=cells&run=2&select=queenCell:5', js: QCAM(5, 6), check: INFO },
+  swarmout: { q: '&hour=11&swarm=1&run=60&cam=420,200,640,330,280,100', check: `world.swarming.swarm.phase + ' ' + world.bees.list.filter((b) => b.swarm === 4).length + ' 只'` },
+  swarmtube: { q: '&hour=11&swarm=1&run=15&cam=-14,95,30,-16,84,0' },
+  virgin: {
+    q: '&hour=11&swarm=1',
+    js: `for (let k = 0; k < 80 && world.swarming.swarm.phase !== 'home'; k++) ${RUN(10)}; for (const c of world.swarming.cells) if (c.stage === 3) c.age = 3195; ${RUN(20)}; { const p = world.entities.pos({ kind: 'bee', id: world.swarming.virgin }); const V = camera.position.constructor; const z = p.z < 0 ? -1 : 1; controller.setPose(new V(p.x + 1.5, p.y + 1.5, p.z + z * 6), new V(p.x, p.y, p.z)) }`,
+    check: `world.swarming.stage + ' ' + world.swarming.cells.map((c) => c.stage).join(',')`,
+  },
   pressure: { q: '&hour=11&select=hive:0', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: INFO },
   restless: { q: '&hour=11', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: ABS },
   // 第一次的提示（P-014）：开局讲观察箱；关掉它以后问换框时讲换框；英文

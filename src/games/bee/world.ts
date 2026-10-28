@@ -6,7 +6,7 @@ import { Simulation } from '../../core/sim/simulation';
 import { clamp } from '../../core/util/math';
 import { Noise2D } from '../../core/util/random';
 import { CONFIG } from './config';
-import { CELLS, COMB_H, Comb, cellFace, cellPos, cellSite, type CombSave } from './sim/comb';
+import { CELLS, COMB_H, Comb, SITES, cellFace, cellPos, cellSite, type CombSave } from './sim/comb';
 import { Bees, type Bee, type BeesSave } from './sim/bees';
 import type { ToolResult } from '../../core/ui/tools';
 import { Flowers, SUGAR, type FlowerSave } from './sim/flowers';
@@ -16,9 +16,10 @@ import { Hornets, type HornetsSave } from './sim/hornets';
 import { Keeper, type KeeperSave } from './sim/keeper';
 import { Pests, type PestsSave } from './sim/pests';
 import { Abscond, type AbscondSave } from './sim/abscond';
+import { Swarming, type SwarmingSave } from './sim/swarming';
 
 /** 能选中的东西。巢房的 id 就是巢房编号，花丛、蜂的 id 是 ids.next 发的号，都不随读档变 */
-export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number } | { kind: 'hornet'; id: number };
+export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number } | { kind: 'flower'; id: number } | { kind: 'bee'; id: number } | { kind: 'hornet'; id: number } | { kind: 'queenCell'; id: number };
 
 /** 花园和观察箱。地形由编号生成，不进存档 */
 export class BeeWorld extends Simulation<BeeRef> {
@@ -31,6 +32,7 @@ export class BeeWorld extends Simulation<BeeRef> {
   readonly keeper: Keeper;
   readonly pests: Pests;
   readonly abscond: Abscond;
+  readonly swarming: Swarming;
   private noise: Noise2D;
   private followPos: Point3 = { x: 0, y: 0, z: 0 };
   private broodClock = 0;
@@ -63,6 +65,9 @@ export class BeeWorld extends Simulation<BeeRef> {
       infect: (cell) => this.pests.infect(cell),
       swarm: () => this.abscond.swarm,
       unrest: () => this.abscond.unrest,
+      issue: () => this.swarming.swarm,
+      duty: (b) => this.swarming.duty(b),
+      flightPoint: (out) => this.swarming.flightPoint(out),
       laying: () => this.clock.seasonalValue(CONFIG.seasons.laying),
       broodZone: () => this.clock.seasonalValue(CONFIG.seasons.broodZone),
       aging: () => this.clock.seasonalValue(CONFIG.seasons.aging),
@@ -91,6 +96,15 @@ export class BeeWorld extends Simulation<BeeRef> {
       flyable: () => this.weather.flyable,
       clock: this.clock,
       log: (msg) => this.events.push(msg, { kind: 'hive', id: 0 }),
+    });
+    this.swarming = new Swarming(this.rng, CONFIG.clock.dayLength, {
+      bees: this.bees,
+      comb: this.comb,
+      nextId: () => this.ids.next('queenCell'),
+      clock: this.clock,
+      flyable: () => this.weather.flyable,
+      present: () => this.abscond.swarm.phase === 'home',
+      log: (msg, ref) => this.events.push(msg, ref ?? { kind: 'hive', id: 0 }),
     });
     this.bees.generate();
     this.flowers.generateExtra(this.rng, () => this.ids.next('flower'));
@@ -132,6 +146,7 @@ export class BeeWorld extends Simulation<BeeRef> {
     this.addSystem('keeper', (dt) => this.keeper.update(dt));
     this.addSystem('pests', (dt) => this.pests.update(dt));
     this.addSystem('abscond', (dt) => this.abscond.update(dt));
+    this.addSystem('swarming', (dt) => this.swarming.update(dt));
     this.addSystem('flowers', (dt) => this.flowers.update(dt, this.clock.hour, this.weather.rain));
     this.saves.add(
       'comb',
@@ -183,6 +198,12 @@ export class BeeWorld extends Simulation<BeeRef> {
       (d: AbscondSave) => this.abscond.restore(d),
     );
     this.saves.add(
+      'swarming',
+      () => this.swarming.toSave(),
+      (d: SwarmingSave) => this.swarming.restore(d),
+      true,
+    );
+    this.saves.add(
       'weather',
       () => this.weather.toSave(),
       (d: WeatherSave) => this.weather.restore(d),
@@ -196,6 +217,18 @@ export class BeeWorld extends Simulation<BeeRef> {
       pos: (r) => (r.id >= 0 && r.id < CELLS ? cellPos(r.id) : null),
       viewDistance: 7,
       viewDir: (r) => ({ x: 0.2, y: 0.25, z: cellFace(r.id) ? -1 : 1 }),
+    });
+    this.entities.define('queenCell', {
+      pos: (r) => {
+        const c = this.swarming.get(r.id);
+        if (!c) return null;
+        const p = cellPos(c.site + c.face * SITES);
+        p.y -= 1.2;
+        p.z += c.face ? -0.6 : 0.6;
+        return p;
+      },
+      viewDistance: 9,
+      viewDir: (r) => ({ x: 0.2, y: -0.15, z: this.swarming.get(r.id)?.face ? -1 : 1 }),
     });
     this.entities.define('flower', {
       pos: (r) => {

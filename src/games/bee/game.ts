@@ -14,6 +14,7 @@ import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, SITES, cellFace, cellSite, siteFrame } from './sim/comb';
 import { SITE_HEAT } from './sim/heat';
 import { FACTORS } from './sim/abscond';
+import { QUEEN_CELL, QUEEN_CELL_KEYS, untilEmerge } from './sim/swarming';
 import { SUGAR, bloomSeasons, nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
 import { SEASONS, type Season } from '../../core/sim/clock';
 import { beeNotes } from './notes';
@@ -136,6 +137,17 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
       if (params.get('sac')) w.pests.outbreak();
       // ?abscond=1：马上飞逃（T-025）
       if (params.get('abscond')) w.abscond.leave();
+      // ?swarm=cells：马上造王台，长到不同的几步；?swarm=1 再马上分蜂（T-027）
+      const swarm = params.get('swarm');
+      if (swarm && w.swarming.begin()) {
+        const D = CONFIG.swarming.dev;
+        const cells = w.swarming.cells;
+        cells.forEach((c, i) => {
+          c.stage = QUEEN_CELL.egg;
+          c.age = (swarm === '1' ? D.egg + D.larva + D.capped : D.egg + D.larva) * (0.1 + (0.85 * i) / Math.max(1, cells.length - 1));
+        });
+        if (swarm === '1') w.swarming.issue();
+      }
       const secs = Math.min(600, Number(params.get('run')) || 0);
       for (let s = 0; s < secs; s += 1) w.advance(1, Infinity, Infinity);
     },
@@ -178,6 +190,9 @@ function pick(view: BeeView, camera: THREE.PerspectiveCamera, dom: HTMLElement, 
   const hornet = view.hornets.pick(camera, rect.width, rect.height, x - rect.left, y - rect.top, tol * 1.5);
   if (hornet && (!bee || hornet.dist < bee.dist + 5)) return { kind: 'hornet', id: hornet.id };
   const front = cell && (!hit || cell.dist < hit.distance) ? cell.dist : (hit?.distance ?? Infinity);
+  // 王台挂在巢面外面，比后面的巢房近就选王台
+  const queen = ray.intersectObjects(view.queenCells.pickables, false)[0];
+  if (queen && queen.distance < front + 0.3 && !(bee && bee.dist < queen.distance - 0.5)) return queen.object.userData.ref as BeeRef;
   if (bee && !(view.bees.fade && cell) && bee.dist < front + 2) return { kind: 'bee', id: bee.id };
   if (cell && (!hit || cell.dist < hit.distance)) return { kind: 'cell', id: cell.cell };
   return (hit?.object.userData.ref as BeeRef | undefined) ?? null;
@@ -271,6 +286,7 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
     const early = ROLE_KEYS.indexOf(role) > ROLE_KEYS.indexOf(byAge);
     body += kv(t('info.byAge'), t(early ? 'info.byAgeEarly' : 'info.byAgeLate', { role: t(`role.${byAge}`) }));
   }
+  if (b.caste === CASTE.queen) body += kv(t('info.queenState'), t(`queenState.${queenState(w, b)}`));
   body += kv(t('info.doing'), t(`act.${b.act}`));
   if (b.caste !== CASTE.queen) body += kv(t('info.crop'), t('info.percent', { p: Math.round(b.crop * 100) }));
   if (role === 'nurse') body += kv(t('info.jelly'), t('info.jellyValue', { n: Math.max(0, Math.floor(b.jelly)) }));
@@ -288,6 +304,24 @@ function beeInfo(w: BeeWorld, id: number, following: boolean): string {
       <button data-a="follow" class="${following ? 'on' : ''}">${t(following ? 'info.unfollow' : 'info.follow')} <kbd>F</kbd></button>
       <button data-a="flyto">${t('info.flyNear')}</button>
     </div>`;
+}
+
+/** 这只蜂王在做什么（T-027） */
+function queenState(w: BeeWorld, b: Bee): 'laying' | 'leaving' | 'virgin' | 'flight' | 'mated' {
+  if (b.swarm === 4) return 'leaving';
+  if (b.id !== w.swarming.virgin) return 'laying';
+  const s = w.swarming.stage;
+  return s === 'flight' || s === 'mated' ? s : 'virgin';
+}
+
+function queenCellInfo(w: BeeWorld, id: number): string {
+  const c = w.swarming.get(id);
+  if (!c) return `<h2>${t('info.gone')}</h2>`;
+  const kv = (label: string, value: string) => `<div class="kv"><span>${label}</span><b>${value}</b></div>`;
+  let body = kv(t('info.queenStage'), t(`queenCell.${QUEEN_CELL_KEYS[c.stage]}`));
+  const left = untilEmerge(c);
+  if (Number.isFinite(left)) body += left > 0 ? kv(t('info.emerge'), t('info.inTime', { t: span(left) })) : `<p class="desc">${t('info.queenHeld')}</p>`;
+  return `<h2>${t('info.queenCell')}</h2>${body}<p class="desc">${t('info.queenCellDesc')}</p>`;
 }
 
 function hornetInfo(w: BeeWorld, id: number, following: boolean): string {
@@ -426,6 +460,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.hornets'), hn ? t('colony.hornetsValue', { n: hn }) : t('colony.hornetsNone'))}
       ${row(t('colony.alarm'), t(w.keeper.alarm > 0.05 ? 'colony.alarmOn' : 'colony.alarmOff'))}
       ${row(t('colony.mood'), moodText(w))}
+      ${row(t('colony.swarming'), tr(w.swarming.label()))}
       ${row(t('colony.pests'), w.pests.worms.length || n.sac ? t('colony.pestsValue', { w: w.pests.worms.length, s: n.sac }) : t('colony.hornetsNone'))}
       ${dishes.length ? row(t('colony.sugar'), t('colony.sugarValue', { n: dishes.length, p: Math.round((dishes.reduce((s, p) => s + p.nectar, 0) / (dishes.length * nectarCap(dishes[0]))) * 100) })) : ''}
       <h3>${t('colony.since')}</h3>
@@ -445,6 +480,8 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.bald', w.pests.bald)}${stat('total.entangled', w.pests.entangled)}
         ${stat('total.sacbrood', w.pests.outbreaks)}${stat('total.sacs', w.pests.sacs)}
         ${stat('total.absconds', w.abscond.absconds)}${stat('total.moveIns', w.abscond.moveIns)}
+        ${stat('total.swarms', w.swarming.swarms)}${stat('total.swarmLeft', w.swarming.left)}
+        ${stat('total.queens', w.swarming.queens)}
       </div>`;
       },
     },
@@ -461,6 +498,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       flower: (r) => flowerInfo(w, r.id),
       bee: (r) => beeInfo(w, r.id, following()),
       hornet: (r) => hornetInfo(w, r.id, following()),
+      queenCell: (r) => queenCellInfo(w, r.id),
     },
     legend: {
       html: () => {

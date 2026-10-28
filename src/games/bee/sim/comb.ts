@@ -396,6 +396,12 @@ export class Comb {
     this.version++;
   }
 
+  /** 工蜂把这只卵、小幼虫改造成王台（T-027）：巢房空出来，蜂王在王台里接着长 */
+  clearBrood(cell: number): void {
+    this.empty(cell);
+    this.version++;
+  }
+
   /** 蜂群走了（T-025）：卵、幼虫、封盖子没有蜂照顾都死在房里，留下要清理的房；返回死了几个 */
   abandon(): number {
     let n = 0;

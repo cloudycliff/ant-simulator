@@ -16,6 +16,7 @@ import { MOUTH } from '../../../src/games/bee/sim/flight';
 import type { HornetState } from '../../../src/games/bee/sim/hornets';
 import { en } from '../../../src/games/bee/i18n/en';
 import { NOTES, beeNotes } from '../../../src/games/bee/notes';
+import { QUEEN_CELL, QUEEN_CELL_KEYS } from '../../../src/games/bee/sim/swarming';
 
 setLang('en');
 const STEP = 1 / 30;
@@ -644,6 +645,99 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   y.bees.list.push(...few);
   for (let i = 0; i < 10; i++) y.advance(1, Infinity, Infinity);
   check('蜂快死光了，箱子空出来', y.abscond.swarm.phase === 'empty' && y.bees.list.length === 0);
+}
+{
+  // 分蜂、造王台、换王（P-016、T-027）：上午十点造王台，把王台里的蜂王拨快
+  const SW = CONFIG.swarming;
+  const DEV = SW.dev;
+  const x = new BeeWorld(7);
+  const S = x.swarming;
+  const heard = new Set<string>();
+  const fast = (secs: number, until: () => boolean = () => false) => {
+    for (let i = 0; i < secs && !until(); i++) {
+      x.advance(1, Infinity, Infinity);
+      for (const b of x.bees.list) seen.add(b.act);
+      for (const e of x.events.entries) if (typeof e.msg === 'object' && 'k' in e.msg) heard.add(e.msg.k);
+    }
+  };
+  fast(((10 - x.clock.hour) / 24) * CONFIG.clock.dayLength);
+  const old = x.bees.queen!;
+  const made = S.begin();
+  const edge = S.cells.every((c) => x.comb.build[c.site] >= 1 && siteV(c.site) - siteFrame(c.site) * GRID.frameStep >= SW.minV);
+  check('分蜂：在巢脾下缘造了几个王台，记进事件', made >= SW.cells[0] && made <= SW.cells[1] && edge && S.stage === 'cells' && S.cells.every((c) => c.stage === QUEEN_CELL.cup), `${made} 个`);
+  for (const c of S.cells) c.age = 1;
+  fast(5);
+  check('分蜂：老蜂王在台基里产了卵', S.cells.every((c) => c.stage === QUEEN_CELL.egg) && heard.has('ev.queenCells'));
+  for (const c of S.cells) c.age = DEV.egg + DEV.larva - 2;
+  const inHive = x.bees.list.filter((b) => !b.out && b.caste === CASTE.worker).length;
+  const flying = new Set(x.bees.list.filter((b) => b.out >= 2).map((b) => b.id));
+  fast(5);
+  const going = x.bees.list.filter((b) => b.swarm === 4);
+  const share = going.filter((b) => b.caste === CASTE.worker).length / inHive;
+  check(
+    '分蜂：第一个王台封盖了就分蜂，老蜂王带走一大半在巢里的工蜂，在外面的不走',
+    S.cells.some((c) => c.stage === QUEEN_CELL.capped) && going.includes(old) && Math.abs(share - SW.share) < 0.06 && !going.some((b) => b.out >= 2 && flying.has(b.id)) && S.swarm.phase === 'leaving' && x.bees.queen === undefined && heard.has('ev.swarmIssue'),
+    `${going.length} 只，占巢里工蜂的 ${(share * 100).toFixed(0)}%`,
+  );
+  fast(SW.leaveMax, () => S.swarm.phase !== 'leaving');
+  fast(10);
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved && r1.swarming.swarm.phase === S.swarm.phase;
+  run(r1, 30);
+  run(r2, 30);
+  check('分蜂时存档往返一致、读两次走得一样', same && fingerprint(r1) === fingerprint(r2), S.swarm.phase);
+  const n0 = x.bees.list.length;
+  fast(600, () => S.swarm.phase === 'home');
+  check(
+    '分蜂：蜂群在箱外盘旋一阵飞走了，箱里没有蜂王，等王台出房',
+    S.swarm.phase === 'home' && !x.bees.list.some((b) => b.swarm === 4) && x.bees.list.length < n0 - going.length / 2 && !x.bees.list.some((b) => b.caste === CASTE.queen) && S.stage === 'queenless' && heard.has('ev.swarmGone'),
+    `剩 ${x.bees.list.length} 只（${tr(S.label())}）`,
+  );
+  const first = S.cells.find((c) => c.stage === QUEEN_CELL.capped)!;
+  first.age = DEV.egg + DEV.larva + DEV.capped - 2;
+  fast(5);
+  const virgin = x.bees.get(S.virgin);
+  check(
+    '换王：第一只新蜂王出房，把别的王台都咬开',
+    !!virgin && virgin.caste === CASTE.queen && S.stage === 'virgin' && S.cells.every((c) => c.stage === QUEEN_CELL.torn) && x.bees.list.filter((b) => b.caste === CASTE.queen).length === 1 && heard.has('ev.virginTore'),
+    S.cells.map((c) => QUEEN_CELL_KEYS[c.stage]).join(' '),
+  );
+  const laid = x.bees.laid;
+  fast(SW.mateAfter + 2 * CONFIG.clock.dayLength, () => S.stage === 'mated');
+  check('换王：处女王不产卵，过一阵在午后出巢婚飞，回来了', S.stage === 'mated' && x.bees.laid === laid && heard.has('ev.matingFlight') && heard.has('ev.mated') && S.cells.length === 0, `${tr(x.clock.stamp())} ${S.stage}`);
+  fast(SW.layAfter + 60, () => x.bees.laid > laid + 3);
+  check('换王：交尾回来过一阵新蜂王开始产卵', S.stage === 'none' && S.virgin < 0 && x.bees.queen === virgin && x.bees.laid > laid && S.queens === 1 && S.swarms === 1, `产了 ${x.bees.laid - laid} 粒`);
+  // 一年只分一次
+  S.update(1e9);
+  check('分蜂：一年只分一次', S.stage === 'none');
+
+  // 没有蜂王也没有王台：工蜂把小幼虫改成急造王台
+  const y = new BeeWorld(7);
+  y.bees.queen!.swarm = 9;
+  y.bees.depart(9);
+  const brood = y.comb.census().counts;
+  y.advance(1, Infinity, Infinity);
+  const after = y.comb.census().counts;
+  const em = y.swarming.cells;
+  check(
+    '换王：没有蜂王时把小幼虫改造成急造王台',
+    em.length === SW.emergency && em.every((c) => c.stage === QUEEN_CELL.egg || c.stage === QUEEN_CELL.larva) && y.swarming.stage === 'queenless' && after.egg + after.larva < brood.egg + brood.larva,
+    em.map((c) => `${QUEEN_CELL_KEYS[c.stage]} ${c.age.toFixed(0)}`).join(' / '),
+  );
+
+  // 春天的强群自己开始造王台，夏天不造
+  const spring = new BeeWorld(7);
+  spring.clock.setSeason('spring', 1);
+  for (let i = 0; i < CONFIG.clock.dayLength; i++) spring.advance(1, Infinity, Infinity);
+  const summer = new BeeWorld(3);
+  for (let i = 0; i < CONFIG.clock.dayLength / 2; i++) summer.advance(1, Infinity, Infinity);
+  check('分蜂：春天的强群一天里开始造王台，夏天不造', spring.swarming.stage === 'cells' && spring.swarming.cells.length > 0 && summer.swarming.stage === 'none' && !summer.swarming.cells.length, tr(spring.swarming.label()));
 }
 const missing = ACTS.filter((a) => !seen.has(a));
 check('各种活都有蜂做过', missing.length === 0, missing.length ? `没见到 ${missing.join(' ')}` : `${seen.size} 种`);

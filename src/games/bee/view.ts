@@ -10,6 +10,7 @@ import { CONFIG } from './config';
 import { DanceView } from './danceView';
 import { HeatView } from './heatView';
 import { HornetView } from './hornetView';
+import { QueenCellView } from './queenCellView';
 import { FlowerView } from './flowerView';
 import { SEASON_COLORS } from './palette';
 import { COMB_H } from './sim/comb';
@@ -39,6 +40,7 @@ export class BeeView {
   readonly dance: DanceView;
   readonly heat: HeatView;
   readonly hornets: HornetView;
+  readonly queenCells: QueenCellView;
   private plate!: THREE.Group;
   private rain = new RainView();
   /** 点选用：观察箱的各个部件，userData.ref 指向它们；花丛的圆柱在 flowers.pickables */
@@ -74,7 +76,8 @@ export class BeeView {
     this.dance = new DanceView(w);
     this.heat = new HeatView(w);
     this.hornets = new HornetView(w);
-    this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group, this.heat.group, this.hornets.group);
+    this.queenCells = new QueenCellView(w);
+    this.group.add(this.comb.group, this.flowers.group, this.bees.group, this.dance.group, this.heat.group, this.hornets.group, this.queenCells.group);
     const box = new THREE.BoxGeometry(62, COMB_H + 30, 30);
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.8, depthTest: false }));
     this.outline.position.set(0, H.baseY + COMB_H / 2 + 6, 0);
@@ -303,6 +306,7 @@ export class BeeView {
     this.bees.update(camera, viewportH, sel?.kind === 'bee' ? sel.id : null);
     this.dance.update(camera);
     this.heat.update();
+    this.queenCells.update(sel?.kind === 'queenCell' ? sel.id : null);
     this.plate.visible = this.w.hornets.plate;
     this.tint();
     this.hornets.update(camera, viewportH, sel?.kind === 'hornet' ? sel.id : null, performance.now() / 1000);
