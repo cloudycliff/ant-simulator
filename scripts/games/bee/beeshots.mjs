@@ -130,6 +130,12 @@ const SCENES = {
   notesreal: { q: '&hour=11', fresh: true, js: `${NOTED}; hud.notes.learn('cerana'); hud.notes.learn('honeyPlan'); hud.toggleNotes(); hud.openNote(hud.notes.def.entries.findIndex((e) => e.id === 'cerana'))`, check: NOTES },
   notesrealen: { q: '&hour=11&lang=en', fresh: true, js: `${NOTED}; hud.notes.learn('cerana'); hud.notes.learn('honeyPlan'); hud.toggleNotes(); hud.openNote(hud.notes.def.entries.findIndex((e) => e.id === 'honeyPlan'))`, check: NOTES },
   // 季节（P-015）：跳到春、秋、冬看花园；油菜、荞麦的信息面板
+  droneout: { q: '&hour=12&season=spring:2&run=120&cam=-130,120,110,-40,100,0', check: `world.bees.list.filter((b) => b.act === 'droneFlight').length + ' 只雄蜂在外面'` },
+  evicted: {
+    q: '&hour=10&season=autumn:2',
+    js: `for (let k = 0; k < 60 && !world.bees.list.some((b) => b.act === 'evicted' && b.out === 3); k++) ${RUN(20)}; { const d = world.bees.list.find((b) => b.act === 'evicted' && b.out === 3); if (d) { const V = camera.position.constructor; controller.setPose(new V(d.pos.x - 5, d.pos.y + 4, d.pos.z + 6), new V(d.pos.x, d.pos.y, d.pos.z)) } }`,
+    check: `world.bees.list.filter((b) => b.act === 'evicted' && b.out === 3).length + ' 只在地上，赶出 ' + world.bees.evicted`,
+  },
   springgarden: { q: '&hour=12&season=spring:3&cam=0,400,900,0,40,-200', check: `world.clock.season + ' ' + world.flowers.patches.filter((p) => world.flowers.open(p, 12) > 0).length` },
   autumngarden: { q: '&hour=12&season=autumn:3&cam=0,400,900,0,40,-200' },
   wintergarden: { q: '&hour=12&season=winter:3&cam=0,400,900,0,40,-200' },

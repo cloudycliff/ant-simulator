@@ -48,6 +48,8 @@ export const NOTES: NoteDef[] = [
   note('virgin', 'life'),
   note('mating', 'life'),
   note('emergency', 'life'),
+  note('droneFlight', 'life'),
+  note('evict', 'life'),
   note('warm', 'climate'),
   note('fan', 'climate'),
   note('rain', 'climate'),
@@ -75,7 +77,7 @@ export const NOTES: NoteDef[] = [
 ];
 
 /** 有蜂在做这件事就算看到了 */
-const BY_ACT: Partial<Record<Act, string>> = { roundDance: 'roundDance', tremble: 'tremble', shimmer: 'shimmer' };
+const BY_ACT: Partial<Record<Act, string>> = { roundDance: 'roundDance', tremble: 'tremble', shimmer: 'shimmer', droneFlight: 'droneFlight', evicted: 'evict' };
 /** 选中一只在做这件事的蜂 */
 const HANDOFF: ReadonlySet<Act> = new Set<Act>(['offer', 'giveNectar', 'receive', 'takeNectar']);
 /** 选中装着这些东西的巢房 */
@@ -104,6 +106,7 @@ const BY_EVENT: Record<string, string> = {
   'ev.virginTore': 'virgin',
   'ev.matingFlight': 'mating',
   'ev.emergencyCells': 'emergency',
+  'ev.droneEvict': 'evict',
 };
 
 /** 玩家这一刻在看什么、在用什么 */

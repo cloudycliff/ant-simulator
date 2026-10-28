@@ -1,3 +1,4 @@
+import { L, type Text } from '../../../core/i18n';
 import { Behavior, type Routine as CoreRoutine } from '../../../core/sim/behavior';
 import type { IdPool } from '../../../core/sim/ids';
 import { turnToward } from '../../../core/move/surface';
@@ -5,7 +6,7 @@ import type { Point3 } from '../../../core/sim/events';
 import { TAU, clamp, wrapAngle } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
-import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteU, siteV, type Comb } from './comb';
+import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteFrame, siteU, siteV, type Comb } from './comb';
 import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './flight';
 import { landingPoint, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
@@ -24,6 +25,7 @@ const HT = CONFIG.heat;
 const HN = CONFIG.hornets;
 const SB = CONFIG.pests.sacbrood;
 const U = CONFIG.abscond;
+const DR = CONFIG.drones;
 /** 每个走路格在哪个温度格 */
 const NODE_HEAT = (() => {
   const a = new Int16Array(NODES);
@@ -111,11 +113,13 @@ export const ACTS = [
   'swarm',
   'scoutHive',
   'mating',
+  'droneFlight',
+  'evicted',
 ] as const;
 export type Act = (typeof ACTS)[number];
 
 /** 要去的地方各有一张路程场 */
-const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance', 'floor', 'cold'] as const;
+const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'droneLay', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance', 'floor', 'cold'] as const;
 type FieldKey = (typeof FIELD_KEYS)[number];
 
 /** 行为协程交给运动层的指令；t 是剩下的秒数，执行时就地减，存档时连进度一起存 */
@@ -287,6 +291,10 @@ export interface BeesSave {
   laid: number;
   starved: number;
   hungry: number;
+  evicted?: number;
+  evicting?: boolean;
+  droneOk?: boolean;
+  droneRoom?: number;
   coldNeed: number;
   hotNeed: number;
 }
@@ -317,6 +325,9 @@ export interface BeeEnv {
   laying(): number;
   broodZone(): number;
   aging(): number;
+  /** 这一季的数（四个一组，春夏秋冬，换季时渐变）；记一条事件（T-028） */
+  seasonal(values: readonly number[]): number;
+  log(msg: Text, bee?: number): void;
 }
 
 /**
@@ -331,6 +342,10 @@ export class Bees {
   laid = 0;
   /** 饿死的幼虫、成蜂 */
   starved = 0;
+  /** 被赶出巢的雄蜂（T-028） */
+  evicted = 0;
+  /** 今年秋天赶雄蜂的事件记过了 */
+  private evicting = false;
   hungry = 0;
   /** 带着东西回巢的趟数；放进巢房的花蜜、花粉（房） */
   trips = 0;
@@ -376,8 +391,9 @@ export class Bees {
   private pushing = false;
   /** 每格停着几只蜂 */
   private occ = new Uint8Array(2 * NODES);
-  /** 雄蜂子还不多、可以在雄蜂房产卵（重算路程场时定） */
+  /** 雄蜂子还不多、可以在雄蜂房产卵 */
   private droneOk = true;
+  private droneRoom = 0;
   private target: Point3 = { x: 0, y: 0, z: 0 };
 
   constructor(
@@ -517,6 +533,8 @@ export class Bees {
     if (this.now() >= this.needAt) {
       this.needAt = this.now() + S.every;
       this.assess();
+      this.countDrones();
+      this.evict();
     }
     let dead = 0;
     const recall = this.env.recall() * dt;
@@ -561,6 +579,35 @@ export class Bees {
    * 看看蜂群缺什么：缺粉、缺蜜的程度；每只哺育蜂要照顾的幼虫多了，清理蜂提前去哺育、哺育蜂推后换工作，
    * 再多就有内勤蜂、守卫退回去哺育；采集蜂少了，内勤蜂、守卫提前去采集，多了推后
    */
+  /** 雄蜂子还不到这一季的上限才在雄蜂房产卵；蜂王多半在身边找房产，路程场不常重算，所以跟着 assess 数 */
+  private countDrones(): void {
+    const cb = this.comb;
+    let drones = 0;
+    for (let c = 0; c < CELLS; c++) if (cb.drone[cellSite(c)] && cb.content[c] >= CELL.egg && cb.content[c] <= CELL.capped) drones++;
+    this.droneOk = drones < C.droneBrood * this.env.seasonal(DR.brood);
+    // 焐热了的空雄蜂房；没有的话蜂王不专门去找（找不到要白走好一阵）
+    this.droneRoom = 0;
+    if (this.droneOk && this.env.seasonal(DR.brood) > 0) for (let c = 0; c < CELLS; c++) if (this.isDroneLayable(c)) this.droneRoom++;
+  }
+
+  /** 秋冬工蜂把巢里的雄蜂赶出去（T-028）；一年记一次事件 */
+  private evict(): void {
+    const rate = this.env.seasonal(DR.evict);
+    if (rate <= 0) {
+      this.evicting = false;
+      return;
+    }
+    const p = (rate * S.every * 24) / CONFIG.clock.dayLength;
+    for (const b of this.list) {
+      if (b.caste !== CASTE.drone || b.out || b.swarm || !this.rng.chance(p)) continue;
+      b.swarm = 5;
+      if (!this.evicting) {
+        this.evicting = true;
+        this.env.log(L('ev.droneEvict'), b.id);
+      }
+    }
+  }
+
   private assess(): void {
     const ht = this.env.heat;
     let cold = 0;
@@ -1091,6 +1138,7 @@ export class Bees {
   private isHungryLarva = (c: number) => this.comb.content[c] === CELL.larva && this.comb.amount[c] < C.hungry;
   private isDirty = (c: number) => (this.comb.content[c] === CELL.sac || (this.comb.content[c] === CELL.empty && this.comb.amount[c] > 0)) && this.comb.build[cellSite(c)] >= 1;
   private isLayable = (c: number) => this.comb.layable(c) && (this.droneOk || !this.comb.drone[cellSite(c)]);
+  private isDroneLayable = (c: number) => this.droneOk && this.comb.drone[cellSite(c)] === 1 && this.comb.layable(c) && this.env.heat.temp[SITE_HEAT[cellSite(c)]] >= DR.layWarm;
   private isOpenFood = (c: number) => {
     const k = this.comb.content[c];
     return (k === CELL.nectar || k === CELL.honey) && this.comb.amount[c] > 0.01;
@@ -1141,7 +1189,6 @@ export class Bees {
   }
 
   private *sources(key: FieldKey): Generator<number> {
-    const cb = this.comb;
     if (key === 'entrance') {
       for (let n = 0; n < NODES; n++) {
         const u = nodeU(n);
@@ -1186,9 +1233,6 @@ export class Bees {
       if (found) return;
     }
     if (key === 'layable') {
-      let drones = 0;
-      for (let c = 0; c < CELLS; c++) if (cb.drone[cellSite(c)] && cb.content[c] >= CELL.egg && cb.content[c] <= CELL.capped) drones++;
-      this.droneOk = drones < C.droneBrood;
       // 蜂王在育儿区里找空房，育儿区里没有了才去别处；只在蜂焐得热的地方产（天凉时育儿区跟着蜂的多少缩小）
       const O = CONFIG.opening.brood;
       const zone = C.queen * this.env.broodZone();
@@ -1210,6 +1254,7 @@ export class Bees {
       larvae: this.isHungryLarva,
       dirty: this.isDirty,
       layable: this.isLayable,
+      droneLay: this.isDroneLayable,
       food: this.isFood,
       pollen: this.isPollen,
       ripen: this.isRipe,
@@ -1263,11 +1308,12 @@ export class Bees {
     if (b.swarm === 2) return yield* this.landIn(b);
     if (b.swarm === 3) return yield* this.scoutHive(b);
     if (b.swarm === 4) return yield* this.leaveWithSwarm(b);
+    if (b.swarm === 5) return yield* this.beEvicted(b);
     if (b.out) return yield* this.comeHome(b);
     if (b.caste === CASTE.queen) return yield* this.queenTask(b);
     // 要飞逃的蜂群吃得饱饱的（T-025）
     if (b.crop < B.hungry + (U.gorge - B.hungry) * this.env.unrest()) return yield* this.eat(b);
-    if (b.caste === CASTE.drone) return yield* this.idle(b, 0.6);
+    if (b.caste === CASTE.drone) return yield* this.droneTask(b);
     const role = roleOf(b);
     // 子脾冷了年轻的蜂去抱团产热，热了去巢门扇风（T-021）
     // 过冬后的蜂大多是老蜂，采集蜂、守卫也来，机会少一些
@@ -1629,7 +1675,9 @@ export class Bees {
     if (this.rng.chance(this.env.unrest() * U.stopLaying)) return yield* this.idle(b, 0.8);
     const laying = this.env.laying();
     if (laying < 1 && !this.rng.chance(laying)) return yield* this.idle(b, 0.8);
-    const cell = yield* this.seek(b, 'layable', this.isLayable, 'seek');
+    // 雄蜂房在巢脾下缘，蜂王在身边找房时找不到，春夏要专门过去产（T-028）
+    let cell = this.droneRoom > 0 && this.rng.chance(DR.lay) ? yield* this.seek(b, 'droneLay', this.isDroneLayable, 'seek') : -1;
+    if (cell < 0) cell = yield* this.seek(b, 'layable', this.isLayable, 'seek');
     if (cell < 0) return yield* this.idle(b, 0.8);
     yield* this.work(b, cell, 'inspect', C.inspect);
     if (!this.isLayable(cell)) return;
@@ -1913,6 +1961,54 @@ export class Bees {
     }
   }
 
+  /** 春夏在巢脾下面一截新造的巢房有一些造成雄蜂房（T-028） */
+  private droneComb = (s: number): boolean => {
+    const top = siteFrame(s) * GRID.frameStep + H.frameH;
+    const p = this.env.seasonal(DR.comb);
+    return p > 0 && top - siteV(s) >= H.frameH * DR.combDepth && this.rng.chance(p);
+  };
+
+  /** 雄蜂：春夏的午后出巢去雄蜂集结区，其余时候在巢里歇着、吃蜜 */
+  private *droneTask(b: Bee): Routine {
+    const h = this.env.hour();
+    if (h >= DR.flightHours[0] && h < DR.flightHours[1] && b.age > b.life * DR.mature && this.env.flyable() && this.rng.chance(DR.flightChance * this.env.seasonal(DR.flight)))
+      return yield* this.droneFlight(b);
+    yield* this.idle(b, 0.6);
+  }
+
+  /** 雄蜂出巢：吃饱了出去，在集结区一带飞一阵，回巢由 task 开头的 comeHome 接着做 */
+  private *droneFlight(b: Bee): Routine {
+    if (b.crop < 0.9) yield* this.eat(b);
+    b.act = 'leave';
+    if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean) || !this.env.flyable()) return yield* this.idle(b);
+    if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+    yield { k: 'fly', ...DEPART, r: 15, v: F.speed, stop: false, t: 30 };
+    b.act = 'droneFlight';
+    const p = this.target;
+    const end = this.now() + this.rng.range(DR.flightTime[0], DR.flightTime[1]);
+    while (this.now() < end) {
+      this.env.flightPoint(p);
+      yield { k: 'fly', x: p.x, y: p.y, z: p.z, r: 60, v: F.speed, stop: false, t: 40 };
+    }
+  }
+
+  /** 被赶出巢的雄蜂：走出巢门，飞不远就落在箱前的地上，过一阵冻饿而死 */
+  private *beEvicted(b: Bee): Routine {
+    b.act = 'evicted';
+    if (b.out === 0) {
+      if (!((yield { k: 'go', f: 'entrance', near: 0, t: 120 }) as boolean)) return yield* this.idle(b);
+      if (!((yield { k: 'tube', dir: 1, s: 0, face: b.face, t: 20 }) as boolean)) return yield* this.idle(b);
+    }
+    const a = this.rng.range(0, TAU);
+    const r = DR.dropR * Math.sqrt(this.rng.next());
+    const x = DR.drop.x + r * Math.cos(a);
+    const z = DR.drop.z + r * Math.sin(a);
+    yield { k: 'fly', x, y: this.env.ground(x, z) + 0.4, z, r: 1, v: F.hop, stop: true, t: 20 };
+    yield { k: 'sip', t: this.rng.range(DR.die[0], DR.die[1]) };
+    this.evicted++;
+    b.life = b.age;
+  }
+
   /** 搬进来的野生蜂群：跟着蜂群飞到巢门前盘旋，盘旋时每一趟有 enter 的机会进巢，蜂群住下了就都进去 */
   private *landIn(b: Bee): Routine {
     const s = this.env.swarm();
@@ -1959,14 +2055,14 @@ export class Bees {
       const cell = yield* this.seek(b, 'frontier', this.isFrontier, 'goBuild', this.comb.repairs ? this.isRepair : this.isFrontier);
       if (cell >= 0) {
         yield* this.work(b, cell, 'build', C.work.build);
-        this.comb.buildUp(cellSite(cell), C.build, C.start);
+        this.comb.buildUp(cellSite(cell), C.build, C.start, this.droneComb);
         b.crop = Math.max(0, b.crop - C.buildCost);
         // 补巢脾的蜂挂在缺口边上接着造，不每造一下就走开
         for (let i = 1; i < CONFIG.keeper.repairStay && this.comb.repairs && b.crop > B.hungry; i++) {
           const next = this.findNear(b, this.isRepair, 2.4);
           if (next < 0 || !((yield { k: 'to', cell: next, t: 6 }) as boolean)) break;
           yield* this.work(b, next, 'build', C.work.build);
-          this.comb.buildUp(cellSite(next), C.build, C.start);
+          this.comb.buildUp(cellSite(next), C.build, C.start, this.droneComb);
           b.crop = Math.max(0, b.crop - C.buildCost);
         }
         return yield* this.maybeRest(b);
@@ -2020,6 +2116,10 @@ export class Bees {
       laid: this.laid,
       starved: this.starved,
       hungry: this.hungry,
+      evicted: this.evicted,
+      evicting: this.evicting,
+      droneOk: this.droneOk,
+      droneRoom: this.droneRoom,
       coldNeed: this.coldNeed,
       hotNeed: this.hotNeed,
     };
@@ -2061,6 +2161,10 @@ export class Bees {
     this.laid = d.laid;
     this.starved = d.starved;
     this.hungry = d.hungry;
+    this.evicted = d.evicted ?? 0;
+    this.evicting = d.evicting ?? false;
+    this.droneOk = d.droneOk ?? true;
+    this.droneRoom = d.droneRoom ?? 0;
     this.coldNeed = d.coldNeed;
     this.hotNeed = d.hotNeed;
     for (const f of Object.values(this.fields)) f.at = -Infinity;

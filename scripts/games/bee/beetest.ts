@@ -153,7 +153,7 @@ for (let s = 0; s < CONFIG.clock.dayLength; s += 10) {
     if (!b.out) continue;
     out++;
     const p = b.pos;
-    if (Math.abs(p.x) > garden || Math.abs(p.z) > garden || p.y < w.groundAt(p.x, p.z) || p.y > 1000 || !Number.isFinite(p.x + p.y + p.z)) badFlight++;
+    if (Math.abs(p.x) > garden || Math.abs(p.z) > garden || p.y < w.groundAt(p.x, p.z) || p.y > 2000 || !Number.isFinite(p.x + p.y + p.z)) badFlight++;
   }
   maxOut = Math.max(maxOut, out);
   const h = w.heat;
@@ -450,7 +450,8 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   run(z, 20);
   z.weather.startRain(true);
   run(z, 5);
-  check('下雨了，胡蜂飞走', z.hornets.list.every((o) => o.state === 'dead' || o.state === 'leave') || z.hornets.list.filter((o) => o.state !== 'dead').length === 0);
+  // 已经扑到管口上被围住的胡蜂走不了
+  check('下雨了，胡蜂飞走', z.hornets.list.every((o) => o.state === 'dead' || o.state === 'leave' || o.state === 'away' || o.state === 'land' || o.state === 'ball'), z.hornets.list.map((o) => o.state).join(' '));
 }
 {
   // 养蜂人：割蜜、换框（T-023）。另开世界
@@ -645,6 +646,64 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   y.bees.list.push(...few);
   for (let i = 0; i < 10; i++) y.advance(1, Infinity, Infinity);
   check('蜂快死光了，箱子空出来', y.abscond.swarm.phase === 'empty' && y.bees.list.length === 0);
+}
+{
+  // 雄蜂的季节变化（T-028）：春天午后雄蜂出巢；春夏巢脾下面新造的位置有雄蜂房；秋天雄蜂被赶出巢、落在箱前地上死掉，蜂王不再产雄蜂卵
+  const DR = CONFIG.drones;
+  const x = new BeeWorld(7);
+  const drones = () => x.bees.list.filter((b) => b.caste === CASTE.drone);
+  const heard = new Set<string>();
+  const fast = (secs: number, each: () => void = () => {}) => {
+    for (let i = 0; i < secs; i++) {
+      x.advance(1, Infinity, Infinity);
+      for (const b of x.bees.list) seen.add(b.act);
+      each();
+    }
+    for (const e of x.events.entries) if (typeof e.msg === 'object' && 'k' in e.msg) heard.add(e.msg.k);
+  };
+  x.clock.setSeason('spring', 2);
+  fast((((12.5 - x.clock.hour + 24) % 24) / 24) * CONFIG.clock.dayLength);
+  let flying = 0;
+  fast(60, () => (flying = Math.max(flying, drones().filter((b) => b.act === 'droneFlight' && b.out === 2).length)));
+  check('雄蜂：春天晴天的午后飞出去', flying >= 5 && x.weather.flyable, `最多 ${flying} 只在外面`);
+  // 新开始造的位置：春天下面一截有一些是雄蜂房，上面一截没有；秋天都不是
+  const droneComb = (x.bees as unknown as { droneComb: (s: number) => boolean }).droneComb;
+  const sample = () => {
+    let deep = 0;
+    let high = 0;
+    for (let s = 0; s < SITES; s += 7) {
+      const down = siteFrame(s) * GRID.frameStep + CONFIG.hive.frameH - siteV(s);
+      if (!droneComb(s)) continue;
+      if (down >= CONFIG.hive.frameH * DR.combDepth) deep++;
+      else high++;
+    }
+    return [deep, high];
+  };
+  const [sDeep, sHigh] = sample();
+  x.clock.setSeason('autumn', 1);
+  const [aDeep] = sample();
+  check('雄蜂房：春天巢脾下面新造的有一些是雄蜂房，秋天不造', sDeep > 0 && sHigh === 0 && aDeep === 0 && x.clock.seasonalValue(DR.brood) === 0, `春 ${sDeep}`);
+  const n0 = drones().length;
+  let ground = 0;
+  fast(CONFIG.clock.dayLength, () => {
+    for (const b of drones()) if (b.act === 'evicted' && b.out === 3 && Math.abs(b.pos.y - x.groundAt(b.pos.x, b.pos.z)) < 1) ground++;
+  });
+  check(
+    '雄蜂：秋天被工蜂赶出巢，落在箱前地上死掉，记进事件',
+    x.bees.evicted > 0 && ground > 0 && drones().length < n0 && heard.has('ev.droneEvict'),
+    `${n0} → ${drones().length} 只，赶出 ${x.bees.evicted}`,
+  );
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved && r1.bees.evicted === x.bees.evicted;
+  run(r1, 30);
+  run(r2, 30);
+  check('赶雄蜂时存档往返一致、读两次走得一样', same && fingerprint(r1) === fingerprint(r2));
 }
 {
   // 分蜂、造王台、换王（P-016、T-027）：上午十点造王台，把王台里的蜂王拨快

@@ -115,7 +115,7 @@ export const CONFIG = {
     builders: 0.35,
     guards: 0.35,
     /** 路程场多久重算一次（秒）：要喂的幼虫、要清理的、能产卵的、食物、花粉、要酿的蜜、在造的巢房、放花蜜和花粉的房 */
-    refresh: { larvae: 2, dirty: 5, layable: 3, food: 5, pollen: 5, ripen: 5, frontier: 10, store: 5, pollenStore: 5 },
+    refresh: { larvae: 2, dirty: 5, layable: 3, droneLay: 5, food: 5, pollen: 5, ripen: 5, frontier: 10, store: 5, pollenStore: 5 },
     /** 育儿区（开局育儿区的椭圆）往外到 ring 倍是放花粉的一圈，再往外放花蜜；蜂王在 queen 倍以内产卵 */
     ring: 1.5,
     queen: 1.4,
@@ -532,6 +532,30 @@ export const CONFIG = {
     flightTime: 60,
     layAfter: 480,
     emergency: 3,
+  },
+  /**
+   * 雄蜂的季节变化（T-028）。四个一组的是春、夏、秋、冬。蜂王产雄蜂卵的上限是 care.droneBrood 乘 brood，
+   * 没到上限时每产一粒有 lay 的机会专门去找雄蜂房（巢脾下缘离育儿区远、凉一些，不低于 layWarm °C 就产）；
+   * 新开始造的位置离框梁不少于 combDepth 倍框高时，有 comb 的机会造成雄蜂房。
+   * 出巢：flight 乘 flightChance 是一只闲着的雄蜂出巢的机会（只在 flightHours 点能飞时、日龄过了寿命的 mature），
+   * 先吃饱，在雄蜂集结区（和婚飞同一带）飞 flightTime 秒回来。
+   * 赶出巢：每游戏小时每只巢里的雄蜂有 evict 的机会被工蜂赶出去，走出巢门，落在箱前 drop 附近 dropR 内的地上，die 秒后死
+   */
+  drones: {
+    brood: [1.2, 1, 0, 0],
+    lay: 0.2,
+    layWarm: 33,
+    comb: [0.5, 0.25, 0, 0],
+    combDepth: 0.4,
+    flight: [1, 1, 0, 0],
+    flightChance: 0.06,
+    flightHours: [12, 16] as [number, number],
+    mature: 0.2,
+    flightTime: [30, 60] as [number, number],
+    evict: [0, 0, 0.03, 0.3],
+    drop: { x: -60, z: 0 },
+    dropR: 30,
+    die: [60, 180] as [number, number],
   },
   /** 花园：边长 size 的正方形，蜂箱在中心；地面起伏的幅度，离蜂箱 flatR 以内是平的；外面的平地铺到 horizon */
   garden: { size: 6000, bump: 6, flatR: 60, horizon: 16000 },

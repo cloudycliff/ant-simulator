@@ -377,8 +377,8 @@ export class Comb {
     this.version++;
   }
 
-  /** 位置加高 d，造好时旁边还没有的位置开始造 */
-  buildUp(site: number, d: number, start: number): void {
+  /** 位置加高 d，造好时旁边还没有的位置开始造；drone 为真的造成雄蜂房（T-028） */
+  buildUp(site: number, d: number, start: number, drone?: (site: number) => boolean): void {
     const b = this.build[site];
     if (b <= 0 || b >= 1) return;
     this.build[site] = Math.min(1, b + d * (this.repair[site] ? CONFIG.keeper.repairBoost : 1));
@@ -389,6 +389,7 @@ export class Comb {
       for (const n of siteNeighbors(site, this.nb))
         if (this.build[n] <= 0) {
           this.build[n] = start;
+          this.drone[n] = drone?.(n) ? 1 : 0;
           grew = true;
         }
       if (grew) this.shape++;

@@ -71,6 +71,8 @@ export class BeeWorld extends Simulation<BeeRef> {
       laying: () => this.clock.seasonalValue(CONFIG.seasons.laying),
       broodZone: () => this.clock.seasonalValue(CONFIG.seasons.broodZone),
       aging: () => this.clock.seasonalValue(CONFIG.seasons.aging),
+      seasonal: (v) => this.clock.seasonalValue(v),
+      log: (msg, id) => this.events.push(msg, id === undefined ? { kind: 'hive', id: 0 } : { kind: 'bee', id }),
     });
     this.hornets = new Hornets(this.rng, () => this.ids.next('hornet'), CONFIG.clock.dayLength, {
       bees: this.bees,

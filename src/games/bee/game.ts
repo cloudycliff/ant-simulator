@@ -481,7 +481,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.sacbrood', w.pests.outbreaks)}${stat('total.sacs', w.pests.sacs)}
         ${stat('total.absconds', w.abscond.absconds)}${stat('total.moveIns', w.abscond.moveIns)}
         ${stat('total.swarms', w.swarming.swarms)}${stat('total.swarmLeft', w.swarming.left)}
-        ${stat('total.queens', w.swarming.queens)}
+        ${stat('total.queens', w.swarming.queens)}${stat('total.evicted', w.bees.evicted)}
       </div>`;
       },
     },
