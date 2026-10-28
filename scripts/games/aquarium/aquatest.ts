@@ -27,6 +27,17 @@ const t0 = performance.now();
 const w = new Tank(7);
 run(w, 60);
 check('一分钟后鱼都在缸里', inside(w));
+{
+  // 季节（T-076）：开局是春天；不改秒数跳到冬天，水温跟着降，跳过的季节进存档
+  const z = new Tank(3);
+  const spring = z.waterTemp();
+  const first = z.clock.season;
+  z.clock.setSeason('winter');
+  const winter = z.waterTemp();
+  const back = new Tank(3);
+  aqSave.read(back, JSON.parse(JSON.stringify(aqSave.write(z, 1))) as AqSaveData);
+  check('季节：开局是春天，冬天水温低，跳过的季节进存档', first === 'spring' && winter < spring - 2 && back.clock.season === 'winter' && z.clock.seconds === 0, `${spring.toFixed(1)} → ${winter.toFixed(1)} °C`);
+}
 
 const unfed = new Tank(7);
 run(unfed, 60);

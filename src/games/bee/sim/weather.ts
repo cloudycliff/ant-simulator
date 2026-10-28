@@ -1,9 +1,11 @@
 import { L, type Text } from '../../../core/i18n';
+import type { SimClock } from '../../../core/sim/clock';
 import { TAU } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 
 const W = CONFIG.weather;
+const S = CONFIG.seasons;
 
 export type WeatherPhase = 'clear' | 'overcast' | 'rain';
 
@@ -21,7 +23,7 @@ export interface WeatherSave {
 
 /**
  * 天气：晴 → 转阴 → 阵雨 → 放晴，平均 rainPerDay 天一场。转阴就不再出巢，下雨时在外面的蜂都飞回来，
- * 雨把花里的花蜜冲淡（T-020）。气温按时刻走一条日变化的曲线，阴雨时低几度
+ * 雨把花里的花蜜冲淡（T-020）。气温按时刻走一条日变化的曲线，冷热随季节（P-015），阴雨时低几度；太冷了也不出巢
  */
 export class Weather {
   phase: WeatherPhase = 'clear';
@@ -40,13 +42,18 @@ export class Weather {
   constructor(
     private readonly rng: Rng,
     private readonly dayLength: number,
-    private readonly clock: { totalDays: number; hour: number },
+    private readonly clock: SimClock,
     private readonly log: (msg: Text) => void,
   ) {}
 
-  /** 能不能出巢：转阴、下雨都不出去 */
+  /** 能不能出巢：转阴、下雨、低于 flyMin 都不出去 */
   get flyable(): boolean {
-    return this.phase === 'clear';
+    return this.phase === 'clear' && !this.cold;
+  }
+
+  /** 冷得飞不了 */
+  get cold(): boolean {
+    return this.air(this.clock.hour) < S.flyMin;
   }
 
   get label(): Text {
@@ -55,10 +62,12 @@ export class Weather {
     return L('weather.clear');
   }
 
-  /** 气温（°C）：清早最低、下午两点最高，阴雨按云量降温 */
+  /** 气温（°C）：清早最低、下午两点最高，冷热随季节，阴雨按云量降温 */
   air(hour: number): number {
     const k = (Math.cos(((hour - W.warmest) / 24) * TAU) + 1) / 2;
-    return W.air[0] + (W.air[1] - W.air[0]) * k + this.warm - W.rainCool * this.cloud;
+    const lo = this.clock.seasonalValue(S.airLo);
+    const hi = this.clock.seasonalValue(S.airHi);
+    return lo + (hi - lo) * k + this.warm - W.rainCool * this.cloud;
   }
 
   /** 马上转阴、接着下雨；now 为真时直接下起来（测试、截图用） */
@@ -86,7 +95,7 @@ export class Weather {
         // 夏天的阵雨多在午后
         const h = this.clock.hour;
         const k = h >= W.showers[0] && h < W.showers[1] ? W.showerPeak : W.showerOff;
-        if (this.clock.totalDays >= W.firstRainDay && this.rng.chance((W.rainPerDay / 24) * k)) this.setPhase('overcast');
+        if (this.clock.totalDays >= W.firstRainDay && this.rng.chance((this.clock.seasonalValue(S.rain) / 24) * k)) this.setPhase('overcast');
       }
     } else if (this.phaseT <= 0) this.setPhase(this.phase === 'overcast' ? 'rain' : 'clear');
     const wantRain = this.phase === 'rain' ? this.strength : 0;

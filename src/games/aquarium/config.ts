@@ -4,8 +4,12 @@ export type Species = 'neon' | 'angel' | 'cory';
 
 /** 长度单位是厘米，时间单位是模拟秒 */
 export const CONFIG = {
-  /** 一天 20 分钟，早上 9 点开局 */
-  clock: { dayLength: 1200, startHour: 9 },
+  /**
+   * 一天 20 分钟，早上 9 点开局。季节（T-076，检验框架的日历）：一季 2 天，开局在春天第一天；
+   * 缸里没有加热棒，水温跟着屋里的季节走，roomTemp 是春夏秋冬各差几度
+   */
+  clock: { dayLength: 1200, startHour: 9, calendar: { lengths: [2, 2, 2, 2] as [number, number, number, number], start: 0 } },
+  roomTemp: [0, 1.5, -0.5, -2.5],
   /** 鱼缸内部：x 在 ±w/2、z 在 ±d/2，y 从缸底 0 到缸口 h；水面高 water，沙层平均厚 sand */
   tank: { w: 120, d: 50, h: 60, water: 54, sand: 5 },
   /** 鱼缸灯几点开、几点关，开关时渐变几小时 */

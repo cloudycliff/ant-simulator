@@ -52,6 +52,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'tank.food': 'Food in the water',
   'tank.bottom': 'On the bottom',
   'tank.flakes': (p) => `${p.n} ${pl(p.n, 'flake', 'flakes')}`,
+  'tank.season': 'Season',
   'tank.light': 'Tank light',
   'tank.lightOn': 'On, off at {time}',
   'tank.lightOff': 'Off, on at {time}',

@@ -117,6 +117,13 @@ const SCENES = {
   // 现实里的养蜂那一组：翻到“中蜂和西方蜜蜂”
   notesreal: { q: '&hour=11', fresh: true, js: `${NOTED}; hud.notes.learn('cerana'); hud.notes.learn('honeyPlan'); hud.toggleNotes(); hud.openNote(hud.notes.def.entries.findIndex((e) => e.id === 'cerana'))`, check: NOTES },
   notesrealen: { q: '&hour=11&lang=en', fresh: true, js: `${NOTED}; hud.notes.learn('cerana'); hud.notes.learn('honeyPlan'); hud.toggleNotes(); hud.openNote(hud.notes.def.entries.findIndex((e) => e.id === 'honeyPlan'))`, check: NOTES },
+  // 季节（P-015）：跳到春、秋、冬看花园；油菜、荞麦的信息面板
+  springgarden: { q: '&hour=12&season=spring:3&cam=0,400,900,0,40,-200', check: `world.clock.season + ' ' + world.flowers.patches.filter((p) => world.flowers.open(p, 12) > 0).length` },
+  autumngarden: { q: '&hour=12&season=autumn:3&cam=0,400,900,0,40,-200' },
+  wintergarden: { q: '&hour=12&season=winter:3&cam=0,400,900,0,40,-200' },
+  rapeseed: { q: '&hour=11&season=spring:3&select=flower:10&fly=1', check: INFO },
+  buckwheat: { q: '&hour=11&season=autumn:3&select=flower:11&fly=1', check: INFO },
+  winterhive: { q: '&hour=12&season=winter:3&select=hive:0', check: INFO },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

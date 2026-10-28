@@ -1,5 +1,6 @@
 import { L, t, type Text } from '../../core/i18n';
 import { SaveSlot, type SaveMeta } from '../../core/platform/saveSlot';
+import { SEASONS } from '../../core/sim/clock';
 import type { Point3 } from '../../core/sim/events';
 import { Simulation } from '../../core/sim/simulation';
 import { clamp } from '../../core/util/math';
@@ -22,7 +23,7 @@ export type BeeRef = { kind: 'hive'; id: number } | { kind: 'cell'; id: number }
 /** 花园和观察箱。地形由编号生成，不进存档 */
 export class BeeWorld extends Simulation<BeeRef> {
   readonly comb = new Comb();
-  readonly flowers = new Flowers();
+  readonly flowers = new Flowers(this.clock);
   readonly bees: Bees;
   readonly weather: Weather;
   readonly heat = new Heat();
@@ -33,9 +34,12 @@ export class BeeWorld extends Simulation<BeeRef> {
   private noise: Noise2D;
   private followPos: Point3 = { x: 0, y: 0, z: 0 };
   private broodClock = 0;
+  /** 上一步是哪一季，换季时记一条事件 */
+  private seasonWas: number;
 
   constructor(readonly seed: number) {
-    super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed);
+    super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed, CONFIG.clock.calendar);
+    this.seasonWas = this.clock.seasonIndex;
     this.noise = new Noise2D(seed);
     const H = CONFIG.hive;
     this.comb.generate(this.rng, seed);
@@ -48,7 +52,7 @@ export class BeeWorld extends Simulation<BeeRef> {
       ground: (x, z) => this.groundAt(x, z),
       flyable: () => this.weather.flyable,
       heat: this.heat,
-      recall: () => (this.weather.phase === 'rain' ? CONFIG.weather.recall[1] : this.weather.phase === 'overcast' ? CONFIG.weather.recall[0] : 0),
+      recall: () => (this.weather.phase === 'rain' || this.weather.cold ? CONFIG.weather.recall[1] : this.weather.phase === 'overcast' ? CONFIG.weather.recall[0] : 0),
       hornets: {
         threat: () => this.hornets.threat(),
         danger: () => this.hornets.danger(),
@@ -59,6 +63,9 @@ export class BeeWorld extends Simulation<BeeRef> {
       infect: (cell) => this.pests.infect(cell),
       swarm: () => this.abscond.swarm,
       unrest: () => this.abscond.unrest,
+      laying: () => this.clock.seasonalValue(CONFIG.seasons.laying),
+      broodZone: () => this.clock.seasonalValue(CONFIG.seasons.broodZone),
+      aging: () => this.clock.seasonalValue(CONFIG.seasons.aging),
     });
     this.hornets = new Hornets(this.rng, () => this.ids.next('hornet'), CONFIG.clock.dayLength, {
       bees: this.bees,
@@ -86,6 +93,7 @@ export class BeeWorld extends Simulation<BeeRef> {
       log: (msg) => this.events.push(msg, { kind: 'hive', id: 0 }),
     });
     this.bees.generate();
+    this.flowers.generateExtra(this.rng, () => this.ids.next('flower'));
     this.heat.update(0, this.weather.air(this.clock.hour), this.bees.list, this.comb);
     this.addSystem('brood', (dt) => {
       this.broodClock += dt;
@@ -111,6 +119,12 @@ export class BeeWorld extends Simulation<BeeRef> {
       );
       this.broodClock = 0;
     });
+    this.addSystem('season', () => {
+      const s = this.clock.seasonIndex;
+      if (s === this.seasonWas) return;
+      this.seasonWas = s;
+      this.events.push(L(`ev.season.${SEASONS[s]}`));
+    });
     this.addSystem('weather', (dt) => this.weather.update(dt));
     this.addSystem('heat', (dt) => this.heat.update(dt, this.weather.air(this.clock.hour), this.bees.list, this.comb));
     this.addSystem('bees', (dt) => this.bees.update(dt));
@@ -126,6 +140,12 @@ export class BeeWorld extends Simulation<BeeRef> {
         this.comb.restore(d);
         this.broodClock = d.clock;
       },
+    );
+    this.saves.add(
+      'season',
+      () => this.seasonWas,
+      (d: number) => (this.seasonWas = d),
+      true,
     );
     this.saves.add(
       'bees',

@@ -72,6 +72,18 @@ export const FLOWER_COLORS: Record<string, { leaf: number; bloom: number; tint: 
   lavender: { leaf: 0x7f9c7a, bloom: 0x8b6cd0, tint: 0x9a86c8 },
   corn: { leaf: 0x5f9032, bloom: 0xd8c47c, tint: 0x86a848 },
   sugar: { leaf: 0x8a6238, bloom: 0xe8b85a, tint: 0x9a8a60 },
+  rapeseed: { leaf: 0x5a8a3a, bloom: 0xf2d41c, tint: 0xd8c434 },
+  buckwheat: { leaf: 0x6a8a3a, bloom: 0xf4ecee, tint: 0xc8b8b8 },
+};
+
+/**
+ * 季节的颜色（P-015），春夏秋冬：草、地面乘的颜色，树冠的颜色。夏天是 1（和没有季节时一样），
+ * 秋天草发黄、树叶转红，冬天草枯、树冠发灰
+ */
+export const SEASON_COLORS = {
+  grass: [0xeaffd8, 0xffffff, 0xffd890, 0xc8b49a],
+  ground: [0xf0ffe8, 0xffffff, 0xfff0c8, 0xd8ccb8],
+  crown: [0x4c8a32, 0x3a6a2a, 0xa8642a, 0x5e5a48],
 };
 
 /** 温度视图的色阶（°C, 颜色）：冷的蓝、子正好的绿、热的橙红；中间按温度插值 */

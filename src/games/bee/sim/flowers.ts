@@ -1,3 +1,4 @@
+import type { SimClock } from '../../../core/sim/clock';
 import type { Point3 } from '../../../core/sim/events';
 import { smoothstep } from '../../../core/util/math';
 import { Rng } from '../../../core/util/random';
@@ -33,10 +34,13 @@ export function openness(sp: FlowerSpecies, hour: number): number {
   return smoothstep(a - sp.ramp, a, hour) * (1 - smoothstep(b, b + sp.ramp, hour));
 }
 
-/** 这片花丛此刻开了多少：还没长成的不开 */
-export function patchOpenness(p: FlowerPatch, hour: number): number {
-  return p.grown < 1 ? 0 : openness(F.species[p.species], hour);
+/** 这片花丛此刻开了多少：还没长成的不开；bloom 是这一季开花的多少（Flowers.bloom） */
+export function patchOpenness(p: FlowerPatch, hour: number, bloom = 1): number {
+  return p.grown < 1 ? 0 : openness(F.species[p.species], hour) * bloom;
 }
+
+/** 这种花在哪几季开（bloom 过半的季节，0 春 1 夏 2 秋 3 冬） */
+export const bloomSeasons = (sp: FlowerSpecies) => sp.bloom.flatMap((b, i) => (b >= 0.5 ? [i] : []));
 
 const plantCache = new Map<number, Float32Array>();
 
@@ -109,17 +113,43 @@ export interface FlowerSave {
   patches: FlowerPatch[];
 }
 
-/** 花园里的花丛：按时刻开合，开着时花蜜和花粉慢慢长回来 */
+/** 花园里的花丛：按时刻开合、按季节开花（P-015），开着时花蜜和花粉慢慢长回来 */
 export class Flowers {
   readonly patches: FlowerPatch[] = [];
   /** 花丛加了或者读了档就加一，画面看它重建 */
   version = 0;
 
-  /** 开局的花丛：每种花至少一片，散在蜂箱周围，互不重叠 */
+  constructor(private readonly clock: Pick<SimClock, 'seasonalValue'>) {}
+
+  /** 这种花这一季开花的多少，0..1 */
+  bloomOf(species: number): number {
+    return this.clock.seasonalValue(F.species[species].bloom);
+  }
+
+  /** 这种花这一季茎叶长得多大，0..1 */
+  leafyOf(species: number): number {
+    return this.clock.seasonalValue(F.species[species].leafy);
+  }
+
+  /** 这片花丛此刻开了多少：时刻、长成和季节都算上 */
+  open(p: FlowerPatch, hour: number): number {
+    return patchOpenness(p, hour, this.bloomOf(p.species));
+  }
+
+  /** 开局的花丛：每种野花至少一片，散在蜂箱周围，互不重叠 */
   generate(rng: Rng, nextId: () => number): void {
     const wild = F.species.map((_, i) => i).filter((i) => F.species[i].wild);
     const kinds = [...wild];
     while (kinds.length < F.patches) kinds.push(wild[rng.int(0, wild.length - 1)]);
+    this.scatter(rng, nextId, kinds);
+  }
+
+  /** 开局的 extra 花丛（油菜、荞麦）各一片；世界在别的东西都生成好以后才调，前面的随机数和没有它们时一样 */
+  generateExtra(rng: Rng, nextId: () => number): void {
+    this.scatter(rng, nextId, F.extra.map((k) => SPECIES_KEYS.indexOf(k)));
+  }
+
+  private scatter(rng: Rng, nextId: () => number, kinds: number[]): void {
     const lim = CONFIG.garden.size / 2 - F.margin;
     for (const species of kinds) {
       const sp = F.species[species];
@@ -156,16 +186,16 @@ export class Flowers {
       if (sp.refill <= 0) continue;
       p.nectar *= wash;
       p.pollen *= wash;
-      const k = openness(sp, hour) * (1 - rain);
+      const k = openness(sp, hour) * (1 - rain) * this.bloomOf(p.species);
       if (k <= 0) continue;
       p.nectar = Math.min(nectarCap(p), p.nectar + (nectarCap(p) * k * dt) / sp.refill);
       p.pollen = Math.min(pollenCap(p), p.pollen + (pollenCap(p) * k * dt) / sp.refill);
     }
   }
 
-  /** 采走最多 want 份花蜜或花粉，返回实际采到的；没开的花采不到，半开时只采得到相应的一部分 */
+  /** 采走最多 want 份花蜜或花粉，返回实际采到的；没开的花（夜里、不在花期）采不到，半开时只采得到相应的一部分 */
   take(p: FlowerPatch, what: 'nectar' | 'pollen', want: number, hour: number): number {
-    const k = patchOpenness(p, hour);
+    const k = this.open(p, hour);
     const got = Math.max(0, Math.min(want, p[what] * k));
     p[what] -= got;
     return got;

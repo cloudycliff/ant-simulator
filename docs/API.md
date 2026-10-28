@@ -12,17 +12,22 @@
 
 #### `core/sim/simulation.ts`
 
-- `Simulation<R>`：游戏世界的基类，`super(一天的秒数, 开局时刻, 种子)`。不依赖 DOM 和渲染，无界面测试直接 `new` 出来跑
+- `Simulation<R>`：游戏世界的基类，`super(一天的秒数, 开局时刻, 种子, 日历?)`；日历见 `Calendar`，不给就冻在夏天。不依赖 DOM 和渲染，无界面测试直接 `new` 出来跑
   - `clock`、`rng`、`ids`、`saves`、`entities`、`events`，各自见下面的文件
   - `addSystem(name, update)`：登记每个模拟步调用一次的子系统，按登记顺序调用
   - `advance(realDt, budgetMs?, maxSteps?)`：推进现实时间 `realDt` 秒（乘以倍速），每步 `ENGINE.loop.fixedStep` 秒。一帧耗时超过 `budgetMs` 就丢掉没算完的时间，这时 `effectiveSpeed`（实际倍速）低于设定倍速；`lastSteps` 是这一帧走了几步。暂停时什么都不做
   - `alpha`：上一步之后攒下、还不够一步的时间占一步的几成（0..1），画面拿它在上一步和这一步的位置之间插值
-  - 内核自己登记了三个存档部分：`clock` 最先恢复，`rng` 和 `ids` 在其他部分之后恢复
+  - 内核自己登记了三个存档部分：`clock` 最先恢复（季节在变时带上 `yearStart`，冻住的日历不写，存档和以前一样），`rng` 和 `ids` 在其他部分之后恢复
 - `SimSystem`：`systems` 里的一项 `{ name, update }`。`update` 可以被替换，`perftest` 用它统计各子系统的耗时
 
 #### `core/sim/clock.ts`
 
 - `SimClock`：`seconds`（开局以来的模拟秒数）、`speed`、`paused`、`dayLength`；`day`（从 1 起）、`hour`（0–24）、`totalDays`、`sunElevation`（-1..1，正午为 1）、`sunAzimuth`（太阳的水平方位 atan2(z, x)）、`daylight`（0 深夜到 1 白天）、`isNight`；`stamp()` / `stampAt(秒数)` 返回“第 3 天 14:20”这样的 `Text`
+  - 季节（T-076）：`calendar`、`yearLength`、`yearStart`（第一天 0 点在一年里的第几天，进存档）；`seasonal`（季节在变）、`year`（从 1 起）、`yearDays`（这一年过了几天）、`seasonIndex`（0 春 1 夏 2 秋 3 冬）、`season`、`seasonDays`（这一季过了几天，带小数）、`seasonDay`（从 1 起）、`seasonLength`
+  - `seasonalValue(春夏秋冬四个值, blend = 1)`：按季节取值，一季的最后 `blend` 天里慢慢变到下一季的值，一季的头一天全是这一季的值；冻住的日历一直取那一季的
+  - `setSeason(season, day = 0)`：跳到某一季的第 `day` 天（从 0 起），时刻、`seconds` 不变，改的是 `yearStart`；冻住的日历不动。调试、截图用
+  - `seasonStamp()`：“夏天第 3 天”这样的 `Text`（`time.seasonDay`），冻住的日历只有季节的名字（`season.*`）
+- `SEASONS`（`['spring', 'summer', 'autumn', 'winter']`）、`Season`；`Calendar`：`{ lengths: 春夏秋冬各几个游戏日, start: 第一天 0 点在一年里的第几天（春天第一天的 0 点是 0）, frozen?: 冻在哪一季 }`
 - `sunDirection(hour, out?)`：那个时刻朝着太阳的单位向量（6 点从 +x 升起，正午偏 +z）。`Environment` 画的太阳也用它，模拟里要按太阳定方向时用同一个
 
 #### `core/sim/saves.ts`

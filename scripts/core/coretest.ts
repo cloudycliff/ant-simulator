@@ -266,6 +266,34 @@ const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) < eps;
   check('时钟由内核自己存档', near(saved.clock.seconds, sim.clock.seconds, 1e-9) && saved.clock.speed === 10);
 }
 
+// ---------------- 季节的日历 ----------------
+{
+  // 一天 100 秒，早上 6 点开局，春夏秋冬各 2 天，开局在夏天第一天
+  const w = new Simulation(100, 6, 1, { lengths: [2, 2, 2, 2], start: 2 });
+  const c = w.clock;
+  check('开局在夏天第一天、第一年', c.season === 'summer' && c.seasonDay === 1 && c.year === 1 && near(c.yearDays, 2.25), [c.season, c.seasonDay, c.yearDays]);
+  const v = [10, 20, 30, 40];
+  check('一季的头一天就是这一季的值', c.seasonalValue(v) === 20);
+  c.seconds = 100 * 1.25;
+  check('一季最后一天慢慢变到下一季', c.season === 'summer' && near(c.seasonalValue(v), 25), c.seasonalValue(v));
+  c.seconds = 100 * 5.75;
+  check('过了冬天是第二年的春天', c.season === 'spring' && c.year === 2 && c.seasonDay === 1, [c.season, c.year]);
+  check('冬天的最后一天变回春天的值', near(new Simulation(100, 12, 1, { lengths: [2, 2, 2, 2], start: 7 }).clock.seasonalValue(v), 25));
+  const before = c.seconds;
+  const hour = c.hour;
+  c.setSeason('winter', 1);
+  check('跳到冬天第二天：时刻、秒数不变', c.season === 'winter' && c.seasonDay === 2 && c.seconds === before && near(c.hour, hour), [c.season, c.seasonDay]);
+  const saved = JSON.parse(JSON.stringify(w.saves.save())) as Record<string, unknown>;
+  const w2 = new Simulation(100, 6, 1, { lengths: [2, 2, 2, 2], start: 2 });
+  w2.saves.restore(saved);
+  check('跳过的季节进存档', w2.clock.season === 'winter' && w2.clock.seasonDay === 2);
+  check('季节的名字', tr(c.seasonStamp()).length > 0 && c.seasonStamp().k === 'time.seasonDay');
+  const plain = new Simulation(100, 6, 1);
+  plain.clock.seconds = 100 * 37;
+  plain.clock.setSeason('winter');
+  check('没给日历的时钟一直是夏天，存档里没有 yearStart', plain.clock.season === 'summer' && !plain.clock.seasonal && plain.clock.seasonalValue(v) === 20 && !('yearStart' in (plain.saves.save().clock as object)));
+}
+
 // ---------------- 词典登记 ----------------
 {
   let threw = false;

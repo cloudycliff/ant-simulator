@@ -7,9 +7,9 @@ import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteU, siteV, type Comb } from './comb';
 import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './flight';
-import { landingPoint, patchOpenness, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
+import { landingPoint, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
-import { HEAT, heatAt, type Heat } from './heat';
+import { HEAT, SITE_HEAT, heatAt, type Heat } from './heat';
 import type { SwarmState } from './abscond';
 
 const B = CONFIG.bees;
@@ -308,6 +308,10 @@ export interface BeeEnv {
   /** 飞逃、搬进来的蜂群在哪（T-025）；飞逃的征兆有多重（0..1） */
   swarm(): SwarmState;
   unrest(): number;
+  /** 这一季蜂王产卵的多少（0..1）、产卵范围乘几、工蜂和雄蜂老得多快（P-015） */
+  laying(): number;
+  broodZone(): number;
+  aging(): number;
 }
 
 /**
@@ -510,13 +514,15 @@ export class Bees {
     }
     let dead = 0;
     const recall = this.env.recall() * dt;
+    const aging = this.env.aging();
     for (const b of this.list) {
       b.waggle = 0;
       b.prev.x = b.pos.x;
       b.prev.y = b.pos.y;
       b.prev.z = b.pos.z;
-      b.age += dt;
-      if (b.caste === CASTE.worker) b.dev += dt * this.pace[roleIndex(b.dev)];
+      const old = b.caste === CASTE.queen ? dt : dt * aging;
+      b.age += old;
+      if (b.caste === CASTE.worker) b.dev += old * this.pace[roleIndex(b.dev)];
       if (b.caste !== CASTE.queen) {
         b.crop = Math.max(0, b.crop - dt / (b.out === 2 ? F.flyBurn : b.caste === CASTE.drone ? B.droneBurn : B.burn));
         b.fast = b.crop > 0 ? 0 : b.fast + dt;
@@ -1177,17 +1183,22 @@ export class Bees {
       let drones = 0;
       for (let c = 0; c < CELLS; c++) if (cb.drone[cellSite(c)] && cb.content[c] >= CELL.egg && cb.content[c] <= CELL.capped) drones++;
       this.droneOk = drones < C.droneBrood;
-      // 蜂王在育儿区里找空房，育儿区里没有了才去别处
+      // 蜂王在育儿区里找空房，育儿区里没有了才去别处；只在蜂焐得热的地方产（天凉时育儿区跟着蜂的多少缩小）
       const O = CONFIG.opening.brood;
+      const zone = C.queen * this.env.broodZone();
+      const temp = this.env.heat.temp;
+      const warm = (c: number) => this.isLayable(c) && temp[SITE_HEAT[cellSite(c)]] >= C.layWarm;
       let found = 0;
       for (let c = 0; c < CELLS; c++) {
         const s = cellSite(c);
-        if (this.isLayable(c) && Math.hypot((siteU(s) - O.u) / (O.ru * C.queen), (siteV(s) - O.v) / (O.rv * C.queen)) < 1) {
+        if (warm(c) && Math.hypot((siteU(s) - O.u) / (O.ru * zone), (siteV(s) - O.v) / (O.rv * zone)) < 1) {
           found++;
           yield cellNode(c);
         }
       }
       if (found) return;
+      for (let c = 0; c < CELLS; c++) if (warm(c)) yield cellNode(c);
+      return;
     }
     const want = {
       larvae: this.isHungryLarva,
@@ -1252,7 +1263,9 @@ export class Bees {
     if (b.caste === CASTE.drone) return yield* this.idle(b, 0.6);
     const role = roleOf(b);
     // 子脾冷了年轻的蜂去抱团产热，热了去巢门扇风（T-021）
-    if (this.coldNeed > 0 && b.load <= 0 && (role === 'cleaner' || role === 'house') && this.rng.chance(this.coldNeed * HT.heaters)) return yield* this.warm(b);
+    // 过冬后的蜂大多是老蜂，采集蜂、守卫也来，机会少一些
+    const heaters = role === 'cleaner' || role === 'house' ? HT.heaters : role === 'nurse' ? 0 : HT.oldHeaters;
+    if (this.coldNeed > 0 && b.load <= 0 && this.rng.chance(this.coldNeed * heaters)) return yield* this.warm(b);
     if (this.hotNeed > 0 && b.load <= 0 && (role === 'house' || role === 'guard') && this.rng.chance(this.hotNeed * HT.fanners)) return yield* this.fan(b);
     switch (role) {
       case 'cleaner':
@@ -1285,7 +1298,7 @@ export class Bees {
     return yield* this.lookForWork(b);
   }
 
-  private isOpen = (p: FlowerPatch) => patchOpenness(p, this.env.hour()) >= F.minOpen;
+  private isOpen = (p: FlowerPatch) => this.env.flowers.open(p, this.env.hour()) >= F.minOpen;
 
   /** 认得的花丛开着就去；合上了有时忘了它 */
   private pickPatch(b: Bee): FlowerPatch | null {
@@ -1604,6 +1617,8 @@ export class Bees {
 
   private *queenTask(b: Bee): Routine {
     if (this.rng.chance(this.env.unrest() * U.stopLaying)) return yield* this.idle(b, 0.8);
+    const laying = this.env.laying();
+    if (laying < 1 && !this.rng.chance(laying)) return yield* this.idle(b, 0.8);
     const cell = yield* this.seek(b, 'layable', this.isLayable, 'seek');
     if (cell < 0) return yield* this.idle(b, 0.8);
     yield* this.work(b, cell, 'inspect', C.inspect);

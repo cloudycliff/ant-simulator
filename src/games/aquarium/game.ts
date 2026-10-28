@@ -151,6 +151,7 @@ function tankUi(tank: Tank, view: TankView, following: () => boolean): GameUi<Aq
       ${row(t('tank.food'), t('tank.flakes', { n: tank.food.length }))}
       <div class="row sub">${t('tank.bottom')}<b>${t('tank.flakes', { n: bottom })}</b></div>
       ${row(t('tank.light'), t(lit ? 'tank.lightOn' : 'tank.lightOff', { time: clockAt(lit ? CONFIG.light.off : CONFIG.light.on) }))}
+      ${row(t('tank.season'), cap(tr(tank.clock.seasonStamp())))}
       <h3>${t('tank.totals')}</h3>
       <div class="grid">
         <span>${t('stat.feeds')}</span><b>${st.feeds}</b><span>${t('stat.eaten')}</span><b>${st.eaten}</b>

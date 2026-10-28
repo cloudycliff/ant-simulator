@@ -94,7 +94,12 @@ for (let cell = 0; cell < CELLS; cell += 37) {
 check('斜着点巢房选中的是那一个', pickBad === 0, `${picked} 个里 ${pickBad} 个不对`);
 const F = CONFIG.flowers;
 const patches = w.flowers.patches;
-check('花丛：片数对、每种野花都有、没有糖水', patches.length === F.patches && F.species.every((s, i) => !s.wild || patches.some((p) => p.species === i)) && patches.every((p) => F.species[p.species].wild), patches.map((p) => SPECIES_KEYS[p.species]).join(' '));
+const extra = F.extra.map((k) => SPECIES_KEYS.indexOf(k));
+check(
+  '花丛：片数对、每种野花都有、油菜和荞麦各一片、没有糖水',
+  patches.length === F.patches + extra.length && F.species.every((s, i) => !s.wild || patches.some((p) => p.species === i)) && extra.every((i) => patches.filter((p) => p.species === i).length === 1) && patches.every((p) => p.species !== SUGAR),
+  patches.map((p) => SPECIES_KEYS[p.species]).join(' '),
+);
 const lim = CONFIG.garden.size / 2 - F.margin;
 const misplaced = patches.filter((p) => {
   const d = Math.hypot(p.x, p.z);
@@ -115,7 +120,7 @@ const emptied = patches.find((q) => nectarCap(q) > 0)!;
   check('花没开时采不到', w.flowers.take(p, 'nectar', 1, 23) === 0 && w.flowers.take(p, 'pollen', 1, 23) === 0);
 }
 // 长回来单独用一份花丛算，世界里的花丛白天有蜂在采
-const regrow = new Flowers();
+const regrow = new Flowers(w.clock);
 regrow.patches.push({ ...emptied, nectar: 0 });
 for (let s = 0; s < CONFIG.clock.dayLength; s++) regrow.update(1, (9 + (s / CONFIG.clock.dayLength) * 24) % 24);
 const regrown = regrow.patches[0];
@@ -279,6 +284,31 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   check('读档后种的花、糖水一样', JSON.stringify(y.flowers.patches) === JSON.stringify(fl.patches) && JSON.stringify(beeSave.write(y, 1)) === saved);
 }
 {
+  // 季节（P-015）：开局是夏天第一天；跳到别的季节（不改秒数），气温、花期、产卵、能不能飞跟着变，换季记事件
+  const x = new BeeWorld(7);
+  const air = () => [x.weather.air(4), x.weather.air(14)];
+  const opened = () => x.flowers.patches.filter((p) => x.flowers.open(p, 12) > 0).map((p) => SPECIES_KEYS[p.species]);
+  const summer = air();
+  const sOpen = opened();
+  const first = x.clock.season === 'summer' && x.clock.seasonDay === 1 && x.clock.year === 1;
+  x.clock.setSeason('autumn');
+  x.advance(1, Infinity, Infinity);
+  const told = x.events.entries.some((e) => e.msg.k === 'ev.season.autumn');
+  const aOpen = opened();
+  x.clock.setSeason('winter');
+  const winter = air();
+  const wOpen = opened();
+  const lay = x.clock.seasonalValue(CONFIG.seasons.laying);
+  const cold = x.weather.air(7) < CONFIG.seasons.flyMin && x.weather.flyable === (x.weather.phase === 'clear' && x.weather.air(x.clock.hour) >= CONFIG.seasons.flyMin);
+  x.clock.setSeason('spring');
+  const pOpen = opened();
+  check(
+    '季节：开局夏天；秋天开荞麦、冬天没有花也不产卵、冷得飞不了、春天开油菜；换季记事件',
+    first && told && sOpen.includes('sunflower') && !sOpen.includes('rapeseed') && !sOpen.includes('buckwheat') && aOpen.includes('buckwheat') && !aOpen.includes('rapeseed') && wOpen.length === 0 && lay === 0 && cold && winter[1] < summer[0] && pOpen.includes('rapeseed') && !pOpen.includes('buckwheat') && !pOpen.includes('sunflower'),
+    `夏 ${summer.map((v) => v.toFixed(0)).join('~')} °C ${sOpen.length} 片开着；秋 ${aOpen.join(' ')}；冬 ${winter.map((v) => v.toFixed(0)).join('~')} °C；春 ${pOpen.join(' ')}`,
+  );
+}
+{
   // 天气：中午下一场雨。另开一个世界
   const x = new BeeWorld(7);
   const Wx = x.weather;
@@ -342,9 +372,16 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   H.spawn(2);
   const land = CONFIG.hornets.land;
   CONFIG.hornets.land = 0;
-  run(x, 20);
+  // 抓到蜂的会带着飞走，看这 20 秒里最多的时候
+  let danger = 0;
+  let shimmer = 0;
+  for (let s = 0; s < 20; s++) {
+    run(x, 1);
+    danger = Math.max(danger, H.danger());
+    shimmer = Math.max(shimmer, x.bees.shimmering);
+  }
   for (const b of x.bees.list) seen.add(b.act);
-  check('胡蜂：飞到巢门外悬停，守卫抖翅、采集蜂不敢出去', H.list.every((h) => h.state === 'hawk' || h.state === 'strike') && x.bees.shimmering > 10 && H.danger() > 0.5, `${H.list.map((h) => h.state).join(' ')}，抖翅 ${x.bees.shimmering} 只，不出巢的机会 ${H.danger().toFixed(2)}`);
+  check('胡蜂：飞到巢门外悬停，守卫抖翅、采集蜂不敢出去', H.list.some((h) => h.state === 'hawk' || h.state === 'strike') && shimmer > 10 && danger > 0.5, `${H.list.map((h) => h.state).join(' ')}，抖翅最多 ${shimmer} 只，不出巢的机会最多 ${danger.toFixed(2)}`);
   for (const h of H.list) h.left = 1e9;
   run(x, 120);
   const caught = H.caught;
@@ -483,9 +520,9 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   const moved = P.worms.some((m) => m.site !== start);
   check('巢虫：从巢脾边钻进去，在房底下打隧道留下丝', moved && silk > 5, `${P.worms.length} 条还在，${silk} 房有丝，白头蛹 ${P.bald}`);
   // 只看这一次发病：不让它每天自己再发
-  const SB = CONFIG.pests.sacbrood as { days: number };
-  const days = SB.days;
-  SB.days = 0;
+  const SB = CONFIG.seasons.sacbrood as number[];
+  const days = [...SB];
+  SB.fill(0);
   P.outbreak();
   const infected = P.infected;
   fast(x, 30);
@@ -514,7 +551,7 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   check('巢虫：蜂多的群里大多被拖出去', P.removed + P.matured >= P.hatched / 2, `孵出 ${P.hatched}，拖出 ${P.removed}，化蛹 ${P.matured}，还在 ${P.worms.length}，白头蛹 ${P.bald}`);
   fast(x, 1800);
   check('中囊病：强群里几天后自己好了', P.disease().sick === 0, `一共染上 ${P.infected} 只、死成囊 ${P.sacs}`);
-  SB.days = days;
+  SB.splice(0, 4, ...days);
   // 弱群：拿掉七成工蜂，蜡螟来得多，白头蛹多、有被丝缠死的
   const y = new BeeWorld(7);
   const keep = y.bees.list.filter((b, i) => b.caste !== CASTE.worker || i % 10 >= 7);
@@ -696,7 +733,7 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
 
 const texts = new Set<string>([tr(w.clock.stamp())]);
 for (const e of w.events.entries) texts.add(tr(e.msg));
-for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', cause: 'x', lo: 1, hi: 2, f: 3, brood: 4, honey: 5 }));
+for (const k of Object.keys(en) as (keyof typeof en)[]) texts.add(t(k, { w: 40, h: 22, n: 3, b: 2, e: 1, l: 4, c: 5, frame: 'x', face: 'y', row: 6, col: 7, p: 8, t: 'z', d: 2, o: 1, a: 'x', x: 3, flower: 'x', goods: 'y', r: 4, s: 5, dir: 'x', m: 6, role: 'x', place: 'x', weather: 'x', cause: 'x', lo: 1, hi: 2, f: 3, brood: 4, honey: 5, season: 'x', y: 1 }));
 const leaks = [...texts].filter((s) => /[一-鿿]|undefined|\{\w+\}|\[object/.test(s));
 check('英文文字没漏翻', leaks.length === 0, leaks.join(' / ') || `${texts.size} 种`);
 

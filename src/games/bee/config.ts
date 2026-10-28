@@ -2,8 +2,30 @@ import './i18n';
 
 /** 长度单位是厘米，时间单位是模拟秒；真实数值和来源见 docs/bee/BALANCE.md */
 export const CONFIG = {
-  /** 一天 10 分钟（DECISIONS T-002），早上 9 点开局 */
-  clock: { dayLength: 600, startHour: 9 },
+  /**
+   * 一天 10 分钟（DECISIONS T-002），早上 9 点开局。一季 5 天、一年 20 天（P-015），开局在夏天第一天
+   * （日历的 start 是第一天 0 点在一年里的第几天，春天第一天是 0）
+   */
+  clock: { dayLength: 600, startHour: 9, calendar: { lengths: [5, 5, 5, 5] as [number, number, number, number], start: 5 } },
+  /**
+   * 季节（P-015、T-076）：每项是春、夏、秋、冬四个值，一季的最后一天慢慢变到下一季（SimClock.seasonalValue）。
+   * air：一天最凉、最热的气温（°C）；rain：平均每天几场阵雨；laying：蜂王产卵的多少（每回有 1 - laying 的机会不产）；
+   * hornets：那天是“胡蜂天”的机会；moth：蜡螟飞来的机会乘几；sacbrood：那天发一次中囊病的机会。
+   * broodZone：蜂王产卵的范围乘几（凉的季节育儿区缩小，保得住温）；aging：工蜂、雄蜂老得多快（冬天的蜂是越冬蜂，
+   * 老得慢，不然冬天停产、春天新蜂出房前老蜂就死光了）。气温低于 flyMin 不出巢，在外面的蜂往回飞
+   */
+  seasons: {
+    airLo: [14, 23, 16, 3],
+    airHi: [24, 33, 27, 12],
+    rain: [0.7, 0.5, 0.35, 0.2],
+    laying: [1, 1, 0.5, 0],
+    broodZone: [0.85, 1, 0.75, 0.6],
+    aging: [0.6, 1, 1, 0.25],
+    hornets: [0.15, 0.75, 0.9, 0],
+    moth: [0.6, 1, 1, 0],
+    sacbrood: [0.45, 0.3, 0.15, 0],
+    flyMin: 7,
+  },
   /**
    * 观察箱：两框巢脾竖着摞，中间隔一根木条。巢脾坐标 u 横向 0..combW、v 竖向 0..2·frameH+bar，
    * 巢脾中心面在 z = 0，两面各在 ±combHalf；baseY 是下框底边离地的高度。
@@ -97,6 +119,8 @@ export const CONFIG = {
     /** 育儿区（开局育儿区的椭圆）往外到 ring 倍是放花粉的一圈，再往外放花蜜；蜂王在 queen 倍以内产卵 */
     ring: 1.5,
     queen: 1.4,
+    /** 蜂王只在不低于这个温度（°C，巢脾上那一格）的空房产卵 */
+    layWarm: 34,
   },
   /**
    * 摇摆舞和交接（T-014）。
@@ -208,7 +232,9 @@ export const CONFIG = {
    * （PALETTE.pollen 的编号）。r 是花丛的半径，spacing 是株距；closes 的花合上时画面上也合起来。
    * land 是蜂落在一株上的几个落脚点（株的坐标，cm，没乘个头）：花序顶上、花盘面上、南瓜花的喇叭里、
    * 薰衣草穗的侧面、玉米雄穗的枝上；画面的南瓜花和前几根薰衣草穗按它摆。
-   * wild 的花开局会长；plantR 是玩家种一片的半径。refill 为 0 的（糖水）采空了不长回来；花丛比株距的一半还小时只有中间一株
+   * wild 的花开局会长（每种至少一片，其余随机）；extra 里的花开局各长一片，放在最后（蜂生出来以后才摆，前面的世界和没有它们时一样）；
+   * plantR 是玩家种一片的半径。refill 为 0 的（糖水）采空了不长回来；花丛比株距的一半还小时只有中间一株。
+   * bloom 是春夏秋冬开花的多少（乘在开合上，0 就是不在花期），leafy 是茎叶长得多大（0 就是这一季地里没有它）
    */
   flowers: {
     patches: 9,
@@ -216,11 +242,14 @@ export const CONFIG = {
     far: 2200,
     gap: 150,
     margin: 300,
+    extra: ['rapeseed', 'buckwheat'] as const,
     species: [
-      { key: 'clover', wild: true, plantR: 120, hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false, land: [[0.5, 13.7, 0]] },
+      { key: 'clover', bloom: [0.8, 1, 0.4, 0], leafy: [1, 1, 1, 0.7], wild: true, plantR: 120, hours: [7, 18], ramp: 1, nectar: 0.08, pollen: 0.02, refill: 150, pollenKind: 2, r: [150, 240], spacing: 11, closes: false, land: [[0.5, 13.7, 0]] },
       {
         key: 'sunflower',
         wild: true,
+        bloom: [0, 1, 0.5, 0],
+        leafy: [0.35, 1, 0.9, 0],
         plantR: 90,
         hours: [7, 18.5],
         ramp: 1,
@@ -233,11 +262,14 @@ export const CONFIG = {
         closes: false,
         land: [[4.3, 171.4, 0], [5.5, 174.1, 0], [4.3, 171.4, 3], [3, 168.7, 0], [4.3, 171.4, -3]],
       },
-      { key: 'pumpkin', wild: true, plantR: 110, hours: [5, 12], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
-      { key: 'lavender', wild: true, plantR: 90, hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false, land: [[15.4, 51, 0], [0, 48, 13.4], [-13.3, 55, -5.5], [6.5, 45, -16.3]] },
-      { key: 'corn', wild: true, plantR: 90, hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false, land: [[7, 221.6, 0], [0, 221.6, 7], [-7, 221.6, 0], [0, 221.6, -7]] },
+      { key: 'pumpkin', bloom: [0, 1, 0.8, 0], leafy: [0.3, 1, 0.9, 0], wild: true, plantR: 110, hours: [5, 12], ramp: 0.8, nectar: 2.5, pollen: 2, refill: 120, pollenKind: 1, r: [120, 190], spacing: 60, closes: true, land: [[17.55, 27, 9.59], [-17.07, 24, 10.42], [-0.47, 30, -19.99]] },
+      { key: 'lavender', bloom: [0.3, 1, 0.2, 0], leafy: [1, 1, 1, 1], wild: true, plantR: 90, hours: [8.5, 18], ramp: 1.2, nectar: 1.2, pollen: 0.15, refill: 160, pollenKind: 4, r: [90, 150], spacing: 48, closes: false, land: [[15.4, 51, 0], [0, 48, 13.4], [-13.3, 55, -5.5], [6.5, 45, -16.3]] },
+      { key: 'corn', bloom: [0, 1, 0.3, 0], leafy: [0.3, 1, 0.9, 0], wild: true, plantR: 90, hours: [7.5, 11.5], ramp: 1, nectar: 0, pollen: 1.2, refill: 180, pollenKind: 3, r: [90, 140], spacing: 35, closes: false, land: [[7, 221.6, 0], [0, 221.6, 7], [-7, 221.6, 0], [0, 221.6, -7]] },
+      // 油菜：春天的主要蜜源，秋天种下、冬天是贴地的一丛叶，春天抽薹开黄花；荞麦：夏天种、秋天开白花，秋天的蜜源（BALANCE）
+      { key: 'rapeseed', wild: false, plantR: 110, bloom: [1, 0, 0, 0], leafy: [1, 0.4, 0.3, 0.5], hours: [7, 18], ramp: 1, nectar: 1, pollen: 0.8, refill: 160, pollenKind: 0, r: [120, 180], spacing: 30, closes: false, land: [[0, 101, 0], [6, 94, 2], [-5, 96, -4], [2, 90, 6]] },
+      { key: 'buckwheat', wild: false, plantR: 100, bloom: [0, 0, 1, 0], leafy: [0, 0.6, 1, 0], hours: [7, 16], ramp: 1, nectar: 0.9, pollen: 0.5, refill: 170, pollenKind: 2, r: [110, 170], spacing: 26, closes: false, land: [[0, 72, 0], [5, 68, 3], [-4, 69, -3]] },
       // 糖水碟：一个木墩上放一碟糖水，只有一“株”；白天蜂才来，喝完了不会自己长回来
-      { key: 'sugar', wild: false, plantR: 10, hours: [6.5, 18.5], ramp: 0.5, nectar: 150, pollen: 0, refill: 0, pollenKind: 0, r: [10, 10], spacing: 60, closes: false, land: [[8, 47.2, 0], [0, 47.2, 8], [-8, 47.2, 0], [0, 47.2, -8], [5.7, 47.2, 5.7], [-5.7, 47.2, -5.7]] },
+      { key: 'sugar', bloom: [1, 1, 1, 1], leafy: [1, 1, 1, 1], wild: false, plantR: 10, hours: [6.5, 18.5], ramp: 0.5, nectar: 150, pollen: 0, refill: 0, pollenKind: 0, r: [10, 10], spacing: 60, closes: false, land: [[8, 47.2, 0], [0, 47.2, 8], [-8, 47.2, 0], [0, 47.2, -8], [5.7, 47.2, 5.7], [-5.7, 47.2, -5.7]] },
     ] as const,
   },
   /**
@@ -246,14 +278,13 @@ export const CONFIG = {
    */
   tools: { grow: 300, maxPlanted: 12, maxFeeders: 3, hiveClear: 250, gap: 40, refillR: 40 },
   /**
-   * 天气（T-020）。平均每天 rainPerDay 场阵雨，第 firstRainDay 天以前不下；showers 点之间下雨的机会是平时的 showerPeak 倍，
+   * 天气（T-020）。平均每天 seasons.rain 场阵雨，第 firstRainDay 天以前不下；showers 点之间下雨的机会是平时的 showerPeak 倍，
    * 其余时候 showerOff 倍（一天平均是 1）。转阴 overcast 秒后下雨，雨下 hours 小时，雨势 strength。
    * 转阴时在外面的蜂每秒有 recall[0] 的机会往回飞，下雨时 recall[1]；雨把花里的花蜜、花粉冲掉，大雨 wash 秒冲掉约六成。
-   * 气温（°C）在 air 之间，最热在 warmest 点、最凉在它前后 12 小时；每天整体偏冷偏热 swing 之间（半天里慢慢变过去）；
+   * 气温（°C）在 seasons.airLo～airHi 之间，最热在 warmest 点、最凉在它前后 12 小时；每天整体偏冷偏热 swing 之间（半天里慢慢变过去）；
    * 阴雨按云量最多降 rainCool
    */
   weather: {
-    rainPerDay: 0.5,
     firstRainDay: 1,
     showers: [11, 19] as [number, number],
     showerPeak: 2,
@@ -263,7 +294,6 @@ export const CONFIG = {
     strength: [0.4, 1] as [number, number],
     recall: [0.1, 1] as [number, number],
     wash: 90,
-    air: [23, 33] as [number, number],
     warmest: 14,
     swing: [-3, 4] as [number, number],
     rainCool: 5,
@@ -273,7 +303,7 @@ export const CONFIG = {
    * 往外面的空气散 loss × 和气温的差，在巢门扇风的蜂每只让散热快 vent 倍；和四邻拉平 spread。
    * 蜂产的热随温度降，到 cook 不再产；振翅产热的蜂到 ideal 上沿就停。扇风的蜂到 fanFull 只时蒸发让巢里比气温凉 evap 度。
    * 子在 ideal 之间发育正常，偏出去每度慢 slowPerC（最慢 slowest 倍）；低于 chill、高于 cook 每秒有（差几度 + 1）/ killTime 的机会死。
-   * 有子不到 broodCells 个的格不算育儿区。育儿区里冷的子占的比例 × heaters 是清理蜂、内勤蜂去子脾上产热的机会，
+   * 有子不到 broodCells 个的格不算育儿区。育儿区里冷的子占的比例 × heaters 是清理蜂、内勤蜂去子脾上产热的机会（采集蜂、守卫 × oldHeaters），
    * 热的比例 × fanners 是内勤蜂、守卫去巢门扇风的机会；一次 hold 秒。冷的子 refresh 秒重找一次
    */
   heat: {
@@ -293,12 +323,13 @@ export const CONFIG = {
     killTime: 2500,
     broodCells: 3,
     heaters: 1,
+    oldHeaters: 0.5,
     fanners: 0.5,
     hold: [20, 40] as [number, number],
     refresh: 5,
   },
   /**
-   * 胡蜂（P-012、T-022）：黄腿胡蜂 Vespa velutina。第 firstDay 天起，每天有 days 的机会是“胡蜂天”，那天 hours 点之间
+   * 胡蜂（P-012、T-022）：黄腿胡蜂 Vespa velutina。第 firstDay 天起，每天有 seasons.hornets 的机会是“胡蜂天”，那天 hours 点之间
    * 每个游戏小时有 perHour 的机会来一只，同时最多 max 只；阴雨天不来、在的也走。一只来了在巢门外待 stay 秒，
    * 悬停在管口外 spot.out cm、上下 spot.up、左右 spot.side 以内的一点，每 drift 秒换一个点，飞 speed、悬停时 hover cm/s。
    * 离它 reach cm 内飞着的蜂，过了 strike 秒的间隔扑一次（扑的时候 dart cm/s），扑中了有 catch 的机会抓走，
@@ -311,7 +342,6 @@ export const CONFIG = {
    */
   hornets: {
     firstDay: 1,
-    days: 0.75,
     hours: [13, 18] as [number, number],
     perHour: 0.5,
     max: 3,
@@ -371,12 +401,12 @@ export const CONFIG = {
   /**
    * 巢虫和中囊病（T-024）。
    * 巢虫：第 firstDay 天起，夜里 hours 点之间每个游戏小时有一次机会飞进来一只蜡螟产卵，孵出 clutch 条巢虫：
-   * 机会在 perHour 之间按蜂群弱的程度插值（巢里的蜂数 / 造好的位置，到 cover 算强、0 最弱）。巢虫从离一处封盖子最近的巢脾边上钻进去、朝那里爬，
+   * 机会在 perHour 之间按蜂群弱的程度插值、再乘 seasons.moth（巢里的蜂数 / 造好的位置，到 cover 算强、0 最弱）。巢虫从离一处封盖子最近的巢脾边上钻进去、朝那里爬，
    * 在一面的房底下沿中肋打隧道，每 crawl 秒爬一格，每格有 turn 的机会拐弯，挑下一格时封盖子底下加 brood 分（方向的余弦是 -1..1），不进蜜房；爬过的巢房留丝 silk 秒，
    * 空房变脏，封盖子有 bald 的机会成白头蛹，白头蛹羽化时有 entangle 的机会被丝缠死。
    * 巢虫离 seeR cm 内的蜂越多越容易被拖出去：每秒 remove × min(1, 蜂数 / crowd)，躲在封盖子下面再乘 hidden。
    * 活过 life 秒的爬出去化蛹（没了）。
-   * 中囊病：第 firstDay 天起每天有 days 的机会发一次病，那时巢里一只幼虫和它 seedR cm 内最多 seed 只幼虫染上。
+   * 中囊病：第 firstDay 天起每天有 seasons.sacbrood 的机会发一次病，那时巢里一只幼虫和它 seedR cm 内最多 seed 只幼虫染上。
    * 哺育蜂喂染病的幼虫有 pick 的机会带上病毒，带着的 carry 秒里每喂一只健康的幼虫有 pass 的机会传过去；
    * 清理蜂拖死囊（多花 cleanWork 倍的时间）有 cleanPick 的机会带上
    */
@@ -401,7 +431,6 @@ export const CONFIG = {
     },
     sacbrood: {
       firstDay: 2,
-      days: 0.3,
       seed: [3, 6] as [number, number],
       seedR: 3,
       pick: 0.4,

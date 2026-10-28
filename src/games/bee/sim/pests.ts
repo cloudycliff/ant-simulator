@@ -1,5 +1,6 @@
 import { L, type Text } from '../../../core/i18n';
 import { TAU } from '../../../core/util/math';
+import type { SimClock } from '../../../core/sim/clock';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 import type { Bee } from './bees';
@@ -42,7 +43,7 @@ export interface PestsSave {
 /** 巢虫、中囊病要知道的：巢里的蜂、时刻，记事件 */
 export interface PestsHost {
   bees: () => readonly Bee[];
-  clock: { totalDays: number; hour: number };
+  clock: Pick<SimClock, 'totalDays' | 'hour' | 'seasonalValue'>;
   log(msg: Text, cell?: number): void;
 }
 
@@ -100,7 +101,7 @@ export class Pests {
     const day = Math.floor(clock.totalDays);
     if (day !== this.day) {
       this.day = day;
-      if (clock.totalDays >= S.firstDay && this.rng.chance(S.days)) this.outbreak();
+      if (clock.totalDays >= S.firstDay && this.rng.chance(clock.seasonalValue(CONFIG.seasons.sacbrood))) this.outbreak();
     }
     this.hourAcc += dt;
     if (this.hourAcc >= this.dayLength / 24) {
@@ -128,14 +129,14 @@ export class Pests {
     }
   }
 
-  /** 这个小时飞进一只蜡螟的机会：蜂群越弱（每个造好的位置上的蜂越少）越大 */
+  /** 这个小时飞进一只蜡螟的机会：蜂群越弱（每个造好的位置上的蜂越少）越大，冷的季节少 */
   mothChance(): number {
     let built = 0;
     for (let s = 0; s < SITES; s++) if (this.comb.build[s] >= 1) built++;
     let inside = 0;
     for (const b of this.host.bees()) if (!b.out) inside++;
     const weak = Math.max(0, Math.min(1, 1 - inside / Math.max(1, built) / M.cover));
-    return M.perHour[0] + (M.perHour[1] - M.perHour[0]) * weak;
+    return (M.perHour[0] + (M.perHour[1] - M.perHour[0]) * weak) * this.host.clock.seasonalValue(CONFIG.seasons.moth);
   }
 
   /**

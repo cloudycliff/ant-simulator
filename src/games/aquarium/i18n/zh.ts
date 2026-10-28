@@ -47,6 +47,7 @@ export const zh = {
   'tank.food': '水里的鱼食',
   'tank.bottom': '其中沉底',
   'tank.flakes': '{n} 片',
+  'tank.season': '季节',
   'tank.light': '鱼缸灯',
   'tank.lightOn': '亮着，{time} 关',
   'tank.lightOff': '关着，{time} 开',

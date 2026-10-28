@@ -1,6 +1,7 @@
 import { L, type Text } from '../../../core/i18n';
 import type { Point3 } from '../../../core/sim/events';
 import { TAU } from '../../../core/util/math';
+import type { SimClock } from '../../../core/sim/clock';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
 import type { Bee, Bees } from './bees';
@@ -54,7 +55,7 @@ export interface HornetHost {
   air(): number;
   flyable(): boolean;
   ground(x: number, z: number): number;
-  clock: { totalDays: number; hour: number; seconds: number };
+  clock: Pick<SimClock, 'totalDays' | 'hour' | 'seconds' | 'seasonalValue'>;
   log(msg: Text, id?: number): void;
 }
 
@@ -136,7 +137,7 @@ export class Hornets {
     const day = Math.floor(host.clock.totalDays);
     if (day !== this.day) {
       this.day = day;
-      this.today = host.clock.totalDays >= N.firstDay && this.rng.chance(N.days);
+      this.today = host.clock.totalDays >= N.firstDay && this.rng.chance(host.clock.seasonalValue(CONFIG.seasons.hornets));
     }
     const hour = host.clock.hour;
     // 箱子空着（T-025）没有蜂可抓，不来

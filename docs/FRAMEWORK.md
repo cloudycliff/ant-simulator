@@ -8,7 +8,7 @@
 
 | 模块 | 内容 | 游戏要做的 |
 |---|---|---|
-| `core/sim` | `Simulation`：时钟、随机数、编号、按登记顺序推进的子系统、存档登记、实体注册表、最近事件、固定步长和帧预算；`SpatialHash`；`Behavior`（行为协程：生成器 yield 指令，逐帧执行，结果传回） | 继承它，登记子系统、存档部分、实体类型；个体行为复杂时用 `Behavior` |
+| `core/sim` | `Simulation`：时钟（昼夜、可选的季节日历）、随机数、编号、按登记顺序推进的子系统、存档登记、实体注册表、最近事件、固定步长和帧预算；`SpatialHash`；`Behavior`（行为协程：生成器 yield 指令，逐帧执行，结果传回） | 继承它，登记子系统、存档部分、实体类型；个体行为复杂时用 `Behavior` |
 | `core/space` | `Space` 接口；`HeightfieldSpace`（地面）、`VolumeSpace`（盒子） | 选一种，传入高度函数和相机范围 |
 | `core/move` | 图上行走（最短路、沿边走）、地表转向、贴地、贴边绕开圆形障碍 | 用得上就用 |
 | `core/render` | 户外的天空、太阳、星空、雾（`Environment`）；雨；画质档位；玩家的亮度设置（白天、夜里两档，乘在曝光上） | 户外游戏用 `Environment`，室内自己放灯 |
@@ -69,6 +69,7 @@ export class Hive extends Simulation<HiveRef> {
   update(dt) { this.behavior.run(() => pickTask(this), (cmd, first) => this.step(dt, cmd, first)); }
   ```
   `step` 返回 `true` 表示这条指令做完，`behavior.result` 里放给协程的结果。有急事要临时调派时用 `behavior.start(协程)` 换掉当前任务，`abort()` 则放弃当前任务、下一帧另选。协程不能存档。可以存下 `behavior.cmd`、`behavior.started` 和执行进度，读档后 `behavior.resume(指令, 已开始)` 接着做完这一步再开新任务（隧道里的位置用 `GraphWalker.toSave` / `restore`）；手里拿着东西的，新任务先把它送到（蚂蚁的做法见 DECISIONS T-059、T-067）。鱼的行为简单，鱼缸没用它
+- **季节**：要季节就给 `super` 第四个参数，一个日历 `{ lengths: [春, 夏, 秋, 冬各几天], start: 开局在一年里的第几天 }`（T-076）。框架只算现在是哪一季，季节的影响写在游戏里：数值写成春夏秋冬四个一组，用 `this.clock.seasonalValue(四个值)` 取，一季的最后一天会慢慢变到下一季。蜂的花期、产卵、气温和鱼缸的水温都是这样做的。不给日历就一直是夏天，存档也和以前一样
 - **事件**：`this.events.push(L('ev.xxx', 参数), 涉及的对象, 位置)`，对象和位置都可以省略
 - **文字**：模拟里只用 `L()` 记下键和参数，界面显示时再翻译
 - 改完写一个无界面测试（照 `scripts/games/aquarium/aquatest.ts`）：跑几个游戏日，检查个体不越界、关键行为发生、存档往返一致、同编号可重现、英文文字没漏翻

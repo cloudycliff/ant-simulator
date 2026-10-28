@@ -5,6 +5,11 @@
 export const coreZh = {
   raw: '{s}',
   'time.stamp': '第{day}天 {time}',
+  'time.seasonDay': '{season}第 {day} 天',
+  'season.spring': '春天',
+  'season.summer': '夏天',
+  'season.autumn': '秋天',
+  'season.winter': '冬天',
   'save.quota': '浏览器存储空间不足',
   'save.denied': '浏览器禁止了本地存储',
   'save.title': '存档',

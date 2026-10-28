@@ -93,7 +93,7 @@ export class Tank extends Simulation<AqRef> {
   private lightWasOn: boolean;
 
   constructor(readonly seed: number) {
-    super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed);
+    super(CONFIG.clock.dayLength, CONFIG.clock.startHour, seed, CONFIG.clock.calendar);
     this.noise = new Noise2D(seed);
     this.generate();
     this.lightWasOn = this.light() > 0.5;
@@ -140,9 +140,9 @@ export class Tank extends Simulation<AqRef> {
     return smoothstep(on, on + ramp, h) * (1 - smoothstep(off, off + ramp, h));
   }
 
-  /** 水温：白天开灯时略高 */
+  /** 水温：白天开灯时略高，跟着屋里的季节走（没有加热棒） */
   waterTemp(): number {
-    return 24.5 + 0.8 * this.light();
+    return 24.5 + 0.8 * this.light() + this.clock.seasonalValue(CONFIG.roomTemp);
   }
 
   /** 时钟被读档或网址参数改过以后调用：灯的开关和采样时刻按现在算，免得记一条假的开关灯事件 */

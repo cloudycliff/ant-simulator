@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { L, t, tr } from '../../core/i18n';
 import type { CameraPose, GameContext, GameModule, GameSession, GameUi, ViewToggle } from '../../core/app/game';
 import { svgIcon } from '../../core/app/shell';
+import { cap } from '../../core/ui/html';
 import { HeightfieldSpace } from '../../core/space/heightfield';
 import { ToolController, type ToolDef } from '../../core/ui/tools';
 import { wrapAngle } from '../../core/util/math';
@@ -13,7 +14,8 @@ import { MOUTH } from './sim/flight';
 import { CELL, COMB_H, CONTENT_KEYS, GRID, SITES, cellFace, cellSite, siteFrame } from './sim/comb';
 import { SITE_HEAT } from './sim/heat';
 import { FACTORS } from './sim/abscond';
-import { SUGAR, nectarCap, openness, patchOpenness, plantCount, pollenCap } from './sim/flowers';
+import { SUGAR, bloomSeasons, nectarCap, openness, plantCount, pollenCap } from './sim/flowers';
+import { SEASONS, type Season } from '../../core/sim/clock';
 import { beeNotes } from './notes';
 import { BeeWorld, beeSave, type BeeRef, type BeeSaveData, type BeeSaveMeta } from './world';
 
@@ -57,8 +59,8 @@ export const beeGame: GameModule<BeeWorld, BeeRef, BeeSaveData, BeeSaveMeta> = {
 };
 
 type ToolKind = 'plant' | 'sugar' | 'swatter' | 'plate';
-/** 种花的选项：开局会长的几种花 */
-const PLANTABLE = CONFIG.flowers.species.map((_, i) => i).filter((i) => CONFIG.flowers.species[i].wild);
+/** 种花的选项：除了糖水的每种花 */
+const PLANTABLE = CONFIG.flowers.species.map((_, i) => i).filter((i) => i !== SUGAR);
 const TOOLS: ToolDef<ToolKind>[] = [
   {
     kind: 'plant',
@@ -122,6 +124,9 @@ function mount(ctx: GameContext<BeeWorld, BeeRef>): GameSession<BeeRef> {
     },
     // ?run=秒数：先往前跑一段（截图用，比如等采集蜂飞出去）；?rain=1 马上下雨
     applyParams: (params) => {
+      // ?season=spring（或 spring:3，第 3 天）：跳到某一季，蜂的日龄不变（P-015）
+      const [season, day] = (params.get('season') ?? '').split(':');
+      if ((SEASONS as readonly string[]).includes(season)) w.clock.setSeason(season as Season, Math.max(0, (Number(day) || 1) - 1));
       if (params.get('rain')) w.weather.startRain(true);
       // ?hornet=只数：马上来几只胡蜂；?plate=1 装上防护片
       if (params.get('plate')) w.hornets.plate = true;
@@ -239,10 +244,13 @@ function flowerInfo(w: BeeWorld, id: number): string {
     <p class="desc">${t('flowerDesc.sugar')}</p>`;
   const k = openness(sp, w.clock.hour);
   const rising = openness(sp, w.clock.hour + 0.1) > k;
-  const now = p.grown < 1 ? 'info.growing' : k >= 1 ? 'info.open' : k <= 0 ? 'info.closed' : rising ? 'info.opening' : 'info.closing';
+  const bloom = w.flowers.bloomOf(p.species);
+  const now = p.grown < 1 ? 'info.growing' : bloom < 0.05 ? 'info.offSeason' : k >= 1 ? 'info.open' : k <= 0 ? 'info.closed' : rising ? 'info.opening' : 'info.closing';
+  const seasons = cap(bloomSeasons(sp).map((i) => t(`season.${SEASONS[i]}`)).join(t('notes.sep')));
   return `<h2>${t('info.flower')} · ${t(`flower.${sp.key}`)}</h2>
     ${kv(t('info.plants'), t('info.plantsValue', { n: plantCount(p) }))}
     ${p.grown < 1 ? kv(t('info.grown'), t('info.grownValue', { p: Math.round(p.grown * 100), t: span((1 - p.grown) * CONFIG.tools.grow) })) : ''}
+    ${kv(t('info.bloomSeason'), seasons)}
     ${hours}
     ${kv(t('info.now'), t(now))}
     ${kv(t('info.nectar'), pct(p.nectar, nectarCap(p)))}
@@ -366,7 +374,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       const ph = w.weather.phase;
       return {
         icon: ph === 'rain' ? '🌧️' : ph === 'overcast' ? '☁️' : w.clock.isNight ? '🌙' : '☀️',
-        text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status', { weather: tr(w.weather.label), t: Math.round(w.weather.air(w.clock.hour)) }),
+        text: t(w.clock.isNight ? 'ui.statusNight' : 'ui.status', { season: cap(tr(w.clock.seasonStamp())), weather: tr(w.weather.label), t: Math.round(w.weather.air(w.clock.hour)) }),
       };
     },
     perfExtra: () => '',
@@ -398,7 +406,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         const dishes = w.flowers.patches.filter((p) => p.species === SUGAR);
         return `
       <h3 class="fold" title="${t(folded ? 'colony.unfold' : 'colony.fold')}">${t('colony.title')}</h3>
-      ${row(t('colony.season'), t('colony.summer'))}
+      ${row(t('colony.season'), t('colony.seasonValue', { season: cap(t(`season.${w.clock.season}`)), d: w.clock.seasonDay, n: w.clock.seasonLength, y: w.clock.year }))}
       ${row(t('colony.bees'), t('colony.beesValue', { n: B.list.length, d: drones }))}
       ${ROLE_KEYS.map((k) => sub(t(`role.${k}`), roles[k])).join('')}
       ${row(t('colony.shift'), t('colony.shiftValue', { a: early, b: late }))}
@@ -414,7 +422,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
       <h3>${t('colony.forage')}</h3>
       ${row(t('colony.out'), String(out))}
-      ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => patchOpenness(p, w.clock.hour) > 0).length }))}
+      ${row(t('colony.flowers'), t('colony.flowersValue', { n: flowers.length, o: flowers.filter((p) => w.flowers.open(p, w.clock.hour) > 0).length }))}
       ${row(t('colony.hornets'), hn ? t('colony.hornetsValue', { n: hn }) : t('colony.hornetsNone'))}
       ${row(t('colony.alarm'), t(w.keeper.alarm > 0.05 ? 'colony.alarmOn' : 'colony.alarmOff'))}
       ${row(t('colony.mood'), moodText(w))}

@@ -142,6 +142,37 @@ function buildModel(key: string): PlantModel {
       spikes.push(paint(spike.translate(tip.x, tip.y + 3, tip.z), C.bloom));
     }
     bloom.push(merge(spikes));
+  } else if (key === 'rapeseed') {
+    // 油菜：一米高的薹，下面几片宽叶，顶上分出几枝，每枝梢上一串四瓣的小黄花（落脚点在花串上）
+    height = 105;
+    body.push(paint(stem(v3(0, 0, 0), v3(0, 88, 0), 0.6, 4), C.leaf));
+    for (let k = 0; k < 5; k++) body.push(paint(leaf(r.range(20, 28), 9).rotateX(-r.range(0.9, 1.3)).rotateY(k * 1.3).translate(0, 6 + k * 9, 0), C.leaf));
+    const tips = landOf(key).map(([x, y, z]) => v3(x, y - 3, z));
+    for (const tip of tips) body.push(paint(stem(v3(0, 70, 0), tip, 0.35), C.leaf));
+    const heads: THREE.BufferGeometry[] = [];
+    for (const tip of tips) {
+      for (let j = 0; j < 7; j++) {
+        const a = j * 2.4;
+        heads.push(paint(new THREE.OctahedronGeometry(0.9, 0).scale(1, 0.5, 1).translate(tip.x + Math.cos(a) * 1.4, tip.y + 1 + j * 0.5, tip.z + Math.sin(a) * 1.4), C.bloom));
+      }
+    }
+    bloom.push(merge(heads));
+  } else if (key === 'buckwheat') {
+    // 荞麦：红茎、心形叶，梢上几簇白里带粉的小花
+    height = 75;
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.4;
+      body.push(paint(stem(v3(0, 0, 0), v3(Math.cos(a) * 3, 62, Math.sin(a) * 3), 0.4), 0xa04a3a));
+    }
+    for (let k = 0; k < 6; k++) body.push(paint(new THREE.CircleGeometry(r.range(4, 6), 5).rotateX(-0.9).rotateY(k * 1.7).translate(0, 15 + k * 8, 0), C.leaf));
+    const tufts: THREE.BufferGeometry[] = [];
+    for (const [x, y, z] of landOf(key)) {
+      for (let j = 0; j < 6; j++) {
+        const a = j * 1.05;
+        tufts.push(paint(new THREE.IcosahedronGeometry(0.9, 0).translate(x + Math.cos(a) * 1.5, y - 2 + (j % 2) * 0.8, z + Math.sin(a) * 1.5), j % 3 ? C.bloom : 0xf0b8c4));
+      }
+    }
+    bloom.push(merge(tufts));
   } else if (key === 'sugar') {
     // 糖水碟：木墩上一只浅瓷碟，糖水面上漂着几根草秆给蜂落脚（落脚点在碟沿里侧）
     height = 50;
@@ -192,6 +223,8 @@ interface Kind {
   blooms: THREE.InstancedMesh;
   patches: FlowerPatch[];
   place: Placed[];
+  /** 花丛底下那片颜色的材质：不在花期时淡掉 */
+  discs: THREE.MeshStandardMaterial[];
   sig: number;
 }
 
@@ -239,6 +272,7 @@ export class FlowerView {
       const model = this.models[kind];
       const patches = w.flowers.patches.filter((p) => p.species === kind);
       const place: Placed[] = [];
+      const discs: THREE.MeshStandardMaterial[] = [];
       for (const p of patches) {
         const pl = plantsOf(p);
         for (let i = 0; i < pl.length; i += 3) {
@@ -247,7 +281,7 @@ export class FlowerView {
           const k = pl[i + 2];
           place.push({ x, y: w.groundAt(x, z), z, k, yaw: plantYaw(k), s: plantScale(k), patch: p });
         }
-        this.addPatch(p, model.height);
+        discs.push(this.addPatch(p, model.height));
       }
       const body = new THREE.InstancedMesh(model.body, this.plantMat, Math.max(1, place.length));
       body.count = 0;
@@ -259,13 +293,13 @@ export class FlowerView {
       for (let i = 0; i < n; i++) blooms.setColorAt(i, _c.setScalar(0.9 + 0.1 * ((i * 0.618) % 1)));
       this.group.add(body, blooms);
       this.parts.push(body, blooms);
-      this.kinds.push({ body, blooms, patches, place, sig: -1 });
+      this.kinds.push({ body, blooms, patches, place, discs, sig: -1 });
     });
     this.marked = -1;
   }
 
   /** 花丛底下那片地带着花的颜色、往外淡掉：远处看不清一株株的花时靠它认出花丛 */
-  private addPatch(p: FlowerPatch, height: number): void {
+  private addPatch(p: FlowerPatch, height: number): THREE.MeshStandardMaterial {
     const seg = 32;
     const R = p.r * 1.15;
     const tint = new THREE.Color(FLOWER_COLORS[F.species[p.species].key].tint);
@@ -290,7 +324,8 @@ export class FlowerView {
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
     g.setIndex(idx);
     g.computeVertexNormals();
-    const disc = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, depthWrite: false, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2 }));
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, depthWrite: false, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2 });
+    const disc = new THREE.Mesh(g, mat);
     disc.receiveShadow = true;
     this.group.add(disc);
     this.parts.push(disc);
@@ -301,30 +336,34 @@ export class FlowerView {
     proxy.userData.ref = { kind: 'flower', id: p.id } satisfies BeeRef;
     this.pickables.push(proxy);
     this.parts.push(proxy);
+    return mat;
   }
 
   /**
    * 会合拢的花按时刻开合；刚种下的花丛按长成多少从小苗长大，长成前不开花；糖水喝完了碟子里是空的。
-   * 这些变了才重排实例；向日葵的花盘都朝东
+   * 不在花期的不开花，茎叶按季节长大、枯掉（P-015）。这些变了才重排实例；向日葵的花盘都朝东
    */
   update(hour: number, selected: number | null): void {
     if (this.built !== this.w.flowers.version) this.build();
     F.species.forEach((sp, kind) => {
       const K = this.kinds[kind];
-      const open = sp.closes ? openness(sp, hour) : 1;
-      let sig = open;
+      const bloom = this.w.flowers.bloomOf(kind);
+      const leafy = this.w.flowers.leafyOf(kind);
+      const open = (sp.closes ? openness(sp, hour) : 1) * Math.min(1, bloom * 1.5);
+      let sig = open + leafy * 5;
       for (const p of K.patches) sig += p.grown * 3 + (kind === SUGAR && p.nectar <= 0.01 ? 7 : 0);
       if (K.sig >= 0 && Math.abs(sig - K.sig) < 0.02) return;
       K.sig = sig;
+      for (const m of K.discs) m.opacity = 0.25 + 0.75 * Math.min(1, bloom * 1.5);
       const model = this.models[kind];
       const sx = 0.25 + 0.75 * open;
       let i = 0;
       let nb = 0;
       for (const pl of K.place) {
         const p = pl.patch;
-        const g = p.grown < 1 ? 0.15 + 0.85 * p.grown : 1;
-        K.body.setMatrixAt(nb++, _m.compose(_p.set(pl.x, pl.y, pl.z), _q.setFromAxisAngle(Y, pl.yaw), _s.setScalar(pl.s * g)));
-        const shown = p.grown >= 1 && !(kind === SUGAR && p.nectar <= 0.01);
+        const g = (p.grown < 1 ? 0.15 + 0.85 * p.grown : 1) * leafy;
+        K.body.setMatrixAt(nb++, g < 0.02 ? ZERO : _m.compose(_p.set(pl.x, pl.y, pl.z), _q.setFromAxisAngle(Y, pl.yaw), _s.setScalar(pl.s * g)));
+        const shown = p.grown >= 1 && !(kind === SUGAR && p.nectar <= 0.01) && open > 0.02;
         _q.setFromAxisAngle(Y, bloomYaw(sp, pl.k));
         _o.set(pl.x, pl.y, pl.z);
         for (const b of model.blooms) {
@@ -332,7 +371,7 @@ export class FlowerView {
             K.blooms.setMatrixAt(i++, ZERO);
             continue;
           }
-          _p.copy(b).multiplyScalar(pl.s).applyQuaternion(_q).add(_o);
+          _p.copy(b).multiplyScalar(pl.s * g).applyQuaternion(_q).add(_o);
           K.blooms.setMatrixAt(i++, _m.compose(_p, _q, _s.set(sx * pl.s, pl.s * (0.9 + 0.1 * open), sx * pl.s)));
         }
       }

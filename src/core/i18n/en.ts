@@ -6,6 +6,11 @@ const pl = (n: unknown, one: string, many: string) => (Number(n) === 1 ? one : m
 export const coreEn: Record<keyof typeof coreZh, Entry> = {
   raw: '{s}',
   'time.stamp': 'Day {day} {time}',
+  'time.seasonDay': '{season}, day {day}',
+  'season.spring': 'spring',
+  'season.summer': 'summer',
+  'season.autumn': 'autumn',
+  'season.winter': 'winter',
   'save.quota': 'Browser storage is full',
   'save.denied': 'The browser blocked local storage',
   'save.title': 'Save',

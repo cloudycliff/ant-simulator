@@ -7,7 +7,7 @@ import { SUGAR } from './sim/flowers';
 import type { BeeRef, BeeWorld } from './world';
 
 /** 笔记的分组，按这个顺序列 */
-type Group = 'hive' | 'workers' | 'forage' | 'climate' | 'threats' | 'keeping' | 'real';
+type Group = 'hive' | 'workers' | 'forage' | 'year' | 'climate' | 'threats' | 'keeping' | 'real';
 
 /** 一条笔记：编号就是词典里 note.<id>.title / body / hint 的 <id>；tip 为真的第一次看到弹提示卡 */
 const note = (id: string, group: Group, tip = true): NoteDef => ({
@@ -39,6 +39,10 @@ export const NOTES: NoteDef[] = [
   note('ripen', 'forage', false),
   note('pollen', 'forage', false),
   note('plant', 'forage'),
+  note('summer', 'year'),
+  note('autumn', 'year'),
+  note('winter', 'year'),
+  note('spring', 'year'),
   note('warm', 'climate'),
   note('fan', 'climate'),
   note('rain', 'climate'),
@@ -146,6 +150,8 @@ export function beeNotes(w: BeeWorld, look: NotesLook): NotesDef {
         }
         yield* seen;
       }
+      // 一季的第一次到来讲那一季：开局是夏天，跟在观察箱那张后面
+      if (w.clock.seasonal) yield w.clock.season;
       if (w.heat.heating >= 40) yield 'warm';
       if (w.heat.fanning >= 20) yield 'fan';
       if (w.weather.phase === 'rain') yield 'rain';

@@ -1,6 +1,6 @@
 import { ENGINE } from '../config';
 import { Rng } from '../util/random';
-import { SimClock } from './clock';
+import { SimClock, type Calendar } from './clock';
 import { EntityRegistry, type EntityRef } from './entities';
 import { EventLog } from './events';
 import { IdPool } from './ids';
@@ -35,17 +35,20 @@ export class Simulation<R extends EntityRef = EntityRef> {
   readonly rng: Rng;
   readonly ids = new IdPool();
 
-  constructor(dayLength: number, startHour: number, seed: number) {
-    this.clock = new SimClock(dayLength, startHour);
+  /** calendar：季节的日历（T-076），不给就冻在夏天 */
+  constructor(dayLength: number, startHour: number, seed: number, calendar?: Calendar) {
+    this.clock = new SimClock(dayLength, startHour, calendar);
     this.rng = new Rng(seed);
     this.events = new EventLog<R>(this.clock);
     this.events.locate = (r) => this.entities.pos(r);
     this.saves.add(
       'clock',
-      () => ({ seconds: this.clock.seconds, speed: this.clock.speed }),
-      (d) => {
+      // 日历冻住的游戏不写 yearStart，存档和以前一样
+      () => ({ seconds: this.clock.seconds, speed: this.clock.speed, ...(this.clock.seasonal ? { yearStart: this.clock.yearStart } : {}) }),
+      (d: { seconds: number; speed: number; yearStart?: number }) => {
         this.clock.seconds = d.seconds;
         this.clock.speed = d.speed;
+        this.clock.yearStart = d.yearStart ?? this.clock.calendar.start;
       },
     );
     this.saves.addLast(

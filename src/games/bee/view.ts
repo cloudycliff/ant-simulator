@@ -11,6 +11,7 @@ import { DanceView } from './danceView';
 import { HeatView } from './heatView';
 import { HornetView } from './hornetView';
 import { FlowerView } from './flowerView';
+import { SEASON_COLORS } from './palette';
 import { COMB_H } from './sim/comb';
 import type { BeeRef, BeeWorld } from './world';
 
@@ -22,6 +23,8 @@ const HIVE_REF: BeeRef = { kind: 'hive', id: 0 };
 const HIVE_CENTER = new THREE.Vector3(0, H.baseY + COMB_H / 2, 0);
 const _dir = new THREE.Vector3();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+const _tint = new THREE.Color();
+const _tc = new THREE.Color();
 const _focus = new THREE.Vector3();
 /** 观察箱（含架子和顶棚）的范围：相机贴近它时按离它多远定快慢；贴着玻璃看时不画雨 */
 export const HIVE_BOX = new THREE.Box3(new THREE.Vector3(-30, 0, -13), new THREE.Vector3(30, H.baseY + COMB_H + 20, 13));
@@ -46,6 +49,8 @@ export class BeeView {
   private outline: THREE.LineSegments;
   /** 每丛草的位置 (x, z)；种了花就把花丛里的草藏起来 */
   private grass!: THREE.InstancedMesh;
+  /** 随季节变色的材质：草、地面（花园和外面一圈）、树冠 */
+  private tinted: { mat: THREE.MeshStandardMaterial; colors: readonly number[]; base: THREE.Color }[] = [];
   private grassAt!: Float32Array;
   private grassFor = -1;
 
@@ -105,13 +110,12 @@ export class BeeView {
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.computeVertexNormals();
-    const ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+    const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    const ground = new THREE.Mesh(g, groundMat);
     ground.receiveShadow = true;
     // 花园外面接一圈平地一直铺到雾里，不然从高处看得见地面的边和天空球下半的深色
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(size / 2 - 100, CONFIG.garden.horizon, 64, 1).rotateX(-Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.25, 0.5, 0.16), roughness: 0.95 }),
-    );
+    const ringMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.25, 0.5, 0.16), roughness: 0.95 });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(size / 2 - 100, CONFIG.garden.horizon, 64, 1).rotateX(-Math.PI / 2), ringMat);
     ring.position.y = -CONFIG.garden.bump - 2;
     this.group.add(ground, ring);
 
@@ -123,7 +127,8 @@ export class BeeView {
       b.computeVertexNormals();
       blades.push(b.rotateZ(0.25).rotateY((k / 5) * Math.PI * 2 + 0.3).translate(Math.cos(k * 1.3) * 0.8, 0, Math.sin(k * 1.3) * 0.8));
     }
-    const grass = new THREE.InstancedMesh(mergeGeometries(blades)!, new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9 }), 30000);
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9 });
+    const grass = new THREE.InstancedMesh(mergeGeometries(blades)!, grassMat, 30000);
     this.grass = grass;
     this.grassAt = new Float32Array(grass.count * 2);
     const m = new THREE.Matrix4();
@@ -151,6 +156,13 @@ export class BeeView {
     // 花园边上的一圈树
     const trunk = new THREE.MeshStandardMaterial({ color: 0x5a3e28 });
     const leaf = new THREE.MeshStandardMaterial({ color: 0x3a6a2a, flatShading: true });
+    const white = new THREE.Color(0xffffff);
+    this.tinted = [
+      { mat: groundMat, colors: SEASON_COLORS.ground, base: white },
+      { mat: ringMat, colors: SEASON_COLORS.ground, base: ringMat.color.clone() },
+      { mat: grassMat, colors: SEASON_COLORS.grass, base: white },
+      { mat: leaf, colors: SEASON_COLORS.crown, base: white },
+    ];
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2 + r.range(-0.2, 0.2);
       const d = r.range(2300, 2900);
@@ -163,6 +175,19 @@ export class BeeView {
       crown.position.set(x, w.groundAt(x, z) + h + 120, z);
       crown.castShadow = t.castShadow = true;
       this.group.add(t, crown);
+    }
+  }
+
+  /** 草、地面、树冠的颜色跟着季节变（P-015）：四季的颜色按 seasonalValue 的权重插值，地面乘在原来的顶点色上 */
+  private tint(): void {
+    const c = this.w.clock;
+    const k = [0, 1, 2, 3].map((i) => c.seasonalValue([0, 1, 2, 3].map((j) => (j === i ? 1 : 0))));
+    for (const t of this.tinted) {
+      _tint.setRGB(0, 0, 0);
+      t.colors.forEach((col, i) => {
+        if (k[i] > 0) _tint.add(_tc.set(col).multiplyScalar(k[i]));
+      });
+      t.mat.color.copy(t.base).multiply(_tint);
     }
   }
 
@@ -279,6 +304,7 @@ export class BeeView {
     this.dance.update(camera);
     this.heat.update();
     this.plate.visible = this.w.hornets.plate;
+    this.tint();
     this.hornets.update(camera, viewportH, sel?.kind === 'hornet' ? sel.id : null, performance.now() / 1000);
   }
 }
