@@ -35,6 +35,7 @@ export interface AbscondSave {
   acc: number;
   timer: number;
   dir: number;
+  stash: number;
   stats: number[];
 }
 
@@ -45,6 +46,8 @@ export interface AbscondHost {
   stress: () => number;
   danger: () => number;
   worms: () => number;
+  /** 空箱时把两框换成空巢框，返回拿出来的蜜；不换时返回 -1 */
+  renew: () => number;
   flyable: () => boolean;
   clock: { hour: number };
   log(msg: Text): void;
@@ -75,6 +78,8 @@ export class Abscond {
   /** 这一步过了多久；空箱、侦察时是还剩多久 */
   private timer = 0;
   private dir = 0;
+  /** 搬进来的蜂群带来、还没吐进巢房的蜜（房）：新巢框上没几个空房，造出来一个吐一个 */
+  stash = 0;
 
   constructor(
     private readonly rng: Rng,
@@ -166,7 +171,8 @@ export class Abscond {
           this.moveIns++;
           let workers = 0;
           for (const b of host.bees.list) if (b.caste === CASTE.worker) workers++;
-          host.comb.unload(workers * U.carry);
+          this.stash = workers * U.carry;
+          this.stash -= host.comb.unload(this.stash);
           this.pressure = 0;
           this.restless = false;
           this.acc = 0;
@@ -187,12 +193,13 @@ export class Abscond {
       this.vacate('ev.collapse');
       return;
     }
+    if (this.stash > 1e-6) this.stash = Math.max(0, this.stash - cb.unload(this.stash));
     const c = cb.census();
     let bald = 0;
     for (let cell = 0; cell < CELLS; cell++) if (cb.bald[cell]) bald++;
     const f = this.factors;
     f.stress = r4(clamp(host.stress() / U.stressFull, 0, 1));
-    f.hunger = r4(clamp((U.hungerAt - c.honeyCells) / (U.hungerAt - U.hungerFull), 0, 1));
+    f.hunger = r4(clamp((U.hungerAt - c.honeyCells - this.stash) / (U.hungerAt - U.hungerFull), 0, 1));
     f.hornets = r4(clamp(this.hornetAvg / U.hornetFull, 0, 1));
     f.pests = r4(clamp((bald + c.counts.sac + U.worm * host.worms()) / U.pestFull, 0, 1));
     this.bad = r4(Math.min(1, FACTORS.reduce((a, k) => a + U.weights[k] * f[k], 0)));
@@ -221,16 +228,19 @@ export class Abscond {
     this.host.log(L('ev.abscond', { cause: L(`cause.${this.cause}`) }));
   }
 
-  /** 蜂群走了（或死光了）：剩下的蜂都算走了，卵和幼虫没人管死掉，箱子空一阵 */
+  /** 蜂群走了（或死光了）：剩下的蜂都算走了，卵和幼虫没人管死掉，箱子空一阵；空箱里换上两框空巢框，新来的蜂群从头造 */
   private vacate(key: 'ev.gone' | 'ev.collapse'): void {
     this.left += this.host.bees.depart();
     const brood = this.host.comb.abandon();
     this.abandoned += brood;
     this.pressure = 0;
     this.restless = false;
+    this.stash = 0;
     this.timer = this.rng.range(U.vacant[0], U.vacant[1]) * this.dayLength;
     this.next('empty');
     this.host.log(L(key, { n: brood }));
+    const honey = this.host.renew();
+    if (honey >= 0) this.host.log(L('ev.renew', { n: Math.round(honey) }));
   }
 
   /** 蜂群的中心放到花园外 farR 处随便一个方向、离地 y */
@@ -256,6 +266,7 @@ export class Abscond {
       acc: r4(this.acc),
       timer: r4(this.timer),
       dir: r4(this.dir),
+      stash: r4(this.stash),
       stats: [this.absconds, this.moveIns, this.left, this.abandoned],
     };
   }
@@ -270,6 +281,7 @@ export class Abscond {
     this.acc = d.acc;
     this.timer = d.timer;
     this.dir = d.dir;
+    this.stash = d.stash;
     [this.absconds, this.moveIns, this.left, this.abandoned] = d.stats;
   }
 }

@@ -80,6 +80,7 @@ export class BeeWorld extends Simulation<BeeRef> {
       stress: () => this.keeper.stress,
       danger: () => this.hornets.danger(),
       worms: () => this.pests.worms.length,
+      renew: () => (CONFIG.abscond.renew ? this.keeper.renew() : -1),
       flyable: () => this.weather.flyable,
       clock: this.clock,
       log: (msg) => this.events.push(msg, { kind: 'hive', id: 0 }),
@@ -305,7 +306,7 @@ export class BeeWorld extends Simulation<BeeRef> {
 const COMPASS = ['dir.e', 'dir.se', 'dir.s', 'dir.sw', 'dir.w', 'dir.nw', 'dir.n', 'dir.ne'] as const;
 const fail = (key: Parameters<typeof L>[0]): ToolResult => ({ ok: false, msg: L(key) });
 
-const SAVE_VERSION = 14;
+const SAVE_VERSION = 15;
 
 export interface BeeSaveData {
   version: number;

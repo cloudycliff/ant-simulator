@@ -99,6 +99,9 @@ const SCENES = {
   abscond: { q: '&hour=10&cam=200,200,520,-260,200,0', js: `world.abscond.leave(); ${RUN(70)}`, check: ABS },
   abscondtube: { q: '&hour=10&cam=-14,95,30,-16,84,0', js: `world.abscond.leave(); ${RUN(25)}`, check: ABS },
   swarmin: { q: '&hour=10&cam=120,160,330,-120,120,0', js: `world.abscond.leave(); for (let k = 0; k < 400 && world.abscond.swarm.phase !== 'landing'; k++) ${RUN(10)}; ${RUN(40)}`, check: ABS },
+  // 空箱换上两框空巢框；野蜂搬进来一天后从框梁往下造
+  emptyhive: { q: '&hour=10&cam=0,103,58,0,103,0', js: `world.abscond.leave(); for (let k = 0; k < 60 && world.abscond.swarm.phase !== 'empty'; k++) ${RUN(10)}`, check: ABS },
+  newcomb: { q: '&hour=10&cam=0,103,58,0,103,0', js: `world.abscond.leave(); for (let k = 0; k < 400 && world.abscond.swarm.phase !== 'home'; k++) ${RUN(10)}; ${RUN(600)}`, check: ABS },
   pressure: { q: '&hour=11&select=hive:0', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: INFO },
   restless: { q: '&hour=11', js: `world.keeper.stress = 1; world.abscond.pressure = 0.5; ${RUN(10)}`, check: ABS },
   // 第一次的提示（P-014）：开局讲观察箱；关掉它以后问换框时讲换框；英文

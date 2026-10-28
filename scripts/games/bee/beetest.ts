@@ -574,18 +574,32 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
     A.swarm.phase === 'empty' && x.bees.list.length === 0 && A.left > n0 * 0.9 && A.abandoned > 1000 && told('ev.abscond') && told('ev.gone') && x.comb.census().counts.larva === 0,
     `${t} 秒飞走 ${A.left} 只，丢下 ${A.abandoned} 个子`,
   );
+  let built = 0;
+  for (let s = 0; s < SITES; s++) if (x.comb.build[s] > 0) built++;
+  const left = x.comb.census();
+  check(
+    '空箱里换上两框空巢框：旧巢脾、蜜、巢虫都拿走，只有框梁下起了个头',
+    built > 0 && built < GRID.cols && left.honeyCells === 0 && left.counts.sac === 0 && x.pests.worms.length === 0 && told('ev.renew'),
+    `起头的位置 ${built} 个`,
+  );
   const honey0 = x.comb.census().honeyCells;
   for (t = 0; t < 3 * CONFIG.clock.dayLength && A.swarm.phase !== 'home'; t += 10) fast(10);
   const inside = x.bees.list.filter((b) => !b.out).length;
-  const brought = x.comb.census().honeyCells - honey0;
+  const brought = x.comb.census().honeyCells + A.stash - honey0;
   check(
     '空箱：侦察蜂来看过，野生蜂群搬进来，有蜂王，带来了蜜',
     A.swarm.phase === 'home' && A.moveIns === 1 && inside > U.workers[0] * 0.8 && !!x.bees.queen && !x.bees.queen.out && told('ev.scouts') && told('ev.moveIn') && brought > U.workers[0] * U.carry * 0.5,
     `空了约 ${(t / CONFIG.clock.dayLength).toFixed(1)} 天，搬进来 ${x.bees.list.length} 只，${inside} 只在巢里，带来约 ${Math.round(brought)} 房蜜`,
   );
   const laid = x.bees.laid;
-  fast(200);
-  check('野生蜂群住下来，蜂王产卵', x.bees.laid > laid + 20 && x.bees.list.every((b) => !b.swarm || b.out), `200 秒产了 ${x.bees.laid - laid} 粒`);
+  fast(600);
+  let rebuilt = 0;
+  for (let s = 0; s < SITES; s++) if (x.comb.build[s] >= 1) rebuilt++;
+  check(
+    '野生蜂群住下来：一天里从框梁往下造巢脾，带来的蜜吐进新造的巢房，蜂王产卵',
+    rebuilt > 500 && A.stash === 0 && x.bees.laid > laid + 50 && x.bees.list.every((b) => !b.swarm || b.out),
+    `造好 ${rebuilt} 个位置，产了 ${x.bees.laid - laid} 粒`,
+  );
   // 蜂快死光了：和飞逃一样空出箱子
   const y = new BeeWorld(7);
   const few = y.bees.list.filter((b) => b.caste !== CASTE.worker).concat(y.bees.list.filter((b) => b.caste === CASTE.worker).slice(0, U.collapse - 5));

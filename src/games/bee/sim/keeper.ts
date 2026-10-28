@@ -92,15 +92,25 @@ export class Keeper {
 
   /** 把一框换成空巢框，返回拿走的子、蜜 */
   swap(frame: number): { brood: number; honey: number } {
+    const got = this.empty(frame);
+    this.bees.dislodge(frame);
+    this.swaps++;
+    this.lostBrood += got.brood;
+    this.open(K.alarm.swap, K.stress.swap);
+    return got;
+  }
+
+  /** 箱子空着时把两框都换成空巢框（T-025）：没有蜂，不算开箱惊扰；返回拿出来的蜜 */
+  renew(): number {
+    return this.empty(0).honey + this.empty(1).honey;
+  }
+
+  private empty(frame: number): { brood: number; honey: number } {
     const per = GRID.rows * GRID.cols;
     const sites = Array.from({ length: per }, (_, i) => frame * per + i);
     const got = this.comb.remove(sites, CONFIG.care.start);
     this.onRemove(sites);
     this.comb.seedTop(frame, CONFIG.care.start);
-    this.bees.dislodge(frame);
-    this.swaps++;
-    this.lostBrood += got.brood;
-    this.open(K.alarm.swap, K.stress.swap);
     return got;
   }
 

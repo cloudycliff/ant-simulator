@@ -31,6 +31,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'ev.collapse': 'Almost all the bees are dead and the hive is empty. The {n} remaining brood died in their cells',
   'ev.scouts': 'A few scout bees came and are going in and out of the entrance, inspecting the empty hive',
   'ev.swarm': 'A wild swarm of Asian honey bees is flying towards the hive',
+  'ev.renew': 'The old comb was taken out of the empty hive (with about {n} cells of honey left on it) and replaced with two empty frames, ready for a new colony',
   'ev.moveIn': 'The wild swarm moved into the hive. It now has {n} bees',
   'cause.stress': 'disturbance from opening the hive',
   'cause.hunger': 'lack of honey',
@@ -453,7 +454,7 @@ export const en: Record<keyof typeof zh, Entry> = {
     'Fewer foragers go out, the queen lays less, and the bees fill up on honey: these are signs that the colony is getting ready to abscond. Select the hive to see where the pressure comes from (disturbance, low honey, hornets, pests).\nAsian honey bees abscond more readily than Western ones. If the beekeeper opens the hive less, leaves enough honey and keeps hornets and wax moth in check, the colony settles down. Once the pressure drops far enough, the signs go away.',
   'note.abscond.title': 'Absconding',
   'note.abscond.body':
-    "The colony has had enough. All the bees pour out of the entrance, circle in a cloud outside, then fly off to find a new home. The eggs, larvae and pupae they leave behind die in their cells.\nThe game isn't over: the empty hive still smells of old comb, and after a day or two wild bees come to look at it and move in.",
+    "The colony has had enough. All the bees pour out of the entrance, circle in a cloud outside, then fly off to find a new home. The eggs, larvae and pupae they leave behind die in their cells.\nThe game isn't over: the old comb comes out and two empty frames go in (the game does this for you). The empty hive still smells of beeswax, and after a day or two wild bees come to look at it, move in and build new comb down from the top bars.\nReal beekeepers also take out and render the old comb after a colony absconds: it often carries wax moth and disease, so keeping it causes more trouble than it saves.",
   'note.scouts.title': 'Scouts look at a new home',
   'note.scouts.body':
     "A swarm, or a colony that has absconded, first sends scouts to look for a new home: how big the space is, which way the entrance faces, whether it's dry. The scouts go back and dance to “vote”. Once enough of them favour the same place, the whole swarm flies there.\nEmpty boxes and old comb smell of wax, which draws bees in. In spring, real beekeepers set out empty hives rubbed with beeswax to lure in wild Asian honey bees.",

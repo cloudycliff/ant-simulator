@@ -1774,7 +1774,7 @@ export class Bees {
     if (queen) put(this.add(CASTE.queen, rng.range(0, 3000), 1e9));
     for (let i = 0; i < n; i++) {
       const life = rng.range(B.life[0], B.life[1]);
-      put(this.add(CASTE.worker, mode === 3 ? rng.range(B.roles.forager, life * 0.95) : rng.range(0, life * 0.8), life));
+      put(this.add(CASTE.worker, mode === 3 ? rng.range(B.roles.forager, life * 0.95) : rng.range(0, life * U.young), life));
     }
     for (let i = 0; i < drones; i++) {
       const life = rng.range(B.droneLife[0], B.droneLife[1]);

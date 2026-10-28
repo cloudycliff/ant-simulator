@@ -422,8 +422,9 @@ export const CONFIG = {
    * 飞逃：巢里的蜂做完手上的事就去巢门出去，在外面的丢下活飞过去，在 cloud 附近 cloudR 内盘旋；都出来了（最多 leaveMax 秒）
    * 再盘旋 cloudTime 秒，然后以 speed cm/s 飞走，飞出 farR 整群没了，留下的子死了。
    * 空箱 vacant 天以后、scoutHours 点之间能飞时来 scouts 只侦察蜂，在巢门进进出出 scoutTime 秒；然后（hours 点之间、能飞时）
-   * workers 只工蜂、drones 只雄蜂和一只蜂王的野生蜂群从 farR 外飞来，在 land 附近 landR 内盘旋，每只每盘旋一趟有 enter 的机会进巢，
-   * 过 landMax 秒剩下的都进去；每只工蜂带来 carry 房蜜，吐进最靠上的空房
+   * workers 只工蜂（日龄在寿命的 0..young 之间，蜂群里年轻的蜂多）、drones 只雄蜂和一只蜂王的野生蜂群从 farR 外飞来，在 land 附近 landR 内盘旋，每只每盘旋一趟有 enter 的机会进巢，
+   * 过 landMax 秒剩下的都进去；每只工蜂带来 carry 房蜜，先带在身上，有空房就吐进最靠上的空房（带着的也算存蜜）。
+   * renew：箱子一空就把两框换成空巢框，新来的蜂群从框梁下重新造
    */
   abscond: {
     every: 5,
@@ -455,8 +456,10 @@ export const CONFIG = {
     scoutHours: [8, 12] as [number, number],
     scouts: [6, 12] as [number, number],
     scoutTime: 100,
-    workers: [1400, 2000] as [number, number],
+    workers: [1800, 2400] as [number, number],
     carry: 0.12,
+    young: 0.5,
+    renew: true,
     drones: [10, 30] as [number, number],
     land: { x: -120, y: 130, z: 0 },
     landR: 70,
