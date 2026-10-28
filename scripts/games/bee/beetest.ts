@@ -681,6 +681,17 @@ check('旧版本存档报问题', beeSave.problem({ ...(JSON.parse(json) as BeeS
     queen.has('queen') && nurse.has('nurse') && !nurse.has('queen') && brood.has('comb') && brood.has('brood') && pollen.has('pollen') && !pollen.has('brood'),
     [...nurse, ...pollen].join(' '),
   );
+  const before = look({ kind: 'bee', id: worker.id });
+  const hive = look({ kind: 'hive', id: 0 });
+  sel = null;
+  x.harvest(x.comb.content.findIndex((c, k) => c === CELL.cappedHoney && x.keeper.cutArea(k).length > 0));
+  x.togglePlate();
+  const done = seen(new Set(['hive', 'queen', 'nurse', 'comb', 'brood', 'sac']));
+  check(
+    '笔记：现实里的养蜂在做过、见过相关的事以后才记下',
+    !before.has('honeyPlan') && !before.has('defense') && !before.has('varroa') && hive.has('inspect') && ['cerana', 'honeyPlan', 'defense', 'varroa'].every((id) => done.has(id)) && !done.has('combs') && !done.has('feeding'),
+    [...done].join(' '),
+  );
 }
 
 const texts = new Set<string>([tr(w.clock.stamp())]);

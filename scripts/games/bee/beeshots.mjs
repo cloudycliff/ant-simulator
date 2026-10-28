@@ -114,6 +114,9 @@ const SCENES = {
   notes: { q: '&hour=11', fresh: true, js: `${NOTED}; hud.toggleNotes()`, check: NOTES },
   notesread: { q: '&hour=11', fresh: true, phone: true, js: `${NOTED}; hud.toggleNotes(); hud.openNote(1)`, check: NOTES },
   notesen: { q: '&hour=11&lang=en', fresh: true, js: `${NOTED}; hud.toggleNotes()`, check: NOTES },
+  // 现实里的养蜂那一组：翻到“中蜂和西方蜜蜂”
+  notesreal: { q: '&hour=11', fresh: true, js: `${NOTED}; hud.notes.learn('cerana'); hud.notes.learn('honeyPlan'); hud.toggleNotes(); hud.openNote(hud.notes.def.entries.findIndex((e) => e.id === 'cerana'))`, check: NOTES },
+  notesrealen: { q: '&hour=11&lang=en', fresh: true, js: `${NOTED}; hud.notes.learn('cerana'); hud.notes.learn('honeyPlan'); hud.toggleNotes(); hud.openNote(hud.notes.def.entries.findIndex((e) => e.id === 'honeyPlan'))`, check: NOTES },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

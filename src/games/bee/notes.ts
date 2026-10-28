@@ -3,10 +3,11 @@ import type { NoteDef, NotesDef } from '../../core/app/notes';
 import { CONFIG } from './config';
 import { ageRoleOf, CASTE, roleOf, type Act } from './sim/bees';
 import { CELL, cellSite, type CellContent } from './sim/comb';
+import { SUGAR } from './sim/flowers';
 import type { BeeRef, BeeWorld } from './world';
 
 /** 笔记的分组，按这个顺序列 */
-type Group = 'hive' | 'workers' | 'forage' | 'climate' | 'threats' | 'keeping';
+type Group = 'hive' | 'workers' | 'forage' | 'climate' | 'threats' | 'keeping' | 'real';
 
 /** 一条笔记：编号就是词典里 note.<id>.title / body / hint 的 <id>；tip 为真的第一次看到弹提示卡 */
 const note = (id: string, group: Group, tip = true): NoteDef => ({
@@ -53,6 +54,15 @@ export const NOTES: NoteDef[] = [
   note('restless', 'keeping'),
   note('abscond', 'keeping'),
   note('scouts', 'keeping'),
+  note('cerana', 'real', false),
+  note('inspect', 'real', false),
+  note('honeyPlan', 'real', false),
+  note('feeding', 'real', false),
+  note('combs', 'real', false),
+  note('defense', 'real', false),
+  note('varroa', 'real', false),
+  note('prevent', 'real', false),
+  note('simplified', 'real', false),
 ];
 
 /** 有蜂在做这件事就算看到了 */
@@ -140,6 +150,16 @@ export function beeNotes(w: BeeWorld, look: NotesLook): NotesDef {
       if (w.heat.fanning >= 20) yield 'fan';
       if (w.weather.phase === 'rain') yield 'rain';
       if (w.abscond.restless) yield 'restless';
+      // 现实里的养蜂（P-014）：玩家做过、见过相关的事以后才记下，讲得深一些
+      if (known.size >= 6) yield 'cerana';
+      if (sel?.kind === 'hive') yield 'inspect';
+      if (w.keeper.harvests > 0) yield 'honeyPlan';
+      if (w.keeper.swaps > 0) yield 'combs';
+      if (w.hornets.swatted > 0 || w.hornets.plate) yield 'defense';
+      if (known.has('sac')) yield 'varroa';
+      if (known.has('restless')) yield 'prevent';
+      if (w.clock.day >= 2) yield 'simplified';
+      if (!known.has('feeding') && w.flowers.patches.some((p) => p.species === SUGAR)) yield 'feeding';
       if (!known.has('lowHoney') && w.abscond.present && w.comb.census().honeyCells < CONFIG.abscond.hungerAt) yield 'lowHoney';
     },
   };
