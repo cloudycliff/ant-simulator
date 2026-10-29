@@ -142,6 +142,9 @@ const SCENES = {
   rapeseed: { q: '&hour=11&season=spring:3&select=flower:10&fly=1', check: INFO },
   buckwheat: { q: '&hour=11&season=autumn:3&select=flower:11&fly=1', check: INFO },
   winterhive: { q: '&hour=12&season=winter:3&select=hive:0', check: INFO },
+  cluster: { q: '&hour=1&season=winter:2&run=150&cam=0,103,58,0,103,0', check: `world.bees.list.filter((b) => b.act === 'cluster').length + ' 只在团里'` },
+  clusterheat: { q: '&hour=1&season=winter:2&run=150&cam=0,103,58,0,103,0&view=heat' },
+  clusterpanel: { q: '&hour=1&season=winter:2&run=150&select=hive:0', check: INFO },
   // 手机的抽屉：点底栏的按钮打开（只拍手机）
   sheetcolony: { q: '&hour=11&run=120', phone: true, click: ['#dock [data-v="0"]'] },
   sheetviews: { q: '&hour=11', phone: true, click: ['#dock [data-v="1"]'] },

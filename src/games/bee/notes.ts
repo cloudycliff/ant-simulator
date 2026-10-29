@@ -43,6 +43,8 @@ export const NOTES: NoteDef[] = [
   note('autumn', 'year'),
   note('winter', 'year'),
   note('spring', 'year'),
+  note('cluster', 'year'),
+  note('winterDead', 'year'),
   note('queenCells', 'life'),
   note('swarm', 'life'),
   note('virgin', 'life'),
@@ -107,6 +109,9 @@ const BY_EVENT: Record<string, string> = {
   'ev.matingFlight': 'mating',
   'ev.emergencyCells': 'emergency',
   'ev.droneEvict': 'evict',
+  'ev.cluster': 'cluster',
+  'ev.winterDead': 'winterDead',
+  'ev.lowStores': 'lowHoney',
 };
 
 /** 玩家这一刻在看什么、在用什么 */

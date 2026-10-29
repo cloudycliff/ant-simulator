@@ -1,12 +1,13 @@
 import { L, type Text } from '../../../core/i18n';
 import { Behavior, type Routine as CoreRoutine } from '../../../core/sim/behavior';
+import type { Season } from '../../../core/sim/clock';
 import type { IdPool } from '../../../core/sim/ids';
 import { turnToward } from '../../../core/move/surface';
 import type { Point3 } from '../../../core/sim/events';
 import { TAU, clamp, wrapAngle } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
-import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteFrame, siteU, siteV, type Comb } from './comb';
+import { CELL, CELLS, GRID, SITES, cellFace, cellSite, siteAt, siteFrame, siteU, siteV, type Comb } from './comb';
 import { APPROACH, DEPART, DOCK, DOOR, MOUTH, TUBE_LEN, steer, tubeAt } from './flight';
 import { landingPoint, plantCount, plantsOf, type FlowerPatch, type Flowers } from './flowers';
 import { Field, NODES, WalkMap, cellNode, nodeAt, nodeU, nodeV } from './walk';
@@ -26,6 +27,7 @@ const HN = CONFIG.hornets;
 const SB = CONFIG.pests.sacbrood;
 const U = CONFIG.abscond;
 const DR = CONFIG.drones;
+const CL = CONFIG.cluster;
 /** 每个走路格在哪个温度格 */
 const NODE_HEAT = (() => {
   const a = new Int16Array(NODES);
@@ -115,11 +117,13 @@ export const ACTS = [
   'mating',
   'droneFlight',
   'evicted',
+  'goCluster',
+  'cluster',
 ] as const;
 export type Act = (typeof ACTS)[number];
 
 /** 要去的地方各有一张路程场 */
-const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'droneLay', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance', 'floor', 'cold'] as const;
+const FIELD_KEYS = ['larvae', 'dirty', 'layable', 'droneLay', 'cluster', 'food', 'pollen', 'ripen', 'frontier', 'store', 'pollenStore', 'entrance', 'floor', 'cold'] as const;
 type FieldKey = (typeof FIELD_KEYS)[number];
 
 /** 行为协程交给运动层的指令；t 是剩下的秒数，执行时就地减，存档时连进度一起存 */
@@ -295,6 +299,8 @@ export interface BeesSave {
   evicting?: boolean;
   droneOk?: boolean;
   droneRoom?: number;
+  frozen?: number;
+  cluster?: [number, number, number];
   coldNeed: number;
   hotNeed: number;
 }
@@ -328,6 +334,10 @@ export interface BeeEnv {
   /** 这一季的数（四个一组，春夏秋冬，换季时渐变）；记一条事件（T-028） */
   seasonal(values: readonly number[]): number;
   log(msg: Text, bee?: number): void;
+  /** 这会儿的气温、哪一季、第几年（P-017） */
+  air(): number;
+  season(): Season;
+  year(): number;
 }
 
 /**
@@ -342,8 +352,13 @@ export class Bees {
   laid = 0;
   /** 饿死的幼虫、成蜂 */
   starved = 0;
-  /** 被赶出巢的雄蜂（T-028） */
+  /** 被赶出巢的雄蜂（T-028）；冬天冻死的工蜂（P-017） */
   evicted = 0;
+  frozen = 0;
+  /** 冬天抱团（P-017）：在不在抱团、团有多大（一面上的半径 cm），哪一年记过抱团的事件 */
+  clustering = false;
+  clusterR = 0;
+  private clusterYear = 0;
   /** 今年秋天赶雄蜂的事件记过了 */
   private evicting = false;
   hungry = 0;
@@ -535,10 +550,12 @@ export class Bees {
       this.assess();
       this.countDrones();
       this.evict();
+      this.huddleUp();
     }
     let dead = 0;
     const recall = this.env.recall() * dt;
     const aging = this.env.aging();
+    const temp = this.env.heat.temp;
     for (const b of this.list) {
       b.waggle = 0;
       b.prev.x = b.pos.x;
@@ -548,8 +565,14 @@ export class Bees {
       b.age += old;
       if (b.caste === CASTE.worker) b.dev += old * this.pace[roleIndex(b.dev)];
       if (b.caste !== CASTE.queen) {
-        b.crop = Math.max(0, b.crop - dt / (b.out === 2 ? F.flyBurn : b.caste === CASTE.drone ? B.droneBurn : B.burn));
+        const burn = b.out === 2 ? F.flyBurn : b.caste === CASTE.drone ? B.droneBurn : B.burn;
+        b.crop = Math.max(0, b.crop - (dt * (b.act === 'cluster' ? CL.burn : 1)) / burn);
         b.fast = b.crop > 0 ? 0 : b.fast + dt;
+      }
+      // 冬天团外冷的地方的工蜂会冻死（P-017）
+      if (this.clustering && !b.out && b.caste === CASTE.worker && temp[heatAt(b.u, b.v)] < CL.chill && this.rng.chance(dt / CL.chillTime)) {
+        this.frozen++;
+        b.life = b.age;
       }
       if (b.age >= b.life || b.fast > B.starve) {
         if (b.fast > B.starve) this.hungry++;
@@ -588,6 +611,19 @@ export class Bees {
     // 焐热了的空雄蜂房；没有的话蜂王不专门去找（找不到要白走好一阵）
     this.droneRoom = 0;
     if (this.droneOk && this.env.seasonal(DR.brood) > 0) for (let c = 0; c < CELLS; c++) if (this.isDroneLayable(c)) this.droneRoom++;
+  }
+
+  /** 冷了抱团，团的大小按巢里有多少蜂；一年第一次在冬天抱团时记事件 */
+  private huddleUp(): void {
+    const on = this.env.air() < CL.air;
+    if (on && !this.clustering && this.env.season() === 'winter' && this.clusterYear !== this.env.year()) {
+      this.clusterYear = this.env.year();
+      this.env.log(L('ev.cluster'));
+    }
+    this.clustering = on;
+    let n = 0;
+    for (const b of this.list) if (!b.out) n++;
+    this.clusterR = r4(Math.sqrt(((n / 2) * CL.area) / Math.PI));
   }
 
   /** 秋冬工蜂把巢里的雄蜂赶出去（T-028）；一年记一次事件 */
@@ -1223,6 +1259,26 @@ export class Bees {
       }
       return;
     }
+    if (key === 'cluster') {
+      // 开局育儿区的中心一圈；那里没有巢脾（换了空巢框）就在哪儿都行
+      const O = CONFIG.opening.brood;
+      const m = this.map.walk;
+      const r = Math.max(2, this.clusterR);
+      let found = 0;
+      for (let n = 0; n < NODES; n++)
+        if (m[n] === 1 && Math.hypot(nodeU(n) - O.u, nodeV(n) - O.v) < r) {
+          found++;
+          yield n;
+          yield n + NODES;
+        }
+      if (found) return;
+      for (let n = 0; n < NODES; n++)
+        if (m[n] === 1) {
+          yield n;
+          yield n + NODES;
+        }
+      return;
+    }
     if (key === 'frontier') {
       let found = 0;
       for (let c = 0; c < CELLS; c++)
@@ -1251,6 +1307,7 @@ export class Bees {
       return;
     }
     const want = {
+      cluster: () => false,
       larvae: this.isHungryLarva,
       dirty: this.isDirty,
       layable: this.isLayable,
@@ -1314,6 +1371,8 @@ export class Bees {
     // 要飞逃的蜂群吃得饱饱的（T-025）
     if (b.crop < B.hungry + (U.gorge - B.hungry) * this.env.unrest()) return yield* this.eat(b);
     if (b.caste === CASTE.drone) return yield* this.droneTask(b);
+    // 冬天抱团（P-017）：多半回团里待着，少数时候照旧干巢里的活
+    if (this.clustering && b.load <= 0 && this.rng.chance(CL.share)) return yield* this.huddle(b);
     const role = roleOf(b);
     // 子脾冷了年轻的蜂去抱团产热，热了去巢门扇风（T-021）
     // 过冬后的蜂大多是老蜂，采集蜂、守卫也来，机会少一些
@@ -1665,13 +1724,16 @@ export class Bees {
     const cell = yield* this.seek(b, 'food', this.isFood, 'goEat', this.isOpenFood);
     if (cell < 0) return yield* this.idle(b, 0.8);
     yield* this.work(b, cell, 'eat', C.work.eat);
-    b.crop = Math.min(1, b.crop + this.comb.takeHoney(cell, (1 - b.crop) * B.meal) / B.meal);
+    // 冬天团里的蜂靠吃蜜产热，吃得多（P-017）
+    const meal = B.meal * (this.clustering ? CL.meal : 1);
+    b.crop = Math.min(1, b.crop + this.comb.takeHoney(cell, (1 - b.crop) * meal) / meal);
   }
 
   private *queenTask(b: Bee): Routine {
     const duty = this.env.duty(b);
     if (duty === 'fly') return yield* this.matingFlight(b);
     if (duty === 'wait') return yield* this.idle(b, 0.6);
+    if (this.clustering && this.env.laying() <= 0) return yield* this.huddle(b);
     if (this.rng.chance(this.env.unrest() * U.stopLaying)) return yield* this.idle(b, 0.8);
     const laying = this.env.laying();
     if (laying < 1 && !this.rng.chance(laying)) return yield* this.idle(b, 0.8);
@@ -1726,6 +1788,20 @@ export class Bees {
     if (!((yield { k: 'go', f: 'cold', near: 0, t: 60 }) as boolean)) return yield* this.idle(b);
     b.act = 'heat';
     yield { k: 'heat', t: this.rng.range(HT.hold[0], HT.hold[1]) };
+  }
+
+  /** 冬天回到团里，挤在一起待一阵 */
+  private *huddle(b: Bee): Routine {
+    b.act = 'goCluster';
+    if (!((yield { k: 'go', f: 'cluster', near: 0, t: 60 }) as boolean)) return yield* this.idle(b);
+    b.act = 'cluster';
+    // 再走到团里随便一处，不然都停在团的边上围成一圈
+    const O = CONFIG.opening.brood;
+    const a = this.rng.range(0, TAU);
+    const r = this.clusterR * Math.sqrt(this.rng.next());
+    const s = siteAt(O.u + r * Math.cos(a), O.v + r * Math.sin(a));
+    if (s >= 0 && this.comb.build[s] >= 1) yield { k: 'to', cell: s + b.face * SITES, t: 20 };
+    yield { k: 'rest', t: this.rng.range(CL.hold[0], CL.hold[1]) };
   }
 
   /** 走到巢门边扇风：中蜂扇风时头背着巢门（意蜂朝着巢门，BALANCE） */
@@ -2120,6 +2196,8 @@ export class Bees {
       evicting: this.evicting,
       droneOk: this.droneOk,
       droneRoom: this.droneRoom,
+      frozen: this.frozen,
+      cluster: [this.clustering ? 1 : 0, this.clusterR, this.clusterYear],
       coldNeed: this.coldNeed,
       hotNeed: this.hotNeed,
     };
@@ -2165,6 +2243,8 @@ export class Bees {
     this.evicting = d.evicting ?? false;
     this.droneOk = d.droneOk ?? true;
     this.droneRoom = d.droneRoom ?? 0;
+    this.frozen = d.frozen ?? 0;
+    [this.clustering, this.clusterR, this.clusterYear] = d.cluster ? [d.cluster[0] === 1, d.cluster[1], d.cluster[2]] : [false, 0, 0];
     this.coldNeed = d.coldNeed;
     this.hotNeed = d.hotNeed;
     for (const f of Object.values(this.fields)) f.at = -Infinity;

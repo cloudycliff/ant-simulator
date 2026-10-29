@@ -17,6 +17,7 @@ import type { HornetState } from '../../../src/games/bee/sim/hornets';
 import { en } from '../../../src/games/bee/i18n/en';
 import { NOTES, beeNotes } from '../../../src/games/bee/notes';
 import { QUEEN_CELL, QUEEN_CELL_KEYS } from '../../../src/games/bee/sim/swarming';
+import { heatAt } from '../../../src/games/bee/sim/heat';
 
 setLang('en');
 const STEP = 1 / 30;
@@ -704,6 +705,61 @@ check('花蜜大多交给内勤蜂', bees.handoffs > bees.selfStored * 3, `交 $
   run(r1, 30);
   run(r2, 30);
   check('赶雄蜂时存档往返一致、读两次走得一样', same && fingerprint(r1) === fingerprint(r2));
+}
+{
+  // 冬天抱团（P-017、T-029）：夜里冷了蜂在巢脾中间抱成一团；存蜜吃光了蜂群饿死，冬天不飞逃，空箱开春才有蜂来
+  const x = new BeeWorld(7);
+  const CL = CONFIG.cluster;
+  const O = CONFIG.opening.brood;
+  const heard = new Set<string>();
+  let left = false;
+  const fast = (secs: number) => {
+    for (let i = 0; i < secs; i++) {
+      x.advance(1, Infinity, Infinity);
+      if (i % 10 === 0) for (const b of x.bees.list) seen.add(b.act);
+      left ||= x.abscond.swarm.phase === 'leaving';
+    }
+    for (const e of x.events.entries) if (typeof e.msg === 'object' && 'k' in e.msg) heard.add(e.msg.k);
+  };
+  x.clock.setSeason('winter', 1);
+  fast(((24 + 1 - x.clock.hour) % 24) * (CONFIG.clock.dayLength / 24));
+  const inHive = x.bees.list.filter((b) => !b.out && b.caste === CASTE.worker);
+  const huddled = inHive.filter((b) => b.act === 'cluster');
+  const near = huddled.filter((b) => Math.hypot(b.u - O.u, b.v - O.v) < x.bees.clusterR * 1.3).length;
+  const core = x.heat.temp[heatAt(O.u, O.v)];
+  check(
+    '冬天抱团：夜里冷了大多数蜂挤在巢脾中间，团心是暖的，记进事件',
+    x.bees.clustering && x.weather.air(x.clock.hour) < CL.air && huddled.length > inHive.length * 0.6 && near > huddled.length * 0.9 && core > 30 && heard.has('ev.cluster'),
+    `${huddled.length} / ${inHive.length} 只在团里（半径 ${x.bees.clusterR.toFixed(1)} cm），团心 ${core.toFixed(1)} °C`,
+  );
+  const saved = JSON.stringify(beeSave.write(x, 1));
+  const reload = () => {
+    const r = new BeeWorld(7);
+    beeSave.read(r, JSON.parse(saved) as BeeSaveData);
+    return r;
+  };
+  const [r1, r2] = [reload(), reload()];
+  const same = JSON.stringify(beeSave.write(r1, 1)) === saved && r1.bees.clustering;
+  run(r1, 30);
+  run(r2, 30);
+  check('抱团时存档往返一致、读两次走得一样', same && fingerprint(r1) === fingerprint(r2));
+  // 存蜜吃光：几百秒里饿死，冬天不飞逃，箱子空出来
+  for (let c = 0; c < CELLS; c++) {
+    const k = x.comb.content[c];
+    if (k === CELL.nectar || k === CELL.honey || k === CELL.cappedHoney) x.comb.takeHoney(c, 1);
+  }
+  for (let i = 0; i < 30 && x.abscond.swarm.phase === 'home'; i++) fast(60);
+  check(
+    '冬天存蜜吃光了：蜂群饿死，不飞逃，箱子空出来，记进事件',
+    x.abscond.swarm.phase === 'empty' && !left && heard.has('ev.lowStores') && heard.has('ev.winterDead'),
+    `${x.abscond.swarm.phase}，饿死 ${x.bees.hungry} 只`,
+  );
+  (x.abscond as unknown as { timer: number }).timer = 0;
+  fast(CONFIG.clock.dayLength);
+  const winterEmpty = x.abscond.swarm.phase === 'empty' && x.clock.season === 'winter';
+  x.clock.setSeason('spring', 1);
+  for (let i = 0; i < 20 && x.abscond.swarm.phase === 'empty'; i++) fast(60);
+  check('冬天死了的箱子冬天没有蜂来，开春侦察蜂来了', winterEmpty && x.abscond.swarm.phase !== 'empty', x.abscond.swarm.phase);
 }
 {
   // 分蜂、造王台、换王（P-016、T-027）：上午十点造王台，把王台里的蜂王拨快

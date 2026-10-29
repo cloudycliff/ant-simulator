@@ -48,7 +48,7 @@ export interface HeatBee {
 }
 
 /**
- * 巢脾上的温度（T-021）：每只蜂都散一点热，抱团振翅的蜂（act 'heat'）散得多；热从格子往四邻传，
+ * 巢脾上的温度（T-021）：每只蜂都散一点热，抱团振翅的蜂（act 'heat'，冬天团里的 'cluster'）散得多；热从格子往四邻传，
  * 往外面的空气散，扇风的蜂越多散得越快。子在哪一格就按哪一格的温度发育
  */
 export class Heat {
@@ -85,7 +85,7 @@ export class Heat {
       if (b.out) continue;
       const i = heatAt(b.u, b.v);
       this.bees[i]++;
-      if (b.act === 'heat') {
+      if (b.act === 'heat' || b.act === 'cluster') {
         this.heaters[i]++;
         heat++;
       } else if (b.act === 'fan') fan++;

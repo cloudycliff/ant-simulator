@@ -115,7 +115,7 @@ export const CONFIG = {
     builders: 0.35,
     guards: 0.35,
     /** 路程场多久重算一次（秒）：要喂的幼虫、要清理的、能产卵的、食物、花粉、要酿的蜜、在造的巢房、放花蜜和花粉的房 */
-    refresh: { larvae: 2, dirty: 5, layable: 3, droneLay: 5, food: 5, pollen: 5, ripen: 5, frontier: 10, store: 5, pollenStore: 5 },
+    refresh: { larvae: 2, dirty: 5, layable: 3, droneLay: 5, cluster: 10, food: 5, pollen: 5, ripen: 5, frontier: 10, store: 5, pollenStore: 5 },
     /** 育儿区（开局育儿区的椭圆）往外到 ring 倍是放花粉的一圈，再往外放花蜜；蜂王在 queen 倍以内产卵 */
     ring: 1.5,
     queen: 1.4,
@@ -453,9 +453,11 @@ export const CONFIG = {
    * 空箱 vacant 天以后、scoutHours 点之间能飞时来 scouts 只侦察蜂，在巢门进进出出 scoutTime 秒；然后（hours 点之间、能飞时）
    * workers 只工蜂（日龄在寿命的 0..young 之间，蜂群里年轻的蜂多）、drones 只雄蜂和一只蜂王的野生蜂群从 farR 外飞来，在 land 附近 landR 内盘旋，每只每盘旋一趟有 enter 的机会进巢，
    * 过 landMax 秒剩下的都进去；每只工蜂带来 carry 房蜜，先带在身上，有空房就吐进最靠上的空房（带着的也算存蜜）。
-   * renew：箱子一空就把两框换成空巢框，新来的蜂群从框梁下重新造
+   * renew：箱子一空就把两框换成空巢框，新来的蜂群从框梁下重新造。
+   * 只在 seasons 里的季节飞逃、来侦察蜂（P-017：冬天不飞逃，冬天死了的箱子开春才有蜂群来）
    */
   abscond: {
+    seasons: ['spring', 'summer', 'autumn'] as readonly string[],
     every: 5,
     stressFull: 0.6,
     hungerAt: 250,
@@ -532,6 +534,22 @@ export const CONFIG = {
     flightTime: 60,
     layAfter: 480,
     emergency: 3,
+  },
+  /**
+   * 冬天抱团（P-017、T-029）。气温低于 air °C 时蜂在巢脾上抱成一团，团的中心在开局育儿区的中心，每只蜂在一面上占 area cm²（两面各一半）。
+   * 工蜂、没在产卵的蜂王每次闲下来有 share 的机会回团里待 hold 秒（算产热的蜂）；团里的蜂蜜囊空得快 burn 倍，吃一次多用 meal 倍的蜜（产热要吃蜜）。
+   * 巢里比 chill °C 冷的地方的工蜂每秒有 1/chillTime 的机会冻死。冬天存蜜少于 lowStores 满房时记一次事件
+   */
+  cluster: {
+    air: 12,
+    area: 0.45,
+    share: 0.85,
+    hold: [20, 40] as [number, number],
+    burn: 2,
+    meal: 4,
+    chill: 10,
+    chillTime: 400,
+    lowStores: 400,
   },
   /**
    * 雄蜂的季节变化（T-028）。四个一组的是春、夏、秋、冬。蜂王产雄蜂卵的上限是 care.droneBrood 乘 brood，

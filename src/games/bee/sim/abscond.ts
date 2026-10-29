@@ -1,4 +1,5 @@
 import { L, type Text } from '../../../core/i18n';
+import type { Season } from '../../../core/sim/clock';
 import { TAU, clamp } from '../../../core/util/math';
 import type { Rng } from '../../../core/util/random';
 import { CONFIG } from '../config';
@@ -37,6 +38,7 @@ export interface AbscondSave {
   dir: number;
   stash: number;
   stats: number[];
+  lowYear?: number;
 }
 
 /** 飞逃要看的：蜂、巢脾、开箱的压力、胡蜂、巢虫、天气和时刻，记事件 */
@@ -49,7 +51,7 @@ export interface AbscondHost {
   /** 空箱时把两框换成空巢框，返回拿出来的蜜；不换时返回 -1 */
   renew: () => number;
   flyable: () => boolean;
-  clock: { hour: number };
+  clock: { hour: number; season: Season; year: number };
   log(msg: Text): void;
 }
 
@@ -80,6 +82,8 @@ export class Abscond {
   private dir = 0;
   /** 搬进来的蜂群带来、还没吐进巢房的蜜（房）：新巢框上没几个空房，造出来一个吐一个 */
   stash = 0;
+  /** 哪一年冬天记过存蜜快吃光了（P-017） */
+  private lowYear = 0;
 
   constructor(
     private readonly rng: Rng,
@@ -135,7 +139,7 @@ export class Abscond {
         return;
       case 'empty':
         this.timer -= dt;
-        if (this.timer <= 0 && within(host.clock.hour, U.scoutHours) && host.flyable()) {
+        if (this.timer <= 0 && within(host.clock.hour, U.scoutHours) && host.flyable() && U.seasons.includes(host.clock.season)) {
           this.far(300, 100);
           host.bees.incoming(this.rng.int(U.scouts[0], U.scouts[1]), 0, false, s, 3);
           this.timer = U.scoutTime;
@@ -190,11 +194,15 @@ export class Abscond {
     for (const b of host.bees.list) if (b.caste === CASTE.worker) workers++;
     if (workers < U.collapse) {
       this.absconds++;
-      this.vacate('ev.collapse');
+      this.vacate(host.clock.season === 'winter' ? 'ev.winterDead' : 'ev.collapse');
       return;
     }
     if (this.stash > 1e-6) this.stash = Math.max(0, this.stash - cb.unload(this.stash));
     const c = cb.census();
+    if (host.clock.season === 'winter' && c.honeyCells + this.stash < CONFIG.cluster.lowStores && this.lowYear !== host.clock.year) {
+      this.lowYear = host.clock.year;
+      host.log(L('ev.lowStores', { n: Math.round(c.honeyCells + this.stash) }));
+    }
     let bald = 0;
     for (let cell = 0; cell < CELLS; cell++) if (cb.bald[cell]) bald++;
     const f = this.factors;
@@ -213,7 +221,7 @@ export class Abscond {
       this.restless = false;
       host.log(L('ev.calm'));
     }
-    if (this.pressure >= U.leave && within(host.clock.hour, U.hours) && host.flyable()) this.leave();
+    if (this.pressure >= U.leave && within(host.clock.hour, U.hours) && host.flyable() && U.seasons.includes(host.clock.season)) this.leave();
   }
 
   /** 飞逃（测试、截图也用） */
@@ -229,7 +237,7 @@ export class Abscond {
   }
 
   /** 蜂群走了（或死光了）：剩下的蜂都算走了，卵和幼虫没人管死掉，箱子空一阵；空箱里换上两框空巢框，新来的蜂群从头造 */
-  private vacate(key: 'ev.gone' | 'ev.collapse'): void {
+  private vacate(key: 'ev.gone' | 'ev.collapse' | 'ev.winterDead'): void {
     this.left += this.host.bees.depart();
     const brood = this.host.comb.abandon();
     this.abandoned += brood;
@@ -268,6 +276,7 @@ export class Abscond {
       dir: r4(this.dir),
       stash: r4(this.stash),
       stats: [this.absconds, this.moveIns, this.left, this.abandoned],
+      lowYear: this.lowYear,
     };
   }
 
@@ -283,5 +292,6 @@ export class Abscond {
     this.dir = d.dir;
     this.stash = d.stash;
     [this.absconds, this.moveIns, this.left, this.abandoned] = d.stats;
+    this.lowYear = d.lowYear ?? 0;
   }
 }

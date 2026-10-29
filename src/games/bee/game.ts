@@ -452,6 +452,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
       ${w.heat.chilled ? sub(t('colony.chilled'), w.heat.chilled) : ''}
       ${row(t('colony.broodTemp'), t('colony.broodTempValue', { t: w.heat.broodMean.toFixed(1), lo: w.heat.broodMin.toFixed(1), hi: w.heat.broodMax.toFixed(1) }))}
       ${row(t('colony.climate'), t('colony.climateValue', { h: w.heat.heating, f: w.heat.fanning }))}
+      ${B.clustering ? row(t('colony.cluster'), t('colony.clusterValue', { n: B.list.filter((b) => b.act === 'cluster').length })) : ''}
       ${row(t('colony.honey'), t('colony.fullCells', { n: Math.round(c.honeyCells) }))}
       ${row(t('colony.pollen'), t('colony.fullCells', { n: Math.round(c.pollenCells) }))}
       <h3>${t('colony.forage')}</h3>
@@ -482,6 +483,7 @@ function beeUi(w: BeeWorld, view: BeeView, following: () => boolean): GameUi<Bee
         ${stat('total.absconds', w.abscond.absconds)}${stat('total.moveIns', w.abscond.moveIns)}
         ${stat('total.swarms', w.swarming.swarms)}${stat('total.swarmLeft', w.swarming.left)}
         ${stat('total.queens', w.swarming.queens)}${stat('total.evicted', w.bees.evicted)}
+        ${stat('total.frozen', w.bees.frozen)}
       </div>`;
       },
     },
