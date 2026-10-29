@@ -64,7 +64,7 @@
 - [x] 存档和读档往返一致（巢脾、花丛、巢里和在外面的蜂、跳舞、跟舞读出的地方、交接）
 - [x] 无界面测试（照 `scripts/games/aquarium/aquatest.ts`），加进 `npm run check`
 - [x] 截图：桌面和竖屏手机，白天、夜里、选中、跟随、工具、英文
-- [x] 部署到 `cyberant.pages.dev/bee.html`
+- [x] 部署到 `cyberant.pages.dev/bee.html`（2026-10-29 起另有单独的地址 https://cyberbee.pages.dev/ ，T-030）
 
 **验收标准**：
 - 无界面跑 10 个游戏日：只数稳定或缓慢增长，储蜜在白天增加、夜里回落但不单向漂移，日龄分工的几种工作都有蜂在做
