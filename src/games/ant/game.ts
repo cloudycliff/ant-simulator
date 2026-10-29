@@ -12,6 +12,7 @@ import { ItemView } from './render/itemView';
 import { createSpace } from './space';
 import { ICON, antUi } from './ui/panels';
 import { Picker } from './ui/picking';
+import { antNotes } from './ui/notes';
 import { createTools } from './ui/tools';
 import type { GameRef } from './world/entities';
 import { loadWorld, saveMeta, saveProblem, saveSlot, saveWorld, type AntSaveMeta, type SaveData } from './world/save';
@@ -123,12 +124,21 @@ function mount(ctx: GameContext<World, GameRef>): GameSession<GameRef> {
   };
 
   let pherTimer = 0;
+  let selection: GameRef | null = null;
+  const notes = antNotes(world, {
+    selection: () => selection,
+    tool: () => tools.def?.kind ?? null,
+    xray: xrayOn,
+    pheromone: () => view.pheromone,
+    roleColors: () => view.roleColors,
+  });
   return {
     shadowLight: env.sun,
     views,
     tools,
     pick: (x, y, tolerance) => picker.pick(x, y, xrayOn(), tolerance),
     onSelect: (sel) => {
+      selection = sel;
       antView.selectedId = sel?.kind === 'ant' ? sel.id : -1;
       nestView.highlightChamber(sel?.kind === 'chamber' ? sel.id : null);
     },
@@ -178,6 +188,6 @@ function mount(ctx: GameContext<World, GameRef>): GameSession<GameRef> {
         world.pheromone.refreshTexture();
       }
     },
-    ui: antUi(world, { following: ctx.following, pheromone: () => view.pheromone }),
+    ui: { ...antUi(world, { following: ctx.following, pheromone: () => view.pheromone }), notes },
   };
 }

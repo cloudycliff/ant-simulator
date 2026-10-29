@@ -371,7 +371,7 @@ export const en: Record<keyof typeof zh, Entry> = {
   'help.click': 'Click to select an ant, room, food or plant · double-click to fly to it',
   'help.touchTap': 'Tap to select an ant, room, food or plant · double-tap to fly to it · while following an ant, drag to orbit',
   'help.follow': '<kbd>F</kbd> follow the selected ant · <kbd>Esc</kbd> deselect · <kbd>Space</kbd> pause/resume',
-  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>X</kbd> x-ray · <kbd>P</kbd> pheromones · <kbd>C</kbd> role colors · <kbd>G</kbd> grass · <kbd>T</kbd> stats · <kbd>M</kbd> music',
+  'help.views': '<kbd>1</kbd>–<kbd>5</kbd> speed · <kbd>X</kbd> x-ray · <kbd>P</kbd> pheromones · <kbd>C</kbd> role colors · <kbd>G</kbd> grass · <kbd>T</kbd> stats · <kbd>M</kbd> music · <kbd>N</kbd> notebook',
   'help.tools': '<kbd>6</kbd> food · <kbd>7</kbd> obstacle · <kbd>8</kbd> water · <kbd>9</kbd> predator (press again to cycle options, <kbd>Esc</kbd> to put the tool away) · <kbd>Ctrl</kbd>+<kbd>S</kbd> save (it also autosaves)',
   'legend.trail': 'Trail pheromone: laid by workers carrying food home; halves in about 1.5 minutes',
   'legend.home': 'Territory scent: hydrocarbons every worker leaves on the ground; fades very slowly',
@@ -548,4 +548,153 @@ export const en: Record<keyof typeof zh, Entry> = {
   'info.midden': 'Midden',
   'info.middenDesc': 'Workers pile food scraps, cocoon shells and dead nestmates at a fixed spot outside the nest, away from the brood, to limit the spread of pathogens. Workers that carry waste usually never go back to work in the nurseries.',
   'info.removedTotal': 'Total removed',
+
+  'notes.title': 'Ant notebook',
+  'notes.group.nest': 'The nest',
+  'notes.group.workers': 'Who does what',
+  'notes.group.forage': 'Food and sharing',
+  'notes.group.aphids': 'Aphids and ladybugs',
+  'notes.group.weather': 'Weather and warmth',
+  'notes.group.threats': 'Enemies',
+  'notes.group.real': 'Real ants',
+  'note.nest.title': 'A colony of black garden ants',
+  'note.nest.body':
+    "The black garden ant (Lasius niger) is one of Europe's most common ants, living under stones in lawns, verges and gardens; in East Asia its close look-alike relatives are common. Workers are only 3–5 mm long. There is one queen and no soldiers, so the workers defend the nest too.\nThe two little mounds on the ground are soil they dug out; below are tunnels and chambers. Select an ant, a chamber or some food to see what it is and what it's doing. Turn on X-ray to look underground.\nA mature wild colony often has thousands to over ten thousand workers. This one has about 1,000.",
+  'note.nest.hint': 'Shown when you start',
+  'note.xray.title': 'The nest underground',
+  'note.xray.body':
+    "X-ray shows the whole nest: a shaft linking layers of chambers. The queen lives in the queen's chamber; eggs, larvae and pupae are kept apart by stage; the food store holds prey and seeds brought home, the waste chamber holds scraps, and there are rest rooms and a winter chamber.\nAnts move the brood for warmth and moisture: pupae like it warm, so on sunny days they are carried up to the shallow sun chamber.\nReal nests are less tidy. Chamber size and depth change with the soil, the season and the size of the colony, and in winter the ants retreat to depths that don't freeze.",
+  'note.xray.hint': 'Turn on X-ray, or move the camera below ground',
+  'note.queen.title': 'The queen',
+  'note.queen.body':
+    "Only the queen lays eggs. Every worker is her daughter, a female that never mates, so the thousand ants in the nest are one big family.\nThe queen hardly leaves her chamber. Nurses feed and groom her and carry her eggs to the egg chamber. A hungry queen lays fewer eggs.\nIn real Lasius niger, workers in a queenless nest can lay unfertilized eggs, which hatch into males (there are no males in the game).",
+  'note.queen.hint': "Click the queen or the queen's chamber",
+  'note.brood.title': 'Eggs, larvae and pupae',
+  'note.brood.body':
+    'Ants go through complete metamorphosis, like butterflies: eggs hatch into white, legless larvae; a well-fed larva spins a cocoon and pupates; the adult forms inside. Lasius niger cocoons are pale brown and often mistaken for "ant eggs".\nLarvae can\'t find food themselves. Nurses feed them sweet liquid mouth to mouth and give them bits of prey, and workers help each new ant tear open its cocoon.\nIn real life an egg takes one to two months to become a worker, faster when warm. The game squeezes it into about 8 game days.',
+  'note.brood.hint': 'Click an egg, larva or pupa chamber',
+  'note.expand.title': 'Expanding the nest',
+  'note.expand.body':
+    "When the ants outgrow their rooms, maintenance workers start digging: first a new tunnel, then a chamber opened out from its end. Each soil pellet is carried out and dropped on the mound by the entrance.\nStudies of Lasius niger found that nest size roughly tracks the number of workers: they dig when crowded and stop when there's room, with no one in charge.\nThe Nest section of the colony panel shows how crowded it is and what is being dug.",
+  'note.expand.hint': 'When the nest gets crowded (see crowding in the colony panel)',
+  'note.midden.title': 'The midden',
+  'note.midden.body':
+    'Leftover prey, empty cocoons and dead nestmates are all cleared away: first to the waste chamber inside, then to the midden outside.\nRubbish left in the nest grows mould and germs, so ants keep it far from the brood. Leafcutter ants even have dedicated waste workers that never go back to the brood areas, so they can\'t carry germs in.',
+  'note.midden.hint': 'Click the midden outside, or the waste chamber',
+  'note.roles.title': 'Jobs by age',
+  'note.roles.body':
+    "A worker changes jobs as she ages: newly emerged, she stays in to tend eggs and larvae (a nurse); later she does housework, cleaning, digging, carrying waste and guarding (maintenance); last of all she goes out to forage (a forager).\nOutside there are predators and it's easy to get lost, so leaving the riskiest work to old ants near the end of their lives costs the colony least.\nIt isn't a fixed rule: when foragers run short, younger workers go out early. Turn on Role colors to color ants by job: pink nurses, blue maintenance, green foragers, orange queen.",
+  'note.roles.hint': 'Turn on Role colors, or click both a nurse and a forager',
+  'note.nurse.title': 'Nurses',
+  'note.nurse.body':
+    'The youngest workers, who rarely leave the nest. They feed the larvae and the queen, lick eggs, larvae and pupae clean (their saliva holds mould back), move pupae to the right temperature and help new ants out of their cocoons.\nThe colony panel shows how many nurses there are and how many the colony wants.',
+  'note.nurse.hint': 'Click a nurse (pink with role colors)',
+  'note.maintenance.title': 'Maintenance workers',
+  'note.maintenance.body':
+    'Middle-aged workers: they clean chambers, carry out rubbish and the dead, dig tunnels and enlarge rooms; they plug the entrances with soil before rain and clear them afterwards; and they come out to guard the entrance when a spider is near.',
+  'note.maintenance.hint': 'Click a maintenance worker (blue with role colors)',
+  'note.forager.title': 'Foragers',
+  'note.forager.body':
+    'The oldest workers, out most of the time: finding food, cutting up prey, sipping sweet juice, tending aphids. Coming home with food they lay a pheromone trail, and with a full crop they share the sugar with nestmates inside.\nClick one to read about its trip, and pick Follow to go along with it.',
+  'note.forager.hint': 'Click a forager (green with role colors)',
+  'note.scout.title': 'Scouts',
+  'note.scout.body':
+    "A few foragers ignore the trails and wander about looking for new food. These are scouts. When one finds something, it lays a trail home and rouses its nestmates.\nAfter rain, while the ground is still damp, it's the scouts that go out first to check; the rest wait inside.",
+  'note.scout.hint': 'Click a scout (the colony panel shows how many there are)',
+  'note.shift.title': 'Changing jobs early',
+  'note.shift.body':
+    "When foragers are lost (eaten by a spider, caught in an antlion's pit) and there aren't enough to bring food in, some younger workers switch to foraging early.\nIn real colonies no one gives orders; each ant changes jobs by what it runs into, such as how long since it met a nestmate returning with food. The game simplifies this to working out from the colony's stores how many of each job there should be.",
+  'note.shift.hint': 'When foragers run short (the event log says so)',
+  'note.trail.title': 'Pheromone trails',
+  'note.trail.body':
+    "A forager that has found food dabs a trail pheromone on the ground with the tip of its abdomen all the way home. Nestmates follow the scent, and those that find food add to it on the way back, so a busy trail grows stronger; once no one uses it, it halves in a minute or two.\nShort, easy routes are walked faster and topped up more often, so they get stronger while long ones fade. That's how a colony with no leader still finds a short path.\nTurn on the Pheromones view: yellow-orange is the food trail, blue is the territory scent, red rings are alarm.",
+  'note.trail.hint': 'Turn on the Pheromones view, or wait for a forager to find food',
+  'note.memory.title': 'Remembering the way',
+  'note.memory.body':
+    'Lasius niger foragers have good memories: after a trip or two to a food source, they can walk straight back without following the scent. In experiments where the trail was bent off to one side, experienced foragers mostly kept to the route they remembered.\nPheromone mainly helps nestmates that have never been there; memory makes the old hands faster.',
+  'note.memory.hint': 'Watch a forager heading to a remembered food spot',
+  'note.share.title': 'The social stomach',
+  'note.share.body':
+    'An ant\'s crop works like a shared stomach: foragers bring sweet juice and honeydew home in it, then pass a drop mouth to mouth to a nestmate, who passes it on again. This is called trophallaxis.\nFood spreads through the whole nest this way, along with scents and other chemical signals. "Social stomach" in the colony panel is the sugar in all the ants\' crops added together.',
+  'note.share.hint': 'Watch two ants share food (most often near the food store)',
+  'note.prey.title': 'Cutting up prey',
+  'note.prey.body':
+    "A dead beetle or caterpillar is too big for one ant, so the ants cut it into small pieces with their mandibles on the spot and carry them back to the food store one by one.\nPrey is protein, mostly for the growing larvae and the egg-laying queen; adult workers run mainly on sugar.",
+  'note.prey.hint': 'Click a dead beetle or caterpillar, or watch ants cutting one up',
+  'note.seeds.title': 'Seeds with a snack',
+  'note.seeds.body':
+    "Many plants' seeds carry a small, oily appendage rich in fat, called an elaiosome. Ants carry the whole seed home, eat the elaiosome and throw the seed on the midden.\nThat moves the seed away from its parent to a rich spot to sprout. Violets and greater celandine are planted by ants this way. The plant pays in food, the ants do the sowing, and both gain.",
+  'note.seeds.hint': 'Click some seeds with elaiosomes',
+  'note.feed.title': 'Putting out food',
+  'note.feed.body':
+    "Click the ground to put food down. Sugar water and fruit juice are sucked into the crop and carried home, dead beetles and caterpillars are cut up and carried off, and seed elaiosomes get eaten too.\nA scout or forager has to bump into the food before a trail leads the others to it, so food placed far away may take a while.",
+  'note.feed.hint': 'Pick the Food tool',
+  'note.obstacle.title': 'Blocking the trail',
+  'note.obstacle.body':
+    'Drop a twig across a trail and the ants mill about at first, going every which way. The few that get round mark a new route, and before long everyone takes the shortest way round.\nIt\'s much like a famous experiment: give ants a long bridge and a short bridge between nest and food, and they soon crowd onto the short one, because the round trip is quicker there and the pheromone builds up faster.',
+  'note.obstacle.hint': 'Pick the Obstacle tool',
+  'note.aphids.title': 'Herding aphids',
+  'note.aphids.body':
+    'Aphids suck plant sap and give off sugary honeydew. Black garden ants are famous herders: they climb the plant, stroke the aphids with their antennae, catch the honeydew and take it home to share.\nIn return the ants chase off ladybugs, lacewing larvae and other enemies, and tended aphids multiply faster. Some ants even carry aphid eggs into the nest for the winter.\nThe colony panel shows how many aphid groups have been found.',
+  'note.aphids.hint': 'Wait for a forager to find aphids (on the herbs)',
+  'note.ladybug.title': 'Ladybugs',
+  'note.ladybug.body':
+    'Ladybugs and their larvae eat aphids, a hundred or more a day each. Ants tending the aphids gang up, biting and shoving until the beetle leaves the plant; the more ants on guard, the slower it eats.\nOn an untended group, a ladybug only leaves when it is full. Use the Predator tool to put one on an aphid group and see how the ants respond.',
+  'note.ladybug.hint': 'Wait for a ladybug to fly in, or put one on aphids with the Predator tool',
+  'note.winged.title': 'Winged aphids',
+  'note.winged.body':
+    'When an aphid group gets too crowded, it produces winged young that fly off to start new groups on other plants, and the old group shrinks.\nAnts don\'t want their aphids to leave. Experiments found that chemical traces left by black garden ants make aphids grow fewer wings and walk more slowly.',
+  'note.winged.hint': 'Once an aphid group is full (the event log says so)',
+  'note.rain.title': 'Shutting the door',
+  'note.rain.body':
+    "As soon as the sky clouds over, foragers head home and maintenance workers plug the entrances layer by layer with soil pellets. After the rain, once the ground dries, they clear them again.\nRain washes trails off the ground, so the ants have to find their way again afterwards, often with scouts going out first.\nMany real ants narrow or close their entrances before rain, at night or in the cold, against both water and enemies.",
+  'note.rain.hint': 'Wait for rain, or pick Call rain in the Water tool',
+  'note.flood.title': 'Flooding',
+  'note.flood.body':
+    'In heavy rain, water pours in through any entrance left open and shallow chambers flood. Nurses hurry the pupae to dry rooms, and the water only goes as it soaks into the soil.\nThat is why maintenance workers rush to plug the entrances before rain.',
+  'note.flood.hint': "In heavy rain when an entrance isn't sealed",
+  'note.sun.title': 'Warming the pupae',
+  'note.sun.body':
+    'Pupae develop faster when warm (about 30 °C is best in the game). When the sun has heated the ground and the stones, nurses carry the pupae up to the shallow sun chamber, and back down when it cools in the evening.\nTurn over a sun-warmed stone in the wild and you often find a pile of cocoons and workers rushing to carry them away: the underside of a stone is a natural incubator.',
+  'note.sun.hint': 'On a sunny morning, once the shallow soil warms up (the event log says so)',
+  'note.cold.title': 'Too cold to go out',
+  'note.cold.body':
+    "Ants are cold-blooded: their bodies are as warm as their surroundings. When the surface is cool they move slowly and find little food, so they stay in, and few ants are out at dawn or at night.\nReal Lasius niger colonies spend the winter deep below the frost, barely moving for months until spring (in the game it's always summer).",
+  'note.cold.hint': 'At night or early morning when the surface is cool',
+  'note.water.title': 'Pouring water',
+  'note.water.body':
+    'A little water or a big cupful washes away the pheromone there and leaves a puddle that slowly dries; the ants walk round it and find their way again. Call rain brings a rain cloud.\nAnts need to drink, but standing water is dangerous for them: they are so small that a drop wrapped round them is hard to escape.',
+  'note.water.hint': 'Pick the Water tool',
+  'note.spider.title': 'Wolf spiders',
+  'note.spider.body':
+    "Wolf spiders don't build webs. They roam the ground and pounce on prey, and a lone forager makes a good snack.\nAnts that sense a spider nearby hurry away; while one is near the nest, foragers stay in and maintenance workers come out to guard.\nUse the Predator tool to put a spider in, or to chase one off.",
+  'note.spider.hint': 'Wait for a spider to wander in, or put one in with the Predator tool',
+  'note.mob.title': 'Mobbing the spider',
+  'note.mob.body':
+    "An ant under attack releases alarm pheromone. Nestmates that smell it rush in, grab the spider's legs and spray formic acid from the tip of the abdomen.\nBlack garden ants have no sting; numbers and formic acid are their weapons. One ant is no match for a wolf spider, but with dozens on it the spider can only flee. The Pheromones view shows alarm pheromone as red rings.",
+  'note.mob.hint': 'When workers swarm a spider',
+  'note.antlion.title': 'Antlions',
+  'note.antlion.body':
+    "An antlion is the larva of a lacewing-like insect. It circles backwards in dry sand to dig a funnel-shaped pit, then buries itself at the bottom with only its big jaws showing.\nAn ant that steps over the edge slips as the sand gives way, and struggling only takes it deeper; the antlion flicks sand up to knock it down, then grabs it and sucks it dry.\nAntlions only dig in dry ground. The adult looks like a long-winged damselfly.",
+  'note.antlion.hint': 'Put an antlion in with the Predator tool',
+  'note.corpse.title': 'Carrying out the dead',
+  'note.corpse.body':
+    "A while after an ant dies it starts to smell of oleic acid and other fatty acids, and nestmates that smell it carry it to the midden.\nIn a famous experiment, the biologist E. O. Wilson dabbed oleic acid on living harvester ants. Their nestmates carried them to the midden all the same; when they walked back, they were carried out again, until the smell wore off.",
+  'note.corpse.hint': 'Watch a maintenance worker carry a dead nestmate out',
+  'note.founding.title': 'How a colony begins',
+  'note.founding.body':
+    "On a hot, muggy summer evening (often after rain), mature colonies release thousands of winged young queens and males, and nests all around take off at about the same time. This is the nuptial flight.\nThe males die soon after mating. Each queen lands, bites off her own wings, squeezes into a crack in the soil and seals herself in. Living on stored fat and the flight muscles she no longer needs, she raises her first workers without eating for months.\nThe first workers are especially small. Once they're out, the queen does nothing but lay eggs. The game has no nuptial flight and no males.",
+  'note.founding.hint': 'After reading about the queen',
+  'note.lifespan.title': 'How long a queen lives',
+  'note.lifespan.body':
+    "Lasius niger queens are remarkably long-lived: one in a laboratory lived almost 29 years, among the longest-lived insects known. A colony lasts as long as its queen.\nWorkers live far shorter lives; generation after generation of workers comes and goes while the queen stays. In the game workers live only forty or fifty game days, and the queen never grows old.",
+  'note.lifespan.hint': 'Reach day three',
+  'note.keeping.title': 'Keeping ants for real',
+  'note.keeping.body':
+    "Ant keepers usually start with a single queen just after her nuptial flight rather than digging up a wild colony (you never get it all, and the queen usually stays underground). A common setup is a test tube with water at one end behind a cotton plug; the queen lives in the dry end, kept in the dark and left alone.\nOnce the first workers appear, feed a little sugar water or diluted honey and some small insects for protein, such as mealworms or pieces of cricket. Leftovers go mouldy, so remove them promptly.\nRoom temperature of 20–28 °C is fine. When the colony grows, move it to a formicarium with a foraging area attached.",
+  'note.keeping.hint': 'After using the Food tool',
+  'note.simplified.title': 'What the game simplifies',
+  'note.simplified.body':
+    "Time runs much faster: at 1× a day lasts 10 minutes, an egg becomes an adult in about 8 days, and a worker's life is much shorter.\nThere are no males or nuptial flights, no seasons or winter rest (it's always summer), and no rival colonies fighting over ground; real black garden ants often fight neighbouring colonies over territory and aphids.\nJobs are tidier than in reality: the game works out how many ants each job needs from the colony's stores, while real colonies have no one planning. And 1,000 ants is smaller than a wild colony.",
+  'note.simplified.hint': 'Reach day two',
 };

@@ -38,6 +38,7 @@ npx tsx scripts/games/ant/weathertest.ts    # 招来一场雨，观察躲雨、�
 npx tsx scripts/games/ant/ladybugtest.ts    # 瓢虫来访、蚜虫涨落，有无蚂蚁照料的对照
 npx tsx scripts/games/ant/perftest.ts 3000  # 3000 只工蚁的模拟耗时
 npx tsx scripts/games/ant/crowdtest.ts      # 3000 只工蚁时休息室、蚁丘和隧道有多挤
+npx tsx scripts/games/ant/notestest.ts      # 蚂蚁笔记：每条都有中英文，什么时候算看到了
 npx tsx scripts/i18ncheck.ts      # 中英文词典与英文模拟文字检查
 node scripts/core/layercheck.mjs       # 依赖方向检查：框架层 src/core 不能导入游戏 src/games
 node scripts/core/apicheck.mjs         # 框架的每个导出都写进了 docs/API.md
@@ -78,6 +79,9 @@ Cloudflare 后台的 Pages 项目 `cyberant` 连接了这个 GitHub 仓库：生
 | 画质：自动 / 高 / 中 / 低 / 省电 | 顶栏右上角的“画质”，点一下换一档；手机在“更多”菜单里（会记住选择） |
 | 亮度（白天、夜里分开调） | 顶栏右上角的“亮度”，拖动滑块；手机在“更多”菜单里（会记住设置） |
 | 背景音乐 开 / 关 | `M`，或顶栏右上角的“音乐”；手机在“更多”菜单里（默认开，会记住选择） |
+| 蚂蚁笔记 | `N`，或顶栏的“笔记”；手机在底栏最后一格 |
+
+第一次看到蚁穴、信息素路线、蚜虫、下雨、狼蛛这些时，右下角（手机在底栏上方）弹一张小卡片讲真实的黑毛蚁是怎么做的；看过的和更多不弹卡片的条目都收在“笔记”里，没看到的写着在哪能看到。卡片上点“不再弹出提示”关掉，笔记面板底下能再打开。看过什么记在浏览器本地，新开局也留着。
 
 手机和平板上用地图式的手势：
 
@@ -113,6 +117,7 @@ Cloudflare 后台的 Pages 项目 `cyberant` 连接了这个 GitHub 仓库：生
 | `?new=1&seed=20261021` | 用指定编号的地图新开局；地图编号显示在存档面板里 |
 | `?view=xray,pheromone,roles,stats` | 开局打开地下透视 / 信息素 / 分工着色 / 统计曲线 |
 | `?rain=60` | 开局招来一场雨，并在后台快进指定秒数（上限 2000），用来直接观察雨中的蚁穴 |
+| `?tips=0` | 这一页不弹第一次的提示卡（截图、测试用；笔记照样记） |
 | `?lang=en` / `?lang=zh` | 本次用指定语言显示（不会被记住；不加时按上次的选择或浏览器语言） |
 | `?ants=3000` | 用指定数量的工蚁开局（上限 5000，人口上限随之提高），用来测性能；和 `new=1` 一样不读存档，之后的自动保存会覆盖原存档 |
 

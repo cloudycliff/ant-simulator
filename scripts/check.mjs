@@ -79,6 +79,8 @@ const NODE_STEPS = [
   { name: '防御', argv: tsx('scripts/games/ant/defensetest.ts') },
   { name: '天气', argv: tsx('scripts/games/ant/weathertest.ts') },
   { name: '瓢虫与蚜虫', argv: tsx('scripts/games/ant/ladybugtest.ts'), judge: lastLine(/^全部通过/) },
+  { name: '蚂蚁笔记', argv: tsx('scripts/games/ant/notestest.ts'), judge: lastLine(/^全部通过/) },
+  { name: '蚂蚁笔记', argv: tsx('scripts/games/ant/notestest.ts'), judge: lastLine(/^全部通过/) },
   { name: '拥挤（3000 只）', argv: tsx('scripts/games/ant/crowdtest.ts'), judge: lastLine(/^休息室最挤/) },
   { name: '性能（3000 只）', argv: tsx('scripts/games/ant/perftest.ts'), judge: lastLine(/^1 倍速/) },
 ];

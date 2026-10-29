@@ -15,7 +15,7 @@ const browser = await launch(9341);
 try {
   const g = await browser.page();
   await g.viewport(W, H, true);
-  await g.open(`${process.argv[2] ?? BASE}?new=1&seed=20261021&hour=12&lang=zh`);
+  await g.open(`${process.argv[2] ?? BASE}?new=1&seed=20261021&hour=12&lang=zh&tips=0`);
   // 收起开局的帮助抽屉，再藏起会挡住手指的面板和浮动事件，让触摸落在画布上
   await g.ev(`hud.setSheet(null); ['colony','info','events','help','stats'].forEach(id => document.getElementById(id).style.visibility = 'hidden')`);
   check('触屏环境被识别为 pointer: coarse', await g.ev(`matchMedia('(pointer: coarse)').matches`));
@@ -209,7 +209,7 @@ try {
   const m = await browser.page();
   await m.send('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
   await m.viewport(W, H, true);
-  await m.open(`${process.argv[2] ?? BASE}?new=1&seed=20261021&hour=12&lang=zh`);
+  await m.open(`${process.argv[2] ?? BASE}?new=1&seed=20261021&hour=12&lang=zh&tips=0`);
   await m.ev(`hud.setSheet(null)`);
   const bg = () => m.ev(`(() => { const b = document.getElementById('btn-background'); return { limited: b.classList.contains('limited'), on: b.classList.contains('on'), enabled: hud.state.background }; })()`);
   const bg0 = await bg();
